@@ -5,6 +5,11 @@
       "source": "kadajett/agent-nestjs-skills",
       "sourceType": "github",
       "computedHash": "1b6f82e889d19d305e38e35594de08eca0242321f353cafa4cf5e61dd3aa1a73"
+    },
+    "typeorm": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "computedHash": "a78bf5815e02755d36eeda49e3e2e87b6e4e161cd90c6cbfb29dc447c4084b99"
     }
   }
 }
