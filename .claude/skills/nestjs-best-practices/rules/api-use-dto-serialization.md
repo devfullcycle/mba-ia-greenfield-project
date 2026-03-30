@@ -7,12 +7,12 @@ tags: api, dto, serialization, class-transformer
 
 ## Use DTOs and Serialization for API Responses
 
-Never return entity objects directly from controllers. Use response DTOs with class-transformer's `@Exclude()` and `@Expose()` decorators to control exactly what data is sent to clients. This prevents accidental exposure of sensitive fields and provides a stable API contract.
+Always use explicit response DTOs. Never return entity objects directly from controllers, even with `@Exclude()` decorators. Response DTOs provide a stable API contract, prevent accidental exposure of sensitive fields, and decouple the API shape from the database model.
 
-**Incorrect (returning entities directly or manual spreading):**
+**Incorrect (returning entities directly, manual spreading, or relying on @Exclude):**
 
 ```typescript
-// Return entities directly
+// Return entities directly — exposes all fields
 @Controller('users')
 export class UsersController {
   @Get(':id')
@@ -35,19 +35,8 @@ async findOne(@Param('id') id: string) {
     // Hard to maintain across endpoints
   };
 }
-```
 
-**Correct (use class-transformer with @Exclude and response DTOs):**
-
-```typescript
-// Enable class-transformer globally
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-  await app.listen(3000);
-}
-
-// Entity with serialization control
+// Returning entities with @Exclude — couples API contract to database model
 @Entity()
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -57,40 +46,33 @@ export class User {
   email: string;
 
   @Column()
-  name: string;
-
-  @Column()
-  @Exclude() // Never include in responses
+  @Exclude() // Relies on entity decorators for API shape
   passwordHash: string;
-
-  @Column({ nullable: true })
-  @Exclude()
-  ssn: string;
-
-  @Column({ default: false })
-  @Exclude({ toPlainOnly: true }) // Exclude from response, allow in requests
-  isAdmin: boolean;
-
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @Column()
-  @Exclude()
-  internalNotes: string;
 }
 
-// Now returning entity is safe
 @Controller('users')
 export class UsersController {
   @Get(':id')
   async findOne(@Param('id') id: string): Promise<User> {
     return this.usersService.findById(id);
-    // Returns: { id, email, name, createdAt }
-    // Sensitive fields excluded automatically
+    // Even with @Exclude, this couples the API contract to the entity.
+    // Adding a column to the entity automatically exposes it in the API.
+    // Violates separation between entities and DTOs.
   }
 }
+```
 
-// For different response shapes, use explicit DTOs
+**Correct (use explicit response DTOs with class-transformer):**
+
+```typescript
+// Enable class-transformer globally
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  await app.listen(3000);
+}
+
+// Response DTOs — explicit API contract, decoupled from entity
 export class UserResponseDto {
   @Expose()
   id: string;

@@ -62,12 +62,20 @@ export class UsersService {
   }
 }
 
+// OrdersService owns the full order creation workflow — that IS its single responsibility
 @Injectable()
 export class OrdersService {
-  constructor(private orderRepo: OrderRepository) {}
+  constructor(
+    private readonly orderRepo: OrderRepository,
+    private readonly payment: PaymentService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async create(userId: string, dto: CreateOrderDto): Promise<Order> {
-    return this.orderRepo.save({ userId, ...dto });
+    const order = await this.orderRepo.save({ userId, ...dto });
+    await this.payment.charge(order);
+    await this.notifications.sendOrderConfirmation(order);
+    return order;
   }
 
   async findByUser(userId: string): Promise<Order[]> {
@@ -84,21 +92,15 @@ export class OrderStatsService {
   }
 }
 
-// Orchestration in controller or dedicated orchestrator
+// Controller delegates to services — no business orchestration
 @Controller('orders')
 export class OrdersController {
-  constructor(
-    private orders: OrdersService,
-    private payment: PaymentService,
-    private notifications: NotificationService,
-  ) {}
+  constructor(private readonly orders: OrdersService) {}
 
   @Post()
   async create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
-    const order = await this.orders.create(user.id, dto);
-    await this.payment.charge(order);
-    await this.notifications.sendOrderConfirmation(order);
-    return order;
+    return this.orders.create(user.id, dto);
+    // OrdersService internally handles payment + notification
   }
 }
 ```

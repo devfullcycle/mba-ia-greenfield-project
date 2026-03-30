@@ -29,7 +29,7 @@ description: 'NestJS common conventions'
 - Inject via constructor: `constructor(private readonly service: SomeService) {}`
 - Never use `new` to instantiate services or repositories
 - Use `private readonly` by default; `protected` only for subclasses
-- Avoid `@Inject()` with string tokens (except NestJS symbols like `APP_GUARD`)
+- Use `@Inject()` only when needed: for custom providers with string/symbol tokens (e.g., `@Inject('CONFIG')`) or NestJS symbols (e.g., `APP_GUARD`). For standard class-based providers, constructor injection without `@Inject()` is sufficient
 
 ## Async/Await
 

@@ -74,7 +74,7 @@ export class OrdersService {
     );
 
     if (!inventory.available) {
-      throw new BadRequestException('Insufficient inventory');
+      throw new InsufficientInventoryException(dto.productId, dto.quantity);
     }
 
     return this.repo.save(dto);
@@ -126,7 +126,7 @@ export class OrdersService {
 
     if (!reserved.success) {
       await this.repo.delete(order.id);
-      throw new BadRequestException('Could not reserve inventory');
+      throw new InventoryReservationFailedException(order.id);
     }
 
     // Non-critical: notifications (use EventPattern)

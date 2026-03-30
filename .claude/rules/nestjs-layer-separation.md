@@ -16,7 +16,9 @@ Services are the single home for all business rules and core domain logic. No ot
 
 ## Controllers Are Thin
 
-Controllers receive HTTP requests, delegate to a service, and return the response. They must not contain conditionals, transformations, or decisions that encode business rules.
+Controllers receive HTTP requests, delegate to services, and return the response. They must not contain conditionals, transformations, or decisions that encode business rules.
+
+Controllers **may** contain simple request-level decisions that are not domain logic — such as checking if a service returned `null` and throwing an appropriate exception, or deciding which service to call based on a query parameter. These are HTTP-layer concerns, not business rules.
 
 ## Guards, Interceptors, Pipes, and Filters Must Delegate
 
@@ -53,6 +55,6 @@ export class ChannelOwnerGuard implements CanActivate {
 ## The Rule
 
 - **Services** own business logic — they are the only place where domain rules, validations, and decisions live
-- **Controllers** are pass-through: receive request, call service, return response
+- **Controllers** are thin: receive request, call service(s), return response. Simple request-level decisions (null checks, choosing which service to call) are OK — domain rules are not
 - **Guards, Interceptors, Pipes, Filters** handle infrastructure concerns only; when they need a business decision, they inject a Service
 - If you find yourself writing `if` statements that encode domain rules outside a service, move that logic into the appropriate service

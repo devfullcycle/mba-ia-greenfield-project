@@ -88,7 +88,7 @@ describe('UsersService', () => {
 
       await expect(
         service.create({ name: 'Test', email: 'test@test.com' }),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(DuplicateEntityException);
     });
   });
 
@@ -102,10 +102,10 @@ describe('UsersService', () => {
       expect(result).toEqual(user);
     });
 
-    it('should throw NotFoundException when not found', async () => {
+    it('should throw EntityNotFoundException when not found', async () => {
       repo.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('999')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('999')).rejects.toThrow(EntityNotFoundException);
     });
   });
 });

@@ -27,7 +27,7 @@ export const AppDataSource = new DataSource({
 // data-source.ts
 export const AppDataSource = new DataSource({
   // ...
-  synchronize: false, // Always false — use migrations
+  synchronize: process.env.NODE_ENV === 'development', // true in dev, false in production
   migrations: ["src/migrations/**/*.ts"],
 });
 ```
@@ -57,7 +57,21 @@ npx typeorm migration:revert -d src/data-source.ts
 5. Commit both the entity change and the migration file together
 
 **Key points:**
-- `synchronize: false` in all environments — including development
+- `synchronize: false` in production — enforced via config validation (e.g., Joi schema in `ConfigModule.forRoot()`)
+- `synchronize: true` is acceptable in development for convenience, as it auto-syncs schema without running migrations
+- Use NestJS `ConfigModule` with validation to guarantee `synchronize` is never `true` in production:
+  ```typescript
+  ConfigModule.forRoot({
+    validationSchema: Joi.object({
+      NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+      DB_SYNCHRONIZE: Joi.when('NODE_ENV', {
+        is: 'production',
+        then: Joi.boolean().valid(false).default(false),
+        otherwise: Joi.boolean().default(true),
+      }),
+    }),
+  })
+  ```
 - Use `migration:generate` for schema changes, `migration:create` for data/seed migrations
 - Always review generated migrations before running them
 - Commit entity changes and migration files in the same commit

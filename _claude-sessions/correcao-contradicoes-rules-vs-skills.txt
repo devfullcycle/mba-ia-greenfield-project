@@ -1,0 +1,1043 @@
+ ▐▛███▜▌   Claude Code v2.1.87
+▝▜█████▛▘  Opus 4.6 (1M context) · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ confronte as rules com as skills disponíveis para ver se há contradição ou se 
+ são complementares                                                             
+
+● I'll explore the rules and skills in parallel to understand their contents.
+
+● 2 Explore agents finished (ctrl+o to expand)
+   ├─ Find and read all rules files · 0 tool uses
+   │  ⎿  Done
+   └─ Find and read all skill files · 0 tool uses
+      ⎿  Done
+
+● Now I need to read the actual content of overlapping rules and skills to do a
+  proper comparison. Let me read the key files.
+
+  Read 9 files (ctrl+o to expand)
+
+● Now let me read the corresponding skill files that overlap with the rules.
+
+  Read 9 files (ctrl+o to expand)
+
+● Let me read a few more overlapping skill files to complete the comparison.
+
+  Read 8 files (ctrl+o to expand)
+
+● Now I have a thorough understanding of both the rules and skills. Let me write
+   the analysis.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● Encontrei 7 contradições entre as rules e as skills, e diversas
+  complementaridades. Aqui o resumo:
+
+  Contradições encontradas:
+
+  ┌─────┬───────────────────────────────────────────────────────┬────────────┐
+  │  #  │                         Área                          │ Severidade │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 1   │ Primary Key — Rule exige UUID, skills mostram         │ Alta       │
+  │     │ auto-increment como válido                            │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 2   │ Loading default — Rule prefere eager, skill prefere   │ Média      │
+  │     │ explicit                                              │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 3   │ catch must throw — Rule é absoluta, skill mostra      │ Alta       │
+  │     │ catch sem throw em background tasks (correto)         │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │     │ Controller orchestration — Rule diz                   │            │
+  │ 4   │ thin/pass-through, skill mostra controller            │ Alta       │
+  │     │ orquestrando 3 services                               │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 5   │ Entity como response DTO — Rule proíbe, skill mostra  │ Média      │
+  │     │ entity com @Exclude como padrão                       │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 6   │ synchronize: true — Inconsistência entre as próprias  │ Média      │
+  │     │ skills + rule                                         │            │
+  ├─────┼───────────────────────────────────────────────────────┼────────────┤
+  │ 7   │ @Inject() com string tokens — Rule diz evitar, skill  │ Baixa      │
+  │     │ usa como exemplo correto                              │            │
+  └─────┴───────────────────────────────────────────────────────┴────────────┘
+
+  As contradições surgem porque as skills são genéricas (best practices
+  universais) enquanto as rules são específicas deste projeto. Todas são
+  resolvíveis com ajustes pontuais.
+
+  O plano completo com detalhes, trechos de código e recomendações de resolução
+  está no arquivo do plano.
+
+❯ Para o  1. não quero mudar o exemplo da skill, pois podemos decidir usar      
+outra estratégia para os ids futuramente, e a skill é um guia                                                
+                                                                                
+                                                                                
+                                                                                
+Para o 2. sim, alinhar com a skill                                              
+                                                                                
+                                                                                
+                                                                                
+Para o 3. sim, alinhar com a skill                                              
+                                                                                
+                                                                                
+                                                                                
+Para o 4. O exemplo na skill deve mudar. Isto de orquestração de service não é  
+necessário, o ponto é que                                                       
+o controller deve apenas invocar a camada de serviços, as vezes ele pode usar   
+um ou mais serviços para                                                        
+consultar alguma coisas e decidir invocar um service que vai mudar o estado do  
+sistema, não significa que                                                      
+ ele tem que sempre chamar um service e responder alguma coisa, não é isto, mas 
+ todo cerne de regras de                                                        
+negócio ficam no service. Então, precisamos corrigir a skill neste ponto.       
+                                                                                
+                                                                                
+                                                                                
+Para o 5. Sim, não quero expor entities diretamente como DTO, isto serve para   
+segurança. Acho que reestruturar é melhor                                                           
+                                                                                
+                                                                                
+                                                                                
+Para o 6. Não, o sync: true para development acaba sendo interessante, pois já  
+carrega o banco sem                                                             
+necessidade de rodar as migrações. O exemplo de config.get() na skill está bom, 
+ mas poderíamos                                                                 
+especificar na skill que usar config validation no Nest.js permite reforçar que 
+ em ambiente de produção deve ser false.                                                                 
+                                                                                
+                                                                                
+                                                                                
+Para o 7. Sim, a rule deve alinhar, porque em situações específicas é           
+necessário usar o @Inject, como especificado na skill                                                           
+Tem outro detalhe que esqueci que os services não podem estourar exceção        
+builtin do Nest.js, como NotFoundException, porque isto é focado em HTTP e os   
+serviços não deve ser importar com que os acessa                                
+
+● Entendido. Vou atualizar o plano com as decisões e o ponto novo sobre exceções
+   HTTP nos services. Deixe-me reler os arquivos afetados para garantir
+  precisão.
+
+  Read 6 files (ctrl+o to expand)
+
+● Now let me update the plan with the concrete execution steps.
+
+  Read 1 file (ctrl+o to expand)
+
+● Updated plan
+  ⎿  /plan to preview
+
+● O plano foi atualizado com as 8 alterações concretas, incluindo o ponto novo
+  sobre domain exceptions vs HTTP exceptions nos services. Cada item tem o
+  trecho exato de "de/para" e os arquivos afetados.
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/elegant-sparking-meadow.md · /plan to edit
+     Plano: Corrigir contradições entre Rules e Skills
+
+     Contexto
+
+     Análise comparativa identificou 7 contradições + 1 ponto novo (services e
+     HTTP exceptions). O usuário decidiu a direção de cada correção. Este plano
+     detalha as edições concretas em cada arquivo.
+
+     ---
+     Alterações
+
+     1. Primary Key Strategy — SEM ALTERAÇÃO
+
+     - Rule exige UUID, skill é genérica. Manter ambas como estão — a skill
+     serve como guia genérico, a rule como padrão do projeto.
+
+     ---
+     2. Eager vs Explicit Loading — Alinhar rule com skill
+
+     Arquivo: .claude/rules/nestjs-entities.md (linha 24)
+
+     De:
+     - Use lazy loading only when necessary — prefer eager loading for small,
+     predictable datasets
+
+     Para:
+     - Prefer explicit relation loading (`relations: [...]`) — load only what
+     each query needs
+     - Use eager loading only for low-cardinality, always-needed relations
+     (e.g., `user.role`)
+     - Use lazy loading only when the relation is rarely accessed and the
+     `Promise<>` type is acceptable
+
+     ---
+     3. catch must throw — Escopar para request lifecycle
+
+     Arquivo: .claude/rules/nestjs-services.md
+
+     3a. Alterar "The Rule" (linhas 57-62):
+
+     De:
+     ## The Rule
+
+     - `catch` blocks must always end with a `throw` — either the original error
+      or a more specific one
+     - The only exception is when the catch is intentionally converting an error
+      into a valid domain result (e.g., `findOneBy` returning `null` is not an
+     error — a `try/catch` that swallows `findOneByOrFail` is)
+     - Use NestJS built-in exceptions (`NotFoundException`, `ConflictException`,
+      `BadRequestException`, etc.) so the exception filter layer can map them to
+      proper HTTP responses
+     - Logging inside a catch is fine, but logging is not a substitute for
+     throwing
+
+     Para:
+     ## The Rule
+
+     ### Request lifecycle (services invocados por controllers)
+
+     - `catch` blocks must always end with a `throw` — either the original error
+      or a more specific one
+     - The only exception is when the catch is intentionally converting an error
+      into a valid domain result (e.g., `findOneBy` returning `null` is not an
+     error — a `try/catch` that swallows `findOneByOrFail` is)
+     - Throw domain exceptions (custom `Error` subclasses) — never throw NestJS
+     HTTP exceptions (`NotFoundException`, `ConflictException`, etc.) from
+     services. Services must not be aware of the transport layer. Exception
+     filters are responsible for mapping domain exceptions to HTTP responses
+     - Logging inside a catch is fine, but logging is not a substitute for
+     throwing
+
+     ### Background tasks, event handlers e cron jobs
+
+     - In these contexts, rethrowing would crash the process. `catch` blocks
+     should log the error and optionally queue for retry or send to a dead
+     letter queue
+     - These are the **only** contexts where catch-and-log without rethrowing is
+      acceptable
+
+     3b. Alterar o exemplo "Good: let it propagate or re-throw with context"
+     (linhas 30-39):
+
+     De:
+     async findById(id: string): Promise<User> {
+       const user = await this.userRepository.findOneBy({ id });
+       if (!user) {
+         throw new NotFoundException(`User ${id} not found`);
+       }
+       return user;
+     }
+
+     Para:
+     async findById(id: string): Promise<User> {
+       const user = await this.userRepository.findOneBy({ id });
+       if (!user) {
+         throw new EntityNotFoundException('User', id);
+       }
+       return user;
+     }
+
+     3c. Alterar o exemplo "Good: catch, enrich, re-throw" (linhas 42-55):
+
+     De:
+     async createChannel(dto: CreateChannelDto): Promise<Channel> {
+       try {
+         return await this.channelRepository.save(dto);
+       } catch (error) {
+         if (error.code === '23505') {
+           throw new ConflictException('Channel name already exists');
+         }
+         throw error; // unknown errors propagate as-is
+       }
+     }
+
+     Para:
+     async createChannel(dto: CreateChannelDto): Promise<Channel> {
+       try {
+         return await this.channelRepository.save(dto);
+       } catch (error) {
+         if (error.code === '23505') {
+           throw new DuplicateEntityException('Channel', 'name');
+         }
+         throw error; // unknown errors propagate as-is
+       }
+     }
+
+     ---
+     4. Controller orchestration — Corrigir exemplo na skill
+
+     Arquivo:
+     .claude/skills/nestjs-best-practices/rules/arch-single-responsibility.md
+
+     Substituir o bloco "Orchestration in controller" (linhas 87-103):
+
+     De:
+     // Orchestration in controller or dedicated orchestrator
+     @Controller('orders')
+     export class OrdersController {
+       constructor(
+         private orders: OrdersService,
+         private payment: PaymentService,
+         private notifications: NotificationService,
+       ) {}
+
+       @Post()
+       async create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
+         const order = await this.orders.create(user.id, dto);
+         await this.payment.charge(order);
+         await this.notifications.sendOrderConfirmation(order);
+         return order;
+       }
+     }
+
+     Para:
+     // Controller delegates to services — no business orchestration
+     @Controller('orders')
+     export class OrdersController {
+       constructor(private readonly orders: OrdersService) {}
+
+       @Post()
+       async create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
+         return this.orders.create(user.id, dto);
+         // OrdersService internally handles payment + notification
+       }
+     }
+
+     // The service owns the business orchestration
+     @Injectable()
+     export class OrdersService {
+       constructor(
+         private readonly orderRepo: OrderRepository,
+         private readonly payment: PaymentService,
+         private readonly notifications: NotificationService,
+       ) {}
+
+       async create(userId: string, dto: CreateOrderDto): Promise<Order> {
+         const order = await this.orderRepo.save({ userId, ...dto });
+         await this.payment.charge(order);
+         await this.notifications.sendOrderConfirmation(order);
+         return order;
+       }
+     }
+
+     ---
+     5. Entity como response DTO — Reestruturar skill
+
+     Arquivo:
+     .claude/skills/nestjs-best-practices/rules/api-use-dto-serialization.md
+
+     Reestruturar para:
+     - Mover o bloco "Entity with serialization control" (entity com @Exclude)
+     para a seção Incorrect com uma nota: "Returning entities directly — even
+     with @Exclude — couples the API contract to the database model and violates
+      separation between entities and DTOs"
+     - Manter apenas os response DTOs explícitos (UserResponseDto,
+     UserDetailResponseDto) na seção Correct
+     - Remover o bloco "Now returning entity is safe" (linhas 82-91) da seção
+     correct
+     - Ajustar o texto introdutório para reforçar: "Always use explicit response
+      DTOs. Never return entity objects directly from controllers, even with
+     @Exclude() decorators."
+
+     ---
+     6. synchronize: true — Permitir em dev, reforçar prod
+
+     Arquivo: .claude/skills/typeorm/rules/migration-workflow.md
+
+     6a. Alterar "Key points" (linhas 59-64):
+
+     De:
+     - `synchronize: false` in all environments — including development
+
+     Para:
+     - `synchronize: false` in production — enforced via config validation
+     (e.g., Joi schema in `ConfigModule.forRoot()`)
+     - `synchronize: true` is acceptable in development for convenience, as it
+     auto-syncs schema without running migrations
+     - Use NestJS `ConfigModule` with validation to guarantee `synchronize` is
+     never `true` in production:
+       ```typescript
+       ConfigModule.forRoot({
+         validationSchema: Joi.object({
+           NODE_ENV: Joi.string().valid('development', 'production',
+     'test').default('development'),
+           DB_SYNCHRONIZE: Joi.when('NODE_ENV', {
+             is: 'production',
+             then: Joi.boolean().valid(false).default(false),
+             otherwise: Joi.boolean().default(true),
+           }),
+         }),
+       })
+
+     **6b.** Alterar o exemplo "Correct" do data-source (linhas 26-32):
+
+     **De:**
+     ```typescript
+     export const AppDataSource = new DataSource({
+       // ...
+       synchronize: false, // Always false — use migrations
+       migrations: ["src/migrations/**/*.ts"],
+     });
+
+     Para:
+     export const AppDataSource = new DataSource({
+       // ...
+       synchronize: process.env.NODE_ENV === 'development', // true in dev, 
+     false in production
+       migrations: ["src/migrations/**/*.ts"],
+     });
+
+     ---
+     7. @Inject() com string tokens — Alinhar rule
+
+     Arquivo: .claude/rules/nestjs-common-conventions.md (linha 32)
+
+     De:
+     - Avoid `@Inject()` with string tokens (except NestJS symbols like
+     `APP_GUARD`)
+
+     Para:
+     - Use `@Inject()` only when needed: for custom providers with string/symbol
+      tokens (e.g., `@Inject('CONFIG')`) or NestJS symbols (e.g., `APP_GUARD`).
+     For standard class-based providers, constructor injection without
+     `@Inject()` is sufficient
+
+     ---
+     8. NOVO: Services não devem lançar HTTP exceptions
+
+     Impacto: Afeta 2 rules + 1 skill.
+
+     8a. Rule nestjs-services.md — Já coberto no item 3 acima (troca de NestJS
+     built-in exceptions por domain exceptions).
+
+     8b. Rule nestjs-controllers.md (linha 56):
+
+     De:
+     - Services throw NestJS built-in exceptions (`NotFoundException`,
+     `ConflictException`, etc.) and exception filters convert them to proper
+     HTTP responses
+
+     Para:
+     - Services throw domain exceptions (custom `Error` subclasses) — never
+     NestJS HTTP exceptions. Exception filters map domain exceptions to proper
+     HTTP responses
+
+     8c. Skill error-throw-http-exceptions.md — Reestruturar completamente:
+
+     - Título: Mudar de "Throw HTTP Exceptions from Services" para "Use Domain
+     Exceptions in Services"
+     - Seção Incorrect: Mover o exemplo que usa
+     NotFoundException/ConflictException direto no service para incorrect.
+     Manter o exemplo de "return error objects" como também incorrect.
+     - Seção Correct: Mostrar domain exceptions (EntityNotFoundException extends
+      Error, DuplicateEntityException extends Error) lançadas pelo service +
+     exception filters que mapeiam para HTTP responses.
+     - Manter o bloco de exception filter EntityNotFoundFilter que já existe
+     (linhas 88-111) como parte da solução correta.
+
+     ---
+     Arquivos a modificar (resumo)
+
+     ┌─────┬─────────────────────────────────────────────────────┬──────────────
+     ┐
+     │  #  │                       Arquivo                       │   Tipo de
+     │
+     │     │                                                     │   mudança
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │                                                     │ Editar linha
+     │
+     │ 2   │ .claude/rules/nestjs-entities.md                    │  24
+     │
+     │     │                                                     │ (loading)
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │                                                     │ Reescrever
+     │
+     │ 3   │ .claude/rules/nestjs-services.md                    │ exemplos +
+     │
+     │     │                                                     │ seção "The
+     │
+     │     │                                                     │ Rule"
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │ .claude/skills/nestjs-best-practices/rules/arch-sin │ Reescrever   
+     │
+     │ 4   │ gle-responsibility.md                               │ exemplo do
+     │
+     │     │                                                     │ controller
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │ .claude/skills/nestjs-best-practices/rules/api-use- │ Reestruturar 
+     │
+     │ 5   │ dto-serialization.md                                │  incorrect/c
+     │
+     │     │                                                     │ orrect
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │                                                     │ Editar key
+     │
+     │ 6   │ .claude/skills/typeorm/rules/migration-workflow.md  │ points +
+     │
+     │     │                                                     │ exemplo
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │ 7   │ .claude/rules/nestjs-common-conventions.md          │ Editar linha
+     │
+     │     │                                                     │  32
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │ 8b  │ .claude/rules/nestjs-controllers.md                 │ Editar linha
+     │
+     │     │                                                     │  56
+     │
+     ├─────┼─────────────────────────────────────────────────────┼──────────────
+     ┤
+     │     │ .claude/skills/nestjs-best-practices/rules/error-th │ Reestruturar 
+     │
+     │ 8c  │ row-http-exceptions.md                              │  completamen
+     │
+     │     │                                                     │ te
+     │
+     └─────┴─────────────────────────────────────────────────────┴──────────────
+     ┘
+
+     ---
+     Verificação
+
+     Após as edições:
+     1. Reler cada arquivo modificado para confirmar consistência interna
+     2. Verificar que nenhuma contradição entre rules e skills permanece nos
+     temas tratados
+     3. Confirmar que os exemplos de código compilam conceitualmente (imports
+     corretos, tipos consistentes)
+
+● Plano aprovado. Vou executar as edições. Começo pelas mais simples em
+  paralelo.
+
+● Update(.claude/rules/nestjs-entities.md)
+  ⎿  Added 3 lines, removed 1 line
+      21  ## Relationships
+      22  
+      23  - Always define both sides of a relationship (e.g., `@OneToMany
+          ` + `@ManyToOne`)
+      24 -- Use lazy loading only when necessary — prefer eager loading f
+         -or small, predictable datasets                                 
+      24 +- Prefer explicit relation loading (`relations: [...]`) — load 
+         +only what each query needs                                     
+      25 +- Use eager loading only for low-cardinality, always-needed rel
+         +ations (e.g., `user.role`)                                     
+      26 +- Use lazy loading only when the relation is rarely accessed an
+         +d the `Promise<>` type is acceptable                           
+      27  
+      28  ## Schema Changes
+      29  
+
+● Update(.claude/rules/nestjs-common-conventions.md)  ⎿  Added 1 line, removed 1 line
+      29  - Inject via constructor: `constructor(private readonly service
+          : SomeService) {}`
+      30  - Never use `new` to instantiate services or repositories
+      31  - Use `private readonly` by default; `protected` only for subcl
+          asses
+      32 -- Avoid `@Inject()` with string tokens (except NestJS symbols l
+         -ike `APP_GUARD`)                                               
+      32 +- Use `@Inject()` only when needed: for custom providers with s
+         +tring/symbol tokens (e.g., `@Inject('CONFIG')`) or NestJS symbo
+         +ls (e.g., `APP_GUARD`). For standard class-based providers, con
+         +structor injection without `@Inject()` is sufficient           
+      33  
+      34  ## Async/Await
+      35  
+
+● Update(.claude/rules/nestjs-controllers.md)
+  ⎿  Added 1 line, removed 1 line
+      53  ## The Rule
+      54  
+      55  - Controllers should not contain `try/catch` blocks — delegate 
+          error handling to exception filters
+      56 -- Services throw NestJS built-in exceptions (`NotFoundException
+         -`, `ConflictException`, etc.) and exception filters convert the
+         -m to proper HTTP responses                                     
+      56 +- Services throw domain exceptions (custom `Error` subclasses) 
+         +— never NestJS HTTP exceptions. Exception filters map domain ex
+         +ceptions to proper HTTP responses                              
+      57  - If a controller-specific transformation is truly needed (rare
+          ), apply a filter at the controller or method level with `@UseF
+          ilters()` instead of inline try/catch
+      58  - Never return manually crafted error objects (`{ error: '...' 
+          }`) — always throw so the filter layer controls the response fo
+          rmat
+      59  - Apply `ValidationPipe` globally or per-route
+
+● Items 2, 7, 8b feitos. Agora o item 3 (nestjs-services.md) — reescrita dos
+  exemplos e "The Rule".
+
+● Update(.claude/rules/nestjs-services.md)
+  ⎿  Added 10 lines, removed 3 lines
+      33  async findById(id: string): Promise<User> {
+      34    const user = await this.userRepository.findOneBy({ id });
+      35    if (!user) {
+      36 -    throw new NotFoundException(`User ${id} not found`);       
+      36 +    throw new EntityNotFoundException('User', id);             
+      37    }
+      38    return user;
+      39  }
+     ...
+      47      return await this.channelRepository.save(dto);
+      48    } catch (error) {
+      49      if (error.code === '23505') {
+      50 -      throw new ConflictException('Channel name already exists'
+         -);                                                             
+      50 +      throw new DuplicateEntityException('Channel', 'name');   
+      51      }
+      52      throw error; // unknown errors propagate as-is
+      53    }
+     ...
+      56  
+      57  ## The Rule
+      58  
+      59 +### Request lifecycle (services invoked by controllers)        
+      60 +                                                               
+      61  - `catch` blocks must always end with a `throw` — either the or
+          iginal error or a more specific one
+      62  - The only exception is when the catch is intentionally convert
+          ing an error into a valid domain result (e.g., `findOneBy` retu
+          rning `null` is not an error — a `try/catch` that swallows `fin
+          dOneByOrFail` is)
+      61 -- Use NestJS built-in exceptions (`NotFoundException`, `Conflic
+         -tException`, `BadRequestException`, etc.) so the exception filt
+         -er layer can map them to proper HTTP responses                 
+      63 +- Throw domain exceptions (custom `Error` subclasses) — never t
+         +hrow NestJS HTTP exceptions (`NotFoundException`, `ConflictExce
+         +ption`, etc.) from services. Services must not be aware of the 
+         +transport layer. Exception filters are responsible for mapping 
+         +domain exceptions to HTTP responses                            
+      64  - Logging inside a catch is fine, but logging is not a substitu
+          te for throwing
+      65 +                                                               
+      66 +### Background tasks, event handlers, and cron jobs            
+      67 +                                                               
+      68 +- In these contexts, rethrowing would crash the process. `catch
+         +` blocks should log the error and optionally queue for retry or
+         + send to a dead letter queue                                   
+      69 +- These are the **only** contexts where catch-and-log without r
+         +ethrowing is acceptable                                        
+
+● Item 3 feito. Agora items 4 e 6 em paralelo.
+
+● Update(.claude/skills/nestjs-best-practices/rules/arch-single-responsibility.m
+        d)
+  ⎿  Added 18 lines, removed 7 lines
+       84    }
+       85  }
+       86  
+       87 -// Orchestration in controller or dedicated orchestrator      
+       87 +// Controller delegates to services — no business orchestratio
+          +n                                                             
+       88  @Controller('orders')
+       89  export class OrdersController {
+       90 -  constructor(                                                
+       91 -    private orders: OrdersService,                            
+       92 -    private payment: PaymentService,                          
+       93 -    private notifications: NotificationService,               
+       94 -  ) {}                                                        
+       90 +  constructor(private readonly orders: OrdersService) {}      
+       91  
+       92    @Post()
+       93    async create(@CurrentUser() user: User, @Body() dto: CreateO
+           rderDto) {
+       98 -    const order = await this.orders.create(user.id, dto);     
+       94 +    return this.orders.create(user.id, dto);                  
+       95 +    // OrdersService internally handles payment + notification
+       96 +  }                                                           
+       97 +}                                                             
+       98 +                                                              
+       99 +// The service owns the business orchestration                
+      100 +@Injectable()                                                 
+      101 +export class OrdersService {                                  
+      102 +  constructor(                                                
+      103 +    private readonly orderRepo: OrderRepository,              
+      104 +    private readonly payment: PaymentService,                 
+      105 +    private readonly notifications: NotificationService,      
+      106 +  ) {}                                                        
+      107 +                                                              
+      108 +  async create(userId: string, dto: CreateOrderDto): Promise<O
+          +rder> {                                                       
+      109 +    const order = await this.orderRepo.save({ userId, ...dto }
+          +);                                                            
+      110      await this.payment.charge(order);
+      111      await this.notifications.sendOrderConfirmation(order);
+      112      return order;
+
+● Update(.claude/skills/typeorm/rules/migration-workflow.md)
+  ⎿  Added 1 line, removed 1 line
+      27  // data-source.ts
+      28  export const AppDataSource = new DataSource({
+      29    // ...
+      30 -  synchronize: false, // Always false — use migrations         
+      30 +  synchronize: process.env.NODE_ENV === 'development', // true 
+         +in dev, false in production                                    
+      31    migrations: ["src/migrations/**/*.ts"],
+      32  });
+      33  ```
+
+● Agora a segunda parte do item 6 (key points do migration-workflow).
+
+● Update(.claude/skills/typeorm/rules/migration-workflow.md)
+  ⎿  Added 15 lines, removed 1 line
+      57  5. Commit both the entity change and the migration file togethe
+          r
+      58  
+      59  **Key points:**
+      60 -- `synchronize: false` in all environments — including developm
+         -ent                                                            
+      60 +- `synchronize: false` in production — enforced via config vali
+         +dation (e.g., Joi schema in `ConfigModule.forRoot()`)          
+      61 +- `synchronize: true` is acceptable in development for convenie
+         +nce, as it auto-syncs schema without running migrations        
+      62 +- Use NestJS `ConfigModule` with validation to guarantee `synch
+         +ronize` is never `true` in production:                         
+      63 +  ```typescript                                                
+      64 +  ConfigModule.forRoot({                                       
+      65 +    validationSchema: Joi.object({                             
+      66 +      NODE_ENV: Joi.string().valid('development', 'production',
+         + 'test').default('development'),                               
+      67 +      DB_SYNCHRONIZE: Joi.when('NODE_ENV', {                   
+      68 +        is: 'production',                                      
+      69 +        then: Joi.boolean().valid(false).default(false),       
+      70 +        otherwise: Joi.boolean().default(true),                
+      71 +      }),                                                      
+      72 +    }),                                                        
+      73 +  })                                                           
+      74 +  ```                                                          
+      75  - Use `migration:generate` for schema changes, `migration:creat
+          e` for data/seed migrations
+      76  - Always review generated migrations before running them
+      77  - Commit entity changes and migration files in the same commit
+
+● Agora os dois itens mais complexos: 5 (reestruturar api-use-dto-serialization)
+   e 8c (reescrever error-throw-http-exceptions). Vou trabalhar nos dois em
+  paralelo.
+
+  Read 2 files (ctrl+o to expand)
+
+● Agora vou reescrever os dois arquivos complexos.
+
+● Write(.claude/skills/nestjs-best-practices/rules/api-use-dto-serialization.md)
+  ⎿  Added 34 lines, removed 34 lines
+       7  
+       8  ## Use DTOs and Serialization for API Responses
+       9  
+      10 -Never return entity objects directly from controllers. Use resp
+         -onse DTOs with class-transformer's `@Exclude()` and `@Expose()`
+         - decorators to control exactly what data is sent to clients. Th
+         -is prevents accidental exposure of sensitive fields and provide
+         -s a stable API contract.                                       
+      10 +Always use explicit response DTOs. Never return entity objects 
+         +directly from controllers, even with `@Exclude()` decorators. E
+         +ntities are database models; DTOs are API contracts. Mixing the
+         +m couples the API to the database schema and risks exposing sen
+         +sitive data when the entity changes.                           
+      11  
+      12 -**Incorrect (returning entities directly or manual spreading):*
+         -*                                                              
+      12 +**Incorrect (returning entities directly, manual spreading, or 
+         +entity with @Exclude):**                                       
+      13  
+      14  ```typescript
+      15 -// Return entities directly                                    
+      15 +// Return entities directly — exposes all fields               
+      16  @Controller('users')
+      17  export class UsersController {
+      18    @Get(':id')
+     ...
+      35      // Hard to maintain across endpoints
+      36    };
+      37  }
+      38 +                                                               
+      39 +// Entity with @Exclude — couples API contract to database mode
+         +l                                                              
+      40 +@Entity()                                                      
+      41 +export class User {                                            
+      42 +  @PrimaryGeneratedColumn('uuid')                              
+      43 +  id: string;                                                  
+      44 +                                                               
+      45 +  @Column()                                                    
+      46 +  email: string;                                               
+      47 +                                                               
+      48 +  @Column()                                                    
+      49 +  @Exclude() // Serialization concern leaks into the entity    
+      50 +  passwordHash: string;                                        
+      51 +}                                                              
+      52 +                                                               
+      53 +@Controller('users')                                           
+      54 +export class UsersController {                                 
+      55 +  @Get(':id')                                                  
+      56 +  async findOne(@Param('id') id: string): Promise<User> {      
+      57 +    return this.usersService.findById(id);                     
+      58 +    // Still returning the entity — any new column is exposed b
+         +y default                                                      
+      59 +    // Adding a column to the entity automatically changes the 
+         +API contract                                                   
+      60 +  }                                                            
+      61 +}                                                              
+      62  ```
+      63  
+      40 -**Correct (use class-transformer with @Exclude and response DTO
+         -s):**                                                          
+      64 +**Correct (explicit response DTOs with class-transformer):**   
+      65  
+      66  ```typescript
+      67  // Enable class-transformer globally
+     ...
+      71    await app.listen(3000);
+      72  }
+      73  
+      50 -// Entity with serialization control                           
+      51 -@Entity()                                                      
+      74 +// Entity stays clean — no serialization decorators            
+      75 +@Entity('users')                                               
+      76  export class User {
+      77    @PrimaryGeneratedColumn('uuid')
+      78    id: string;
+      79  
+      56 -  @Column()                                                    
+      80 +  @Column({ type: 'varchar', length: 255, unique: true })      
+      81    email: string;
+      82  
+      59 -  @Column()                                                    
+      83 +  @Column({ type: 'varchar', length: 255 })                    
+      84    name: string;
+      85  
+      62 -  @Column()                                                    
+      63 -  @Exclude() // Never include in responses                     
+      86 +  @Column({ type: 'varchar', select: false })                  
+      87    passwordHash: string;
+      88  
+      66 -  @Column({ nullable: true })                                  
+      67 -  @Exclude()                                                   
+      68 -  ssn: string;                                                 
+      69 -                                                               
+      70 -  @Column({ default: false })                                  
+      71 -  @Exclude({ toPlainOnly: true }) // Exclude from response, all
+         -ow in requests                                                 
+      72 -  isAdmin: boolean;                                            
+      73 -                                                               
+      89    @CreateDateColumn()
+      90    createdAt: Date;
+      76 -                                                               
+      77 -  @Column()                                                    
+      78 -  @Exclude()                                                   
+      79 -  internalNotes: string;                                       
+      91  }
+      92  
+      82 -// Now returning entity is safe                                
+      83 -@Controller('users')                                           
+      84 -export class UsersController {                                 
+      85 -  @Get(':id')                                                  
+      86 -  async findOne(@Param('id') id: string): Promise<User> {      
+      87 -    return this.usersService.findById(id);                     
+      88 -    // Returns: { id, email, name, createdAt }                 
+      89 -    // Sensitive fields excluded automatically                 
+      90 -  }                                                            
+      91 -}                                                              
+      92 -                                                               
+      93 -// For different response shapes, use explicit DTOs            
+      93 +// Response DTOs define the API contract explicitly            
+      94  export class UserResponseDto {
+      95    @Expose()
+      96    id: string;
+
+● Write(.claude/skills/nestjs-best-practices/rules/error-throw-http-exceptions.m
+       d)
+  ⎿  Added 87 lines, removed 24 lines
+       1  ---
+       2 -title: Throw HTTP Exceptions from Services                     
+       2 +title: Use Domain Exceptions in Services                       
+       3  impact: HIGH
+       4 -impactDescription: Keeps controllers thin and simplifies error 
+         -handling                                                       
+       5 -tags: error-handling, exceptions, services                     
+       4 +impactDescription: Keeps services transport-agnostic and simpli
+         +fies error handling                                            
+       5 +tags: error-handling, exceptions, services, domain             
+       6  ---
+       7  
+       8 -## Throw HTTP Exceptions from Services                         
+       8 +## Use Domain Exceptions in Services                           
+       9  
+      10 -It's acceptable (and often preferable) to throw `HttpException`
+         - subclasses from services in HTTP applications. This keeps cont
+         -rollers thin and allows services to communicate appropriate err
+         -or states. For truly layer-agnostic services, use domain except
+         -ions that map to HTTP status codes.                            
+      10 +Services must not throw NestJS HTTP exceptions (`NotFoundExcept
+         +ion`, `ConflictException`, etc.) because they are transport-lay
+         +er concepts. Services should be unaware of whether they are cal
+         +led via HTTP, WebSocket, gRPC, or a CLI. Instead, throw domain 
+         +exceptions (custom `Error` subclasses) and use exception filter
+         +s to map them to HTTP responses.                               
+      11  
+      12  **Incorrect (return error objects instead of throwing):**
+      13  
+     ...
+       37  }
+       38  ```
+       39  
+       40 -**Correct (throw exceptions directly from service):**         
+       40 +**Incorrect (throwing HTTP exceptions from services):**       
+       41  
+       42  ```typescript
+       43 -// Throw exceptions directly from service                     
+       43 +// HTTP exceptions in services — couples service to transport 
+          +layer                                                         
+       44  @Injectable()
+       45  export class UsersService {
+       46 -  constructor(private readonly repo: UserRepository) {}       
+       47 -                                                              
+       46    async findById(id: string): Promise<User> {
+       47      const user = await this.repo.findOne({ where: { id } });
+       48      if (!user) {
+       49        throw new NotFoundException(`User #${id} not found`);
+       50 +      // NotFoundException is an HTTP concept — service should
+          + not know about HTTP                                          
+       51      }
+       52      return user;
+       53    }
+       54  
+       55    async create(dto: CreateUserDto): Promise<User> {
+       57 -    const existing = await this.repo.findOne({                
+       58 -      where: { email: dto.email },                            
+       59 -    });                                                       
+       56 +    const existing = await this.repo.findOne({ where: { email:
+          + dto.email } });                                              
+       57      if (existing) {
+       58        throw new ConflictException('Email already registered');
+       59 +      // ConflictException maps to HTTP 409 — not the service'
+          +s concern                                                     
+       60      }
+       61      return this.repo.save(dto);
+       62    }
+       63 +}                                                             
+       64 +```                                                           
+       65  
+       66 +**Correct (domain exceptions + exception filters):**          
+       67 +                                                              
+       68 +```typescript                                                 
+       69 +// Domain exceptions — transport-agnostic                     
+       70 +export class EntityNotFoundException extends Error {          
+       71 +  constructor(                                                
+       72 +    public readonly entity: string,                           
+       73 +    public readonly id: string,                               
+       74 +  ) {                                                         
+       75 +    super(`${entity} with ID "${id}" not found`);             
+       76 +  }                                                           
+       77 +}                                                             
+       78 +                                                              
+       79 +export class DuplicateEntityException extends Error {         
+       80 +  constructor(                                                
+       81 +    public readonly entity: string,                           
+       82 +    public readonly field: string,                            
+       83 +  ) {                                                         
+       84 +    super(`${entity} with duplicate ${field}`);               
+       85 +  }                                                           
+       86 +}                                                             
+       87 +                                                              
+       88 +// Service throws domain exceptions                           
+       89 +@Injectable()                                                 
+       90 +export class UsersService {                                   
+       91 +  constructor(private readonly repo: UserRepository) {}       
+       92 +                                                              
+       93 +  async findById(id: string): Promise<User> {                 
+       94 +    const user = await this.repo.findOne({ where: { id } });  
+       95 +    if (!user) {                                              
+       96 +      throw new EntityNotFoundException('User', id);          
+       97 +    }                                                         
+       98 +    return user;                                              
+       99 +  }                                                           
+      100 +                                                              
+      101 +  async create(dto: CreateUserDto): Promise<User> {           
+      102 +    const existing = await this.repo.findOne({ where: { email:
+          + dto.email } });                                              
+      103 +    if (existing) {                                           
+      104 +      throw new DuplicateEntityException('User', 'email');    
+      105 +    }                                                         
+      106 +    return this.repo.save(dto);                               
+      107 +  }                                                           
+      108 +                                                              
+      109    async update(id: string, dto: UpdateUserDto): Promise<User> 
+           {
+       67 -    const user = await this.findById(id); // Throws if not fou
+          -nd                                                            
+      110 +    const user = await this.findById(id); // Throws EntityNotF
+          +oundException if not found                                    
+      111      Object.assign(user, dto);
+      112      return this.repo.save(user);
+      113    }
+     ...
+      127    }
+      128  }
+      129  
+       87 -// For layer-agnostic services, use domain exceptions         
+       88 -export class EntityNotFoundException extends Error {          
+       89 -  constructor(                                                
+       90 -    public readonly entity: string,                           
+       91 -    public readonly id: string,                               
+       92 -  ) {                                                         
+       93 -    super(`${entity} with ID "${id}" not found`);             
+       94 -  }                                                           
+       95 -}                                                             
+       96 -                                                              
+       97 -// Map to HTTP in exception filter                            
+      130 +// Exception filters map domain exceptions to HTTP responses  
+      131  @Catch(EntityNotFoundException)
+      132  export class EntityNotFoundFilter implements ExceptionFilter {
+      133    catch(exception: EntityNotFoundException, host: ArgumentsHos
+           t) {
+     ...
+      142      });
+      143    }
+      144  }
+      145 +                                                              
+      146 +@Catch(DuplicateEntityException)                              
+      147 +export class DuplicateEntityFilter implements ExceptionFilter 
+          +{                                                             
+      148 +  catch(exception: DuplicateEntityException, host: ArgumentsHo
+          +st) {                                                         
+      149 +    const ctx = host.switchToHttp();                          
+      150 +    const response = ctx.getResponse<Response>();             
+      151 +                                                              
+      152 +    response.status(409).json({                               
+      153 +      statusCode: 409,                                        
+      154 +      message: exception.message,                             
+      155 +      entity: exception.entity,                               
+      156 +      field: exception.field,                                 
+      157 +    });                                                       
+      158 +  }                                                           
+      159 +}                                                             
+      160 +                                                              
+      161 +// Register filters globally in main.ts                       
+      162 +app.useGlobalFilters(                                         
+      163 +  new EntityNotFoundFilter(),                                 
+      164 +  new DuplicateEntityFilter(),                                
+      165 +);                                                            
+      166 +                                                              
+      167 +// Or via module                                              
+      168 +@Module({                                                     
+      169 +  providers: [                                                
+      170 +    { provide: APP_FILTER, useClass: EntityNotFoundFilter },  
+      171 +    { provide: APP_FILTER, useClass: DuplicateEntityFilter }, 
+      172 +  ],                                                          
+      173 +})                                                            
+      174 +export class AppModule {}                                     
+      175  ```
+      176  
+      177  Reference: [NestJS Exception Filters](https://docs.nestjs.com/
+           exception-filters)
+
+● Todas as 8 edições concluídas. Agora vou rodar a validação para confirmar
+  consistência.

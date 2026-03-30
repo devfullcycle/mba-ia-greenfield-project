@@ -33,7 +33,7 @@ async findById(id: string): Promise<User | null> {
 async findById(id: string): Promise<User> {
   const user = await this.userRepository.findOneBy({ id });
   if (!user) {
-    throw new NotFoundException(`User ${id} not found`);
+    throw new EntityNotFoundException('User', id);
   }
   return user;
 }
@@ -47,7 +47,7 @@ async createChannel(dto: CreateChannelDto): Promise<Channel> {
     return await this.channelRepository.save(dto);
   } catch (error) {
     if (error.code === '23505') {
-      throw new ConflictException('Channel name already exists');
+      throw new DuplicateEntityException('Channel', 'name');
     }
     throw error; // unknown errors propagate as-is
   }
@@ -56,7 +56,14 @@ async createChannel(dto: CreateChannelDto): Promise<Channel> {
 
 ## The Rule
 
+### Request lifecycle (services invocados por controllers)
+
 - `catch` blocks must always end with a `throw` — either the original error or a more specific one
 - The only exception is when the catch is intentionally converting an error into a valid domain result (e.g., `findOneBy` returning `null` is not an error — a `try/catch` that swallows `findOneByOrFail` is)
-- Use NestJS built-in exceptions (`NotFoundException`, `ConflictException`, `BadRequestException`, etc.) so the exception filter layer can map them to proper HTTP responses
+- Throw domain exceptions (custom `Error` subclasses) — never throw NestJS HTTP exceptions (`NotFoundException`, `ConflictException`, etc.) from services. Services must not be aware of the transport layer. Exception filters are responsible for mapping domain exceptions to HTTP responses
 - Logging inside a catch is fine, but logging is not a substitute for throwing
+
+### Background tasks, event handlers e cron jobs
+
+- In these contexts, rethrowing would crash the process. `catch` blocks should log the error and optionally queue for retry or send to a dead letter queue
+- These are the **only** contexts where catch-and-log without rethrowing is acceptable

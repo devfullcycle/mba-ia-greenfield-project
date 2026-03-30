@@ -83,7 +83,7 @@ export class UsersService {
   async create(dto: CreateUserDto): Promise<User> {
     const existing = await this.usersRepo.findByEmail(dto.email);
     if (existing) {
-      throw new ConflictException('Email already registered');
+      throw new DuplicateEntityException('User', 'email');
     }
 
     const user = new User();

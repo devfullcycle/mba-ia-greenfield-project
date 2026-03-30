@@ -46,14 +46,14 @@ async findOne(@Param('id') id: string) {
 @Get(':id')
 async findOne(@Param('id') id: string) {
   return this.usersService.findById(id);
-  // if service throws NotFoundException, the exception filter returns 404
+  // if service throws a domain exception, the exception filter maps it to the proper HTTP response
 }
 ```
 
 ## The Rule
 
 - Controllers should not contain `try/catch` blocks — delegate error handling to exception filters
-- Services throw NestJS built-in exceptions (`NotFoundException`, `ConflictException`, etc.) and exception filters convert them to proper HTTP responses
+- Services throw domain exceptions (custom `Error` subclasses) — never NestJS HTTP exceptions. Exception filters map domain exceptions to proper HTTP responses
 - If a controller-specific transformation is truly needed (rare), apply a filter at the controller or method level with `@UseFilters()` instead of inline try/catch
 - Never return manually crafted error objects (`{ error: '...' }`) — always throw so the filter layer controls the response format
 - Apply `ValidationPipe` globally or per-route

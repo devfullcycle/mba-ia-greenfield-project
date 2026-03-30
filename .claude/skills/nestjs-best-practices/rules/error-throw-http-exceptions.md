@@ -1,13 +1,13 @@
 ---
-title: Throw HTTP Exceptions from Services
+title: Use Domain Exceptions in Services
 impact: HIGH
-impactDescription: Keeps controllers thin and simplifies error handling
-tags: error-handling, exceptions, services
+impactDescription: Keeps services transport-agnostic and controllers thin
+tags: error-handling, exceptions, services, domain-exceptions
 ---
 
-## Throw HTTP Exceptions from Services
+## Use Domain Exceptions in Services
 
-It's acceptable (and often preferable) to throw `HttpException` subclasses from services in HTTP applications. This keeps controllers thin and allows services to communicate appropriate error states. For truly layer-agnostic services, use domain exceptions that map to HTTP status codes.
+Services must not throw NestJS HTTP exceptions (`NotFoundException`, `ConflictException`, etc.) — these are transport-layer concerns. Instead, throw domain exceptions (custom `Error` subclasses) that describe what went wrong in business terms. Exception filters are responsible for mapping domain exceptions to HTTP responses.
 
 **Incorrect (return error objects instead of throwing):**
 
@@ -37,10 +37,55 @@ export class UsersController {
 }
 ```
 
-**Correct (throw exceptions directly from service):**
+**Incorrect (throwing HTTP exceptions from services):**
 
 ```typescript
-// Throw exceptions directly from service
+// HTTP exceptions in services — couples service to transport layer
+@Injectable()
+export class UsersService {
+  async findById(id: string): Promise<User> {
+    const user = await this.repo.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User #${id} not found`);
+      // NotFoundException is an HTTP concept — services should not know about HTTP
+    }
+    return user;
+  }
+
+  async create(dto: CreateUserDto): Promise<User> {
+    const existing = await this.repo.findOne({ where: { email: dto.email } });
+    if (existing) {
+      throw new ConflictException('Email already registered');
+      // ConflictException (409) is HTTP — not a domain concept
+    }
+    return this.repo.save(dto);
+  }
+}
+```
+
+**Correct (domain exceptions + exception filters):**
+
+```typescript
+// Domain exceptions — describe what went wrong in business terms
+export class EntityNotFoundException extends Error {
+  constructor(
+    public readonly entity: string,
+    public readonly id: string,
+  ) {
+    super(`${entity} with ID "${id}" not found`);
+  }
+}
+
+export class DuplicateEntityException extends Error {
+  constructor(
+    public readonly entity: string,
+    public readonly field: string,
+  ) {
+    super(`${entity} with duplicate ${field}`);
+  }
+}
+
+// Service throws domain exceptions — no HTTP awareness
 @Injectable()
 export class UsersService {
   constructor(private readonly repo: UserRepository) {}
@@ -48,17 +93,15 @@ export class UsersService {
   async findById(id: string): Promise<User> {
     const user = await this.repo.findOne({ where: { id } });
     if (!user) {
-      throw new NotFoundException(`User #${id} not found`);
+      throw new EntityNotFoundException('User', id);
     }
     return user;
   }
 
   async create(dto: CreateUserDto): Promise<User> {
-    const existing = await this.repo.findOne({
-      where: { email: dto.email },
-    });
+    const existing = await this.repo.findOne({ where: { email: dto.email } });
     if (existing) {
-      throw new ConflictException('Email already registered');
+      throw new DuplicateEntityException('User', 'email');
     }
     return this.repo.save(dto);
   }
@@ -70,7 +113,7 @@ export class UsersService {
   }
 }
 
-// Controller stays thin
+// Controller stays thin — no error handling
 @Controller('users')
 export class UsersController {
   @Get(':id')
@@ -84,17 +127,7 @@ export class UsersController {
   }
 }
 
-// For layer-agnostic services, use domain exceptions
-export class EntityNotFoundException extends Error {
-  constructor(
-    public readonly entity: string,
-    public readonly id: string,
-  ) {
-    super(`${entity} with ID "${id}" not found`);
-  }
-}
-
-// Map to HTTP in exception filter
+// Exception filters map domain exceptions to HTTP responses
 @Catch(EntityNotFoundException)
 export class EntityNotFoundFilter implements ExceptionFilter {
   catch(exception: EntityNotFoundException, host: ArgumentsHost) {
@@ -109,6 +142,27 @@ export class EntityNotFoundFilter implements ExceptionFilter {
     });
   }
 }
+
+@Catch(DuplicateEntityException)
+export class DuplicateEntityFilter implements ExceptionFilter {
+  catch(exception: DuplicateEntityException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+
+    response.status(409).json({
+      statusCode: 409,
+      message: exception.message,
+      entity: exception.entity,
+      field: exception.field,
+    });
+  }
+}
+
+// Register globally in main.ts
+app.useGlobalFilters(
+  new EntityNotFoundFilter(),
+  new DuplicateEntityFilter(),
+);
 ```
 
 Reference: [NestJS Exception Filters](https://docs.nestjs.com/exception-filters)

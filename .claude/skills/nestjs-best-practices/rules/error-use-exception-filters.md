@@ -53,15 +53,12 @@ export class UsersController {
   }
 }
 
-// Custom domain exception
-export class UserNotFoundException extends NotFoundException {
-  constructor(userId: string) {
-    super({
-      statusCode: 404,
-      error: 'Not Found',
-      message: `User with ID "${userId}" not found`,
-      code: 'USER_NOT_FOUND',
-    });
+// Custom domain exception — extends Error, not HttpException
+export class UserNotFoundException extends Error {
+  public readonly code = 'USER_NOT_FOUND';
+
+  constructor(public readonly userId: string) {
+    super(`User with ID "${userId}" not found`);
   }
 }
 

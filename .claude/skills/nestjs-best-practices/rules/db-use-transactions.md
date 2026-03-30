@@ -87,7 +87,7 @@ export class TransferService {
         where: { id: fromId },
       });
       if (source.balance < 0) {
-        throw new BadRequestException('Insufficient funds');
+        throw new InsufficientFundsException(fromId, amount);
       }
 
       // Credit destination account
