@@ -56,3 +56,10 @@ Every change must be tested. During development, run only the tests related to t
 - If something out of scope comes up during work, note it as a separate task instead of acting on it
 - Focus on the defined scope for each task to ensure clarity and maintainability of the codebase.
 - If you identify a necessary change that is out of scope, create a new issue or task for it instead of including it in the current work.
+
+## Agent Skill Usage
+
+When working on any task (planning, implementing, debugging, refactoring, 
+reviewing, etc.), decompose the request into its underlying subtasks and 
+concerns, then identify which available skills match any of them and activate 
+those skills.

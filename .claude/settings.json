@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Identify and activate relevant skills for this task.'"
+          }
+        ]
+      }
+    ]
+  }
+}
