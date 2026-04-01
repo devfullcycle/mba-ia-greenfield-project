@@ -63,3 +63,23 @@ When working on any task (planning, implementing, debugging, refactoring,
 reviewing, etc.), decompose the request into its underlying subtasks and 
 concerns, then identify which available skills match any of them and activate 
 those skills.
+
+## Library Documentation Lookup
+
+Before implementing any feature, you MUST use the **context7** MCP tool to look up the relevant library APIs and official documentation.
+
+Always:
+
+- Check the installed library version in the project manifest
+- Retrieve the corresponding documentation using context7
+- Cross-reference APIs to avoid deprecated or incompatible patterns
+- Follow the official documentation over training data
+
+Skip documentation lookup only for trivial operations such as:
+
+- Variable declarations
+- Basic control flow
+- Simple CRUD using established project patterns
+
+If a library is involved and there is uncertainty, documentation lookup is mandatory.
+If the documentation returned does not match the installed version, flag the discrepancy before proceeding.
