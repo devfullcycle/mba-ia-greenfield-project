@@ -36,15 +36,12 @@ Veja o diagrama de arquitetura do projeto: [software-arch.mermaid](diagrams/soft
 Preparação de toda a fundação do projeto: repositório, ambiente de desenvolvimento, projetos Next.js e Nest.js, banco de dados PostgreSQL e serviços auxiliares.
 
 - Repositório com estrutura de monorepo (frontend e backend)
-- Projeto Next.js (frontend) e Nest.js (backend) inicializados
+- Projeto Next.js (frontend) (será criado depois, não agora) e Nest.js (backend) inicializados
 - Ambiente de desenvolvimento local com todos os serviços via Docker Compose
-- Estrutura inicial do banco de dados PostgreSQL (schema, migrations e seeds)
-- Serviço de armazenamento de arquivos (vídeos e thumbnails)
-- Serviço de processamento em segundo plano (filas)
-- Serviço de envio de e-mails transacionais
+- Estrutura inicial do banco de dados PostgreSQL (schema, migrations e seeds) (sem tabelas ainda)
 - Fundação de IA para coding.
 
-**Entregáveis:** ambiente de desenvolvimento funcional, banco de dados configurado, serviços de armazenamento, fila e e-mail operacionais.
+**Entregáveis:** ambiente de desenvolvimento funcional, banco de dados configurado.
 
 ---
 
@@ -54,6 +51,7 @@ Preparação de toda a fundação do projeto: repositório, ambiente de desenvol
 
 Fluxo completo de criação de conta, confirmação por e-mail, login, logout e recuperação de senha.
 
+- Serviço de envio de e-mails transacionais
 - Cadastro de usuário com e-mail e senha
 - Criação automática do canal do usuário a partir do prefixo do e-mail
 - Confirmação de conta via e-mail com link de ativação
@@ -72,6 +70,8 @@ Fluxo completo de criação de conta, confirmação por e-mail, login, logout e 
 
 Upload de arquivos grandes sem travar o sistema, processamento automático do vídeo e geração de URL única.
 
+- Serviço de armazenamento de arquivos (vídeos e thumbnails)
+- Serviço de processamento em segundo plano (filas)
 - Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance
 - Pré-cadastro automático do vídeo como rascunho ao iniciar o upload
 - Processamento automático do vídeo após upload (extração de duração e metadados)

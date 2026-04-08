@@ -26,6 +26,17 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Message Queue** (TBD) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
 
+## Docker Networking
+
+This project runs entirely in Docker containers. When configuring connections between services (database, cache, queue, etc.), **always use the Docker Compose service name** as the host — never `localhost` or `127.0.0.1`.
+
+Inside a container, `localhost` refers to the container itself, not the host machine or other containers. Services communicate through the Docker Compose network using their service names (e.g., `db`, `nestjs-api`).
+
+- **Correct:** `DB_HOST=db` (the Compose service name)
+- **Wrong:** `DB_HOST=localhost`
+
+This applies to all environment variables, configuration files, and code that references service hosts.
+
 ## Working Principles
 
 - **Single Responsibility:** each module, service, and function should have a clear, focused responsibility.
