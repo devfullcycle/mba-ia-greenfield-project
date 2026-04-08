@@ -10,4 +10,13 @@ export const envValidationSchema = Joi.object({
   DB_USERNAME: Joi.string().required(),
   DB_PASSWORD: Joi.string().required(),
   DB_NAME: Joi.string().required(),
+  JWT_SECRET: Joi.string().required(),
+  JWT_REFRESH_SECRET: Joi.string().required(),
+  JWT_ACCESS_EXPIRATION: Joi.string().default('15m'),
+  JWT_REFRESH_EXPIRATION: Joi.string().default('7d'),
+  CONFIRMATION_TOKEN_EXPIRATION_HOURS: Joi.number().default(1),
+  PASSWORD_RESET_TOKEN_EXPIRATION_HOURS: Joi.number().default(1),
+  MAIL_HOST: Joi.string().default('mailpit'),
+  MAIL_PORT: Joi.number().default(1025),
+  MAIL_FROM: Joi.string().default('"StreamTube" <noreply@streamtube.com>'),
 });
