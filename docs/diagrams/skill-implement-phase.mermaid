@@ -1,0 +1,64 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart TB
+    subgraph INPUT["📥 Entrada"]
+        phase["phase-NN-*.md\n(plano — contrato)"]
+        plan["project-plan.md\n(subproject alvo)"]
+        decisions["decisions/\n(escolhas fixas)"]
+        testing["testing-guide skill\n(how to write tests)"]
+        practices["best-practices skills\n(subproject-specific)"]
+    end
+
+    subgraph PREP["🔧 Preparação"]
+        preflight["Preflight\n(branch, deps,\nplan sanity)"]
+        tasklist["Criar task list\n(1 task por SI,\nordem do Dependency Map)"]
+    end
+
+    subgraph LOOP["🔁 Loop por SI"]
+        plan_uc["1. Plan SI\n(re-read section)"]
+        implement["2. Implementar\ntechnical actions"]
+        write_tests["3. Write tests\n(Tests section)"]
+        run_tests["4. Run SI tests\n(escopo do SI)"]
+        fix["5. Fix loop\n(max 3 tentativas)"]
+        stop["6. STOP\nSeguir para SI-NN.X+1?"]
+    end
+
+    subgraph FINAL["✅ Final Verification"]
+        suite["Full test suite"]
+        tsc["tsc --noEmit"]
+        build["npm run build"]
+        deliv["Deliverables checklist"]
+    end
+
+    subgraph OUTPUT["📤 Saída"]
+        report["Completion report"]
+    end
+
+    phase --> preflight
+    plan --> preflight
+    decisions --> preflight
+    practices --> implement
+    testing --> write_tests
+
+    preflight --> tasklist
+    tasklist --> plan_uc
+
+    plan_uc --> implement
+    implement --> write_tests
+    write_tests --> run_tests
+    run_tests --> fix
+    fix --> stop
+    stop -.próximo SI.-> plan_uc
+    stop -.último SI.-> suite
+
+    suite --> tsc
+    tsc --> build
+    build --> deliv
+    deliv --> report
+
+    classDef input fill:#42A5F5,stroke:#1E88E5,color:#FFF
+    classDef process fill:#FF7043,stroke:#E64A19,color:#FFF
+    classDef output fill:#66BB6A,stroke:#43A047,color:#FFF
+
+    class phase,plan,decisions,testing,practices input
+    class preflight,tasklist,plan_uc,implement,write_tests,run_tests,fix,stop,suite,tsc,build,deliv process
+    class report output

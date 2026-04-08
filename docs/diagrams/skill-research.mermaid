@@ -1,0 +1,32 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    subgraph INPUT["📥 Entrada"]
+        plan["project-plan.md\n(capabilities)"]
+        decisions["decisions/\n(decisões anteriores)"]
+    end
+
+    subgraph PROCESS["🔍 Pesquisa"]
+        identify["Identificar<br/>decisões técnicas"]
+        research["Pesquisar opções\n(Context7, Web)"]
+        evaluate["Avaliar trade-offs"]
+        recommend["Recomendar"]
+    end
+
+    subgraph OUTPUT["📤 Saída"]
+        doc["technical-decisions-phase-NN.md<br/>(TD-01, TD-02...)"]
+    end
+
+    plan --> identify
+    decisions --> identify
+    identify --> research
+    research --> evaluate
+    evaluate --> recommend
+    recommend --> doc
+
+    classDef input fill:#42A5F5,stroke:#1E88E5,color:#FFF
+    classDef process fill:#FF7043,stroke:#E64A19,color:#FFF
+    classDef output fill:#66BB6A,stroke:#43A047,color:#FFF
+
+    class plan,decisions input
+    class identify,research,evaluate,recommend process
+    class doc output

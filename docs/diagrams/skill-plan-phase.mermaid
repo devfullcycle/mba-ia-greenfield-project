@@ -1,0 +1,42 @@
+ %%{init: {'theme': 'dark'}}%%
+flowchart LR
+    subgraph INPUT["📥 Entrada"]
+        plan["project-plan.md\n(phase capabilities)"]
+        decisions["decisions/\n(user choices per phase)"]
+        phases["phases/\n(fases anteriores)"]
+        testing["testing-guide skill\n(test layers & coverage)"]
+    end
+
+    subgraph PROCESS["📋 Planejamento"]
+        validate["Validar\n(consistência, ambiguidades,\ndecisões faltantes,\ndependências)"]
+        research["Pesquisar\n(Context7, web search)"]
+        decompose["Decompor em\nImplementation Steps"]
+        actions["Definir\nactions técnicas"]
+        tests["Escrever Tests\n(layer & files por SI)"]
+        criteria["Escrever\nacceptance criteria"]
+        specs["Escrever\nTechnical Specifications\n(Data Model, API Contracts,\nAuth Matrix, Error Catalog,\nEvents/Messages)"]
+    end
+
+    subgraph OUTPUT["📤 Saída"]
+        doc["phase-NN-[name].md\n(SIs, Specs, Dependency Map,\nDeliverables)"]
+    end
+
+    plan --> validate
+    decisions --> validate
+    phases --> validate
+    validate --> research
+    research --> decompose
+    decompose --> actions
+    actions --> tests
+    testing --> tests
+    tests --> criteria
+    criteria --> specs
+    specs --> doc
+
+    classDef input fill:#42A5F5,stroke:#1E88E5,color:#FFF
+    classDef process fill:#FF7043,stroke:#E64A19,color:#FFF
+    classDef output fill:#66BB6A,stroke:#43A047,color:#FFF
+
+    class plan,decisions,phases,testing input
+    class validate,research,decompose,actions,tests,criteria,specs process
+    class doc output

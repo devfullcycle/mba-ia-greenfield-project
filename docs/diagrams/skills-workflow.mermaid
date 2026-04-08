@@ -1,0 +1,28 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart LR
+    plan["📋<br/>project-plan.md"]
+
+    research["🔍<br/>/research"]
+    tdocs["📄<br/>technical-decisions.md"]
+    user["👤<br/>User"]
+
+    planphase["📋<br/>/plan-phase"]
+    phase["📄<br/>phase-NN.md"]
+    implement["⚙️<br/>Implementar"]
+
+    plan --> research
+    research --> tdocs
+    tdocs --> user
+    user --> planphase
+    planphase --> phase
+    phase --> implement
+
+    plan -.-> planphase
+
+    style research fill:#FF7043,stroke:#E64A19,color:#FFF,stroke-width:3px
+    style planphase fill:#FF7043,stroke:#E64A19,color:#FFF,stroke-width:3px
+    style implement fill:#66BB6A,stroke:#43A047,color:#FFF,stroke-width:3px
+    style tdocs fill:#42A5F5,stroke:#1E88E5,color:#FFF
+    style plan fill:#7C4DFF,stroke:#651FFF,color:#FFF
+    style phase fill:#42A5F5,stroke:#1E88E5,color:#FFF
+    style user fill:#37474F,stroke:#78909C,color:#ECEFF1
