@@ -29,7 +29,7 @@ After reading all context sources, validate the inputs before producing any outp
 **Ambiguities in the phase scope:**
 - Capabilities described too vaguely to decompose into actionable step implementations (e.g., "handle authentication" — which flows exactly?).
 - Unclear boundaries — is a capability part of this phase or the next?
-- Missing edge cases that will surface during implementation (e.g., "user login" but no mention of what happens when email is unconfirmed).
+- Missing edge cases visible from reading the spec (e.g., "user login" but no mention of what happens when email is unconfirmed). Flag here only gaps apparent from static reading; edge cases that require tracing execution paths belong to "Unmapped consequences" below.
 
 **Missing decisions:**
 - Capabilities that require a technical choice but have no corresponding decision (e.g., phase includes "upload large files" but no decision on chunked vs streaming vs resumable).
@@ -40,7 +40,19 @@ After reading all context sources, validate the inputs before producing any outp
 - Phase depends on something from a previous phase that was not planned or delivered.
 - Circular or missing dependencies between capabilities within the phase.
 
-**If any issues are found:** stop and present them to the user before generating the plan. Group issues by type (inconsistency, ambiguity, missing decision, dependency gap). Be specific — quote the conflicting statements or point to the exact capability that is unclear. Wait for the user to resolve them. Once the user confirms resolutions (typically by updating `docs/decisions/` or the phase scope in `docs/project-plan.md`), re-read the affected sources and re-run the validation checks before generating the plan.
+**Unmapped consequences of functional requirements:**
+
+Unlike the categories above — which compare documents against each other statically — this one requires mentally simulating each functional requirement's execution and checking whether all consequences are addressed. For every capability in the phase, walk through the operation step by step and ask:
+
+- **What are the inputs, and what are their edge cases?** Consider realistic variance in the data that triggers the operation (e.g., "channel handle from email prefix" — what if two users share the same prefix? What if the prefix is empty, one character, or 200 characters? What if it contains only special characters that get stripped?).
+- **What does this operation produce, and can those outputs collide, overflow, or violate constraints?** Trace each derived or generated value to where it is stored or used. Check whether uniqueness constraints, length limits, format requirements, or downstream consumers can be violated by legitimate inputs (e.g., a derived handle that is unique in the spec but not unique in practice given the derivation rule).
+- **What happens to related entities and side effects?** When the operation creates, modifies, or deletes data, trace the impact on every entity it touches directly or transitively. Ask whether cascading effects, ordering dependencies, or state transitions in related entities are specified (e.g., "delete user" — are their videos, comments, and upload jobs handled? "change email" — does the channel handle update too, or is it frozen?).
+- **What happens under concurrency or repeated execution?** Consider whether two users or two requests performing the same operation simultaneously could produce race conditions, duplicate records, or inconsistent states not addressed by the specs (e.g., two simultaneous registrations with the same email, concurrent refresh token rotations).
+- **Is the failure path specified?** For each step that can fail, check whether the specs define what happens — rollback behavior, error response, user-facing message, or cleanup of partial state (e.g., "registration creates user + channel" — what if channel creation fails after the user row is inserted? Is it transactional?).
+
+The goal is not to enumerate every possible edge case exhaustively, but to simulate realistic execution paths and flag consequences that no document currently addresses. Report each finding the same way as other validation issues: quote the requirement, describe the unmapped consequence, and ask the user to decide.
+
+**If any issues are found:** stop and present them to the user before generating the plan. Group issues by type (inconsistency, ambiguity, missing decision, dependency gap, unmapped consequence). Be specific — quote the conflicting statements or point to the exact capability that is unclear. Wait for the user to resolve them. Once the user confirms resolutions (typically by updating `docs/decisions/` for the current phase, the phase scope in `docs/project-plan.md`, or providing explicit out-of-scope decisions for unmapped consequences), re-read the affected sources and re-run the validation checks before generating the plan.
 
 **If no issues are found:** proceed to generate the plan.
 

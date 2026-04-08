@@ -2,7 +2,7 @@
 
 > **Phase:** 02 — Cadastro, Login e Gerenciamento de Conta
 > **Status:** Finalized
-> **Date:** 2026-04-02
+> **Date:** 2026-04-07
 
 ---
 
@@ -126,6 +126,99 @@
 
 ---
 
+## TD-06: Request Validation Library
+
+**Context:** Phase 02 introduces the first HTTP endpoints with user input (registration, login, password reset). A runtime validation library is needed to validate DTOs — rejecting invalid payloads before they reach the service layer. NestJS supports multiple approaches through its `ValidationPipe` and custom pipes.
+
+**Options:**
+
+### Option A: class-validator + class-transformer
+- Decorator-based validation directly on TypeScript DTO classes. NestJS's built-in `ValidationPipe` uses class-validator under the hood. Over 80 built-in decorators (`@IsEmail()`, `@MinLength()`, `@IsString()`, etc.) plus support for custom validators. class-transformer handles plain-to-instance conversion (`transform: true`).
+- **Pros:** First-class NestJS integration — `ValidationPipe` works out of the box with zero custom pipe code. Decorators co-located with the DTO class serve as documentation. Extensive decorator library covers most validation needs. Official NestJS documentation uses this approach. Supports nested validation, groups, and conditional rules.
+- **Cons:** Relies on `reflect-metadata` and experimental decorators — TypeScript runtime coupling. Two separate packages needed (class-validator + class-transformer). Validation rules are not composable as schemas — harder to reuse outside DTOs. No type inference from validation rules (types and validators can drift apart).
+
+### Option B: nestjs-zod (Zod schemas)
+- Schema-first approach: define a Zod schema, then generate a DTO class via `createZodDto()`. Uses `ZodValidationPipe` (global or per-route) for validation. TypeScript types are inferred directly from the schema — single source of truth for types and validation.
+- **Pros:** Single source of truth — types and validation rules cannot drift. Functional, composable schemas. Growing ecosystem (~5M weekly downloads for Zod). Works well for shared validation (frontend + backend). No dependency on `reflect-metadata` or experimental decorators.
+- **Cons:** Requires `nestjs-zod` wrapper package (lower adoption than class-validator in NestJS). Different mental model from standard NestJS patterns — developers must learn Zod's API alongside NestJS. `createZodDto()` adds an abstraction layer. Less NestJS-specific documentation and examples. OpenAPI integration requires additional setup.
+
+**Recommendation:** **Option A (class-validator + class-transformer)** — This is a backend-only project (no shared schemas with frontend), so Zod's single-source-of-truth advantage is less impactful. class-validator is the documented NestJS approach, and the project already uses decorators extensively (TypeORM entities, NestJS DI). Fewer integration surprises with NestJS 11.
+
+**Decision:** A (class-validator + class-transformer)
+
+---
+
+## TD-07: Error Response Standardization
+
+**Context:** Phase 02 is the first phase introducing public HTTP endpoints. The error response format defined here becomes the contract for all subsequent phases. Consistent error responses are essential for frontend consumption and API usability. The choice affects how domain exceptions, validation errors, and framework errors are presented to clients.
+
+**Options:**
+
+### Option A: Custom Domain Exception Filter — `{ statusCode, error, message }`
+- Create a `DomainException` base class with domain error codes (e.g., `EMAIL_ALREADY_EXISTS`). A custom `@Catch(DomainException)` exception filter maps these to `{ statusCode, error, message }`. A separate filter normalizes class-validator errors into the same shape. Framework `HttpException`s pass through NestJS's default handling.
+- **Pros:** Domain error codes are explicit and typed — easy for clients to switch on `error` field. Clean separation between domain errors (business logic) and HTTP errors (framework). Error catalog is self-documenting and testable. Custom filters give full control over the response shape. The format is simple and lightweight.
+- **Cons:** Two custom filters to maintain (domain + validation). Must keep error catalog in sync with exception classes. Framework errors (404, 500) still use NestJS's default format — slight inconsistency unless a catch-all filter is added.
+
+### Option B: NestJS Default HttpException — `{ statusCode, message, error }`
+- Use NestJS's built-in `HttpException` and subclasses (`ConflictException`, `UnauthorizedException`, etc.) directly. No custom exception filter needed — the built-in exception layer formats responses as `{ statusCode, message, error }` where `error` is the HTTP status name (e.g., "Conflict").
+- **Pros:** Zero custom code — works out of the box. Consistent with NestJS conventions. Less code to maintain. All HTTP exceptions follow the same format automatically.
+- **Cons:** The `error` field contains HTTP status names ("Conflict", "Unauthorized") — not machine-readable domain codes. Clients cannot distinguish between "wrong password" and "expired token" without parsing the `message` string. No typed error catalog. Harder to maintain consistent error documentation. Mixing domain semantics into HTTP exceptions pollutes the framework layer.
+
+### Option C: RFC 9457 Problem Details — `{ type, title, status, detail, instance }`
+- Implement the RFC 9457 (Problem Details for HTTP APIs) standard. Responses include a `type` URI for the error, `title` summary, `status` code, `detail` explanation, and `instance` URI. Requires a custom exception filter to format all errors in this shape.
+- **Pros:** Industry standard (IETF RFC). Self-documenting via `type` URI. Extensible — custom fields are allowed. Supported by API tooling (OpenAPI, Swagger). Future-proof for complex API ecosystems.
+- **Cons:** Overhead for a single-app project — `type` URIs need to be defined and maintained. More verbose response shape. NestJS has no built-in support — requires full custom implementation. Overkill for a project where the only consumer is a first-party Next.js frontend. Learning curve for developers unfamiliar with the RFC.
+
+**Recommendation:** **Option A (Custom Domain Exception Filter)** — Provides machine-readable error codes that the Next.js frontend can switch on, without the overhead of RFC 9457's URI-based type system. The project is single-consumer (first-party frontend), so a simple `{ statusCode, error, message }` format with domain codes balances clarity and simplicity. The custom filter cost is low — two small files.
+
+**Decision:** A (Custom Domain Exception Filter)
+
+---
+
+## TD-08: Rate Limiting Strategy
+
+**Context:** Auth endpoints (login, register, password reset) are prime targets for brute-force attacks. A rate limiting mechanism is needed to restrict the number of requests per IP within a time window. The project uses NestJS 11 with Express as the HTTP adapter.
+
+**Options:**
+
+### Option A: @nestjs/throttler
+- Official NestJS rate limiting module. Provides `ThrottlerModule.forRoot()` configuration with `ttl` (ms) and `limit`. Uses a `ThrottlerGuard` that integrates with NestJS's guard system. Supports `@SkipThrottle()` and `@Throttle()` decorators for per-route overrides. In-memory storage by default, with pluggable stores for Redis/Memcached.
+- **Pros:** Native NestJS module — DI integration, decorator-based overrides, guard lifecycle. Scoping via module imports (can restrict to specific modules). `@SkipThrottle()` decorator for exempting routes. Supports multiple named throttlers for different rate limits. Active maintenance by the NestJS team. v6 supports NestJS 11.
+- **Cons:** In-memory storage by default — does not persist across restarts or scale across instances (acceptable for single-instance). Less granular than express-rate-limit (e.g., no built-in `ipv6Subnet` handling). Fewer external store adapters compared to express-rate-limit ecosystem.
+
+### Option B: express-rate-limit
+- Express middleware for rate limiting. Configured as a middleware function with `windowMs`, `limit`, and options for headers (standard `RateLimit-*` or legacy `X-RateLimit-*`). Applied via `app.use()` to specific paths or globally. Supports external stores (Redis, Memcached, MongoDB) for distributed deployments.
+- **Pros:** Mature library (~8M weekly downloads). Built-in standard headers support (`RateLimit-*` per draft-8). `ipv6Subnet` handling for subnet-aware limiting. Large ecosystem of external stores. Simple middleware API.
+- **Cons:** Express middleware — does not integrate with NestJS's guard/decorator system. Cannot use `@SkipThrottle()` or `@Throttle()` decorators — must apply middleware per path. Applied in `main.ts` or as NestJS middleware — outside the module/DI system. Harder to scope to specific modules. No native support for NestJS execution context (WebSocket, GraphQL).
+
+**Recommendation:** **Option A (@nestjs/throttler)** — Native NestJS integration is decisive: the guard system allows scoping rate limiting to `AuthModule` only via module-level `APP_GUARD`, with `@SkipThrottle()` for exemptions. The project is single-instance with no distributed requirements, so in-memory storage is sufficient. Using express-rate-limit would bypass NestJS's DI and guard lifecycle for no clear benefit.
+
+**Decision:** A (@nestjs/throttler)
+
+---
+
+## TD-09: Refresh Token Format
+
+**Context:** TD-03 defined the refresh token strategy (rotation with family-based theft detection), but not the token format. Since every refresh operation requires a DB lookup (for rotation and reuse detection), the format choice is about what information the token carries, not whether DB access can be skipped. Depends on TD-02 (auth approach) and TD-03 (refresh strategy).
+
+**Options:**
+
+### Option A: JWT (signed token with payload)
+- Refresh token is a JWT signed with a dedicated secret/key, carrying `userId`, `tokenFamily`, `jti` (unique ID) in the payload. On refresh, the `jti` is looked up in the DB to validate rotation state. Expiration is embedded via `exp` claim.
+- **Pros:** Consistent format with access token — same signing/verification infrastructure (`@nestjs/jwt`). Payload carries structured data useful for logging and debugging without a DB query. `jti` claim provides a standard unique identifier. Expiration is self-contained via `exp`.
+- **Cons:** Payload is base64-readable — leaks `userId` and `tokenFamily` if intercepted (mitigated by HTTPS). Longer than a random string (~200+ chars). Signature verification is technically redundant since DB lookup is mandatory (TD-03).
+
+### Option B: Opaque (random bytes)
+- Refresh token is a cryptographically random string (`crypto.randomBytes(32)`, hex-encoded = 64 chars). Stored in DB and looked up by hash on each refresh.
+- **Pros:** No data leakage — token is meaningless without DB. Short (64 chars hex). No signing infrastructure needed for refresh tokens.
+- **Cons:** Cannot extract any information without a DB query — even basic logging requires a lookup. Different handling from access tokens — two token formats in the codebase. No standard claims (`exp`, `jti`) — expiration must be tracked exclusively in DB.
+
+**Recommendation:** **Option B (Opaque)** — Since DB lookup is mandatory (TD-03), JWT signature adds no security value. Opaque tokens are shorter, leak no data, and are simpler to generate.
+
+**Decision:** A (JWT) — Consistency with the access token format is preferred. The team wants a single token infrastructure using `@nestjs/jwt` for both access and refresh tokens. Payload data (`userId`, `tokenFamily`) simplifies logging and debugging. Data leakage risk is acceptable given HTTPS enforcement.
+
+---
+
 ## Decisions Summary
 
 | ID | Decision | Recommendation | Choice |
@@ -135,3 +228,7 @@
 | TD-03 | Refresh Token Strategy | Rotation (stored in DB) | A (Refresh Token Rotation) |
 | TD-04 | Email Confirmation & Reset Tokens | Random opaque tokens in DB | B (Random Opaque Tokens in Database) |
 | TD-05 | Email Sending Infrastructure | @nestjs-modules/mailer | A (@nestjs-modules/mailer) |
+| TD-06 | Request Validation Library | class-validator + class-transformer | A (class-validator + class-transformer) |
+| TD-07 | Error Response Standardization | Custom Domain Exception Filter | A (Custom Domain Exception Filter) |
+| TD-08 | Rate Limiting Strategy | @nestjs/throttler | A (@nestjs/throttler) |
+| TD-09 | Refresh Token Format | Opaque (random bytes) | A (JWT) |
