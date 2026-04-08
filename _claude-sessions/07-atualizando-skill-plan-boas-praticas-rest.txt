@@ -1,0 +1,711 @@
+ ▐▛███▜▌   Claude Code v2.1.96
+▝▜█████▛▘  Opus 4.6 (1M context) · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ /model                                                                        
+  ⎿  Set model to Opus 4.6 (1M context) (default) with high effort
+
+❯ No plano de impl. @docs/phases/phase-02-auth.md , temos                       
+    no contrato da api, mensagem redundante quando temos                        
+    sucesso da operação, isto não é uma boa prática do rest.                    
+    Se a operação foi feita com sucesso e não temos nada a                      
+    retornar na resposta http, podemos usar o status code                       
+    204. Este é apenas um exemplo, me ajude a pensar padrões                    
+    do REST que deveríamos estar especificados no                               
+    @.claude/skills/plan-phase/SKILL.md para que ela não                        
+    cometa estes erros, ou seja, siga as boas práticas do                       
+    REST                                                                        
+
+● Let me start by reading the phase-02-auth.md to identify the REST
+  anti-patterns, and then I'll design improvements for the skill.
+
+  Read 1 file (ctrl+o to expand)
+
+● Good analysis request. Let me identify all REST anti-patterns in phase-02 and
+  design the rules for the skill.
+
+  Here are the issues I found in phase-02-auth.md:
+
+  Endpoints returning redundant success messages (should be 204 No Content):
+  - POST /auth/confirm-email → 200 { message: "Email confirmed successfully" }
+  - POST /auth/resend-confirmation → 200 { message: "If the email exists..." }
+  - POST /auth/logout → 200 { message: "Logged out successfully" }
+  - POST /auth/forgot-password → 200 { message: "If the email exists..." }
+  - POST /auth/reset-password → 200 { message: "Password reset successfully" }
+
+  Endpoints that are correct:
+  - POST /auth/register → 201 { id, email } (returns meaningful data)
+  - POST /auth/login → 200 { access_token, refresh_token } (returns meaningful
+  data)
+  - POST /auth/refresh → 200 { access_token, refresh_token } (returns meaningful
+   data)
+
+  Now let me design the REST rules for the skill and write the plan.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User answered Claude's questions:
+  ⎿  · Identifiquei 5 convenções REST principais para adicionar ao SKILL.md: (1)
+      seleção de status code, (2) regra de corpo de resposta, (3) Location 
+     header para 201, (4) distinção ação vs recurso, (5) template para 204 em 
+     ACs. Há alguma outra convenção REST que você gostaria de incluir? → Essas 5
+      cobrem bem
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/replicated-drifting-eagle.md · /plan to edit
+     Plano: Adicionar Convenções REST ao SKILL.md do plan-phase
+
+     Contexto
+
+     O plano da fase 02 (docs/phases/phase-02-auth.md) gerou contratos de API
+     com anti-padrões REST — especificamente, endpoints que retornam { message: 
+     "..." } como corpo da resposta quando a operação não produz dados
+     significativos. Exemplos:
+
+     - POST /auth/confirm-email → 200 { message: "Email confirmed successfully" 
+     } — deveria ser 204 No Content
+     - POST /auth/logout → 200 { message: "Logged out successfully" } — deveria
+     ser 204 No Content
+     - POST /auth/forgot-password → 200 { message: "If the email exists..." } —
+     deveria ser 204 No Content
+     - POST /auth/reset-password → 200 { message: "Password reset successfully" 
+     } — deveria ser 204 No Content
+     - POST /auth/resend-confirmation → 200 { message: "If the email exists..." 
+     } — deveria ser 204 No Content
+
+     Endpoints corretos (retornam dados significativos):
+     - POST /auth/register → 201 { id, email } ✓
+     - POST /auth/login → 200 { access_token, refresh_token } ✓
+     - POST /auth/refresh → 200 { access_token, refresh_token } ✓
+
+     A causa raiz: o SKILL.md não tem regras de convenção REST para guiar a
+     escolha de status codes e quando incluir/omitir corpo de resposta. Sem
+     essas regras, o agente inventa mensagens de confirmação redundantes.
+
+     Mudanças Planejadas
+
+     1. Adicionar seção "REST Conventions for API Contracts" no SKILL.md
+
+     Arquivo: .claude/skills/plan-phase/SKILL.md
+
+     Adicionar uma nova seção antes de "How to write Technical Specifications"
+     (logo após "How to write Acceptance Criteria") com as seguintes regras:
+
+     1a. Seleção de Status Code (Success)
+
+     ┌───────────┬──────────────────────────────────┬──────────────────────────┐
+     │  Status   │           Quando usar            │          Corpo           │
+     ├───────────┼──────────────────────────────────┼──────────────────────────┤
+     │           │ Operação bem-sucedida que        │                          │
+     │ 200 OK    │ retorna dados significativos     │ Sim — o recurso ou dado  │
+     │           │ (representação de recurso,       │ produzido                │
+     │           │ tokens, resultado de busca)      │                          │
+     ├───────────┼──────────────────────────────────┼──────────────────────────┤
+     │           │                                  │ Sim — representação do   │
+     │ 201       │ POST que cria um novo recurso    │ recurso criado (no       │
+     │ Created   │ identificável                    │ mínimo ID + campos       │
+     │           │                                  │ essenciais)              │
+     ├───────────┼──────────────────────────────────┼──────────────────────────┤
+     │ 204 No    │ Operação bem-sucedida sem dados  │ Nenhum corpo             │
+     │ Content   │ significativos para retornar     │                          │
+     ├───────────┼──────────────────────────────────┼──────────────────────────┤
+     │ 202       │ Operação aceita para             │ Opcional — referência ao │
+     │ Accepted  │ processamento assíncrono         │  job/task                │
+     │           │ (resultado ainda não disponível) │                          │
+     └───────────┴──────────────────────────────────┴──────────────────────────┘
+
+     1b. Regra de ouro para corpo de resposta de sucesso
+
+     ▎ O corpo de uma resposta de sucesso contém a representação do recurso/dado
+      produzido ou nada (204). Nunca retorne { message: "..." } como único 
+     conteúdo — o status code HTTP já comunica o resultado.
+
+     Casos específicos:
+     - Endpoint cria recurso → 201 + representação do recurso
+     - Endpoint retorna dados (tokens, lista, busca) → 200 + dados
+     - Endpoint executa ação sem produzir dados (logout, confirmar email,
+     revogar token, enviar email) → 204 sem corpo
+     - Endpoint security-neutral (forgot-password, resend-confirmation — sempre
+     retorna a mesma resposta independente do input) → 204 sem corpo (a ausência
+      de corpo naturalmente previne vazamento de informação)
+
+     1c. Cabeçalho Location para 201
+
+     Quando o recurso criado possui um endpoint de consulta (GET), incluir
+     Location header apontando para a URI do recurso. Omitir quando não existe
+     endpoint GET para o recurso (ex: registro de usuário pode não ter GET 
+     /users/:id ainda na fase atual).
+
+     1d. Endpoints de ação vs. endpoints de recurso
+
+     Nem todo endpoint mapeia para CRUD de um recurso. Endpoints de ação (login,
+      logout, confirm, reset) são válidos no REST. A regra:
+     - Ação que produz um resultado (login → tokens) → 200 com o resultado
+     - Ação que dispara efeito colateral sem produzir dados (logout, confirm) →
+     204
+
+     2. Atualizar template do API Contract no SKILL.md
+
+     Local: Seção "Output structure" → template do API Contract
+
+     Atualizar o template para refletir os padrões 204 e 201:
+
+     #### METHOD /resource/path (SI-NN.X)
+
+     **Request headers:**
+     - Authorization: Bearer <access_token> _(if authenticated)_
+     - Content-Type: application/json
+
+     **Request body:**
+     - field: type, required/optional — constraints
+
+     **Response 2XX:** _(choose based on REST conventions: 200 for data, 201 for
+      creation, 204 for no content)_
+     - field: type _(omit for 204)_
+
+     **Response headers:** _(if applicable)_
+     - Location: /resource/:id _(for 201 when GET endpoint exists)_
+
+     **Error responses:**
+     - 4XX ERROR_CODE: when this error occurs
+     - 400 validation error: when the request body fails schema validation
+
+     3. Atualizar seção "API Contracts" em "How to write Technical 
+     Specifications"
+
+     Local: "How to write Technical Specifications" → "API Contracts"
+
+     Adicionar ao final da seção existente:
+
+     ▎ Status code and response body: Follow the REST conventions defined in 
+     "REST Conventions for API Contracts" above. In particular: use 204 No 
+     Content for endpoints that succeed without producing data — do not invent {
+      message: "..." } wrappers. Use 201 Created for POST endpoints that create 
+     resources.
+
+     4. Atualizar AC template formulas (ajuste menor)
+
+     Local: "How to write Acceptance Criteria" → "Template formulas" → "HTTP
+     endpoint behavior"
+
+     Adicionar variante para 204:
+
+     [METHOD] [/path] with [input description] returns 204 with no response body
+
+     Exemplo: POST /auth/logout with a valid access token returns 204 with no 
+     response body — all user's refresh tokens are revoked
+
+     5. Corrigir phase-02-auth.md (consequência)
+
+     Após atualizar o SKILL.md, corrigir os contratos da fase 02:
+
+     ┌────────────────────────────────┬─────────────────┬───────────────┐
+     │            Endpoint            │      Antes      │    Depois     │
+     ├────────────────────────────────┼─────────────────┼───────────────┤
+     │ POST /auth/confirm-email       │ 200 { message } │ 204 sem corpo │
+     ├────────────────────────────────┼─────────────────┼───────────────┤
+     │ POST /auth/resend-confirmation │ 200 { message } │ 204 sem corpo │
+     ├────────────────────────────────┼─────────────────┼───────────────┤
+     │ POST /auth/logout              │ 200 { message } │ 204 sem corpo │
+     ├────────────────────────────────┼─────────────────┼───────────────┤
+     │ POST /auth/forgot-password     │ 200 { message } │ 204 sem corpo │
+     ├────────────────────────────────┼─────────────────┼───────────────┤
+     │ POST /auth/reset-password      │ 200 { message } │ 204 sem corpo │
+     └────────────────────────────────┴─────────────────┴───────────────┘
+
+     Também atualizar os acceptance criteria correspondentes nos SIs (remover
+     referências ao { message } e usar "returns 204" no lugar).
+
+     Arquivos a modificar
+
+     1. .claude/skills/plan-phase/SKILL.md — adicionar convenções REST (seções
+     1-4 acima)
+     2. docs/phases/phase-02-auth.md — corrigir contratos e ACs (seção 5)
+
+     Verificação
+
+     - Reler SKILL.md completo após edições para garantir coerência entre seções
+     - Reler phase-02-auth.md para confirmar que todos os 5 endpoints foram
+     corrigidos
+     - Verificar que os ACs dos SIs afetados (SI-02.7, SI-02.11, SI-02.12) foram
+      atualizados
+
+● Plano aprovado. Vou implementar as mudanças no SKILL.md e na phase-02-auth.md.
+
+  Começando com as 4 edições no SKILL.md (todas em locais distintos do arquivo):
+
+● Update(.claude/skills/plan-phase/SKILL.md)
+  ⎿  Added 35 lines
+      365  
+      366  **Handling unresolved ambiguities during drafting:** If you re
+           ach a point where a decision is missing and was not caught dur
+           ing Validation, insert an inline marker `[DECIDE: option A | o
+           ption B — brief context]` in the draft and continue. When the 
+           draft is complete, present all markers to the user via `AskUse
+           rQuestion` (one question per marker). `AskUserQuestion` accept
+           s up to 4 questions per call, so if there are ≤4 markers use a
+            single call; if there are more, issue sequential calls of up 
+           to 4 questions each until all markers are resolved. Apply the 
+           answers with targeted `Edit` calls. This avoids breaking the d
+           rafting flow with mid-stream questions.
+      367  
+      368 +## REST Conventions for API Contracts                         
+      369 +                                                              
+      370 +When specifying API contracts, follow these conventions to ens
+          +ure the plan produces RESTful, standards-compliant endpoint de
+          +finitions.                                                    
+      371 +                                                              
+      372 +### Success Status Code Selection                             
+      373 +                                                              
+      374 +| Status | When to use | Response body |                      
+      375 +|--------|-------------|---------------|                      
+      376 +| **200 OK** | Operation succeeded and returns meaningful data
+          + (resource representation, token pair, search results, compute
+          +d value) | Yes — the resource or data produced |              
+      377 +| **201 Created** | POST that creates a new identifiable resou
+          +rce | Yes — representation of the created resource (at minimum
+          +: ID + essential fields) |                                    
+      378 +| **204 No Content** | Operation succeeded with nothing meanin
+          +gful to return | **None** — no response body at all |         
+      379 +| **202 Accepted** | Operation accepted for asynchronous proce
+          +ssing — result not yet available | Optional — reference to the
+          + job/task for polling |                                       
+      380 +                                                              
+      381 +### Response Body Rules                                       
+      382 +                                                              
+      383 +The body of a success response contains the **representation o
+          +f the resource/data produced** or **nothing** (204). Never ret
+          +urn `{ message: "..." }` as the sole content of a success resp
+          +onse — the HTTP status code already communicates the outcome. 
+      384 +                                                              
+      385 +Decision guide:                                               
+      386 +                                                              
+      387 +- **Endpoint creates a resource** (register user, create video
+          +) → 201 + resource representation                             
+      388 +- **Endpoint returns data** (login → tokens, search → results)
+          + → 200 + data                                                 
+      389 +- **Endpoint executes an action without producing data** (logo
+          +ut, confirm email, revoke token, send email) → 204 with no bod
+          +y                                                             
+      390 +- **Security-neutral endpoint** (forgot-password, resend-confi
+          +rmation — always returns the same response regardless of input
+          + to avoid leaking information) → 204 with no body (the absence
+          + of a body naturally prevents information leakage)            
+      391 +                                                              
+      392 +### Location Header for 201 Created                           
+      393 +                                                              
+      394 +When the created resource has a retrieval endpoint (GET), incl
+          +ude a `Location` response header pointing to the resource URI 
+          +(e.g., `Location: /users/:id`). Omit when no GET endpoint exis
+          +ts for the resource in the current phase.                     
+      395 +                                                              
+      396 +### Action Endpoints vs. Resource Endpoints                   
+      397 +                                                              
+      398 +Not every endpoint maps to CRUD on a resource. Action endpoint
+          +s (login, logout, confirm, reset) are valid in REST. The rule:
+      399 +                                                              
+      400 +- Action that **produces a result** (login → tokens) → 200 wit
+          +h the result                                                  
+      401 +- Action that **triggers a side effect without producing data*
+          +* (logout, confirm) → 204 with no body                        
+      402 +                                                              
+      403  ## How to write Technical Specifications
+      404  
+      405  Not every phase needs all specification sections. Use this che
+           cklist to decide which to include:
+
+● Update(.claude/skills/plan-phase/SKILL.md)
+  ⎿  Added 4 lines, removed 3 lines
+      137  **Request body:**
+      138  - field: type, required/optional — constraints
+      139  
+      140 -**Response NNN:**                                             
+      141 -- field: type                                                 
+      140 +**Response 2XX:** _(choose based on REST Conventions: 200 for 
+          +data, 201 for creation, 204 for no content)_                  
+      141 +- field: type _(omit entire section for 204 — no body)_       
+      142  
+      143 -**Response headers:** (if applicable)                         
+      143 +**Response headers:** _(if applicable)_                       
+      144 +- Location: /resource/:id _(for 201 when GET endpoint exists)_
+      145  - Header-Name: description
+      146  
+      147  **Error responses:**
+
+● Update(.claude/skills/plan-phase/SKILL.md)
+  ⎿  Added 2 lines
+      433  
+      434  When validation rules are simple (2-3 constraints per field), 
+           describe them inline in the request body. When extensive, grou
+           p them in a separate **Validation Rules** subsection per endpo
+           int or per entity.
+      435  
+      436 +**Status code and response body:** Follow the REST conventions
+          + defined in "REST Conventions for API Contracts" above. In par
+          +ticular: use 204 No Content for endpoints that succeed without
+          + producing data — do not invent `{ message: "..." }` wrappers.
+          + Use 201 Created for POST endpoints that create resources.    
+      437 +                                                              
+      438  ### Authorization Matrix
+      439  
+      440  A table mapping every endpoint of the phase to its access requ
+           irement:
+
+● Update(.claude/skills/plan-phase/SKILL.md)
+  ⎿  Added 6 lines
+      267  
+      268  Example: `POST /auth/register with an already-registered email
+            returns 409 with EMAIL_ALREADY_EXISTS`
+      269  
+      270 +For 204 No Content responses (action endpoints with no respons
+          +e body):                                                      
+      271 +                                                              
+      272 +    [METHOD] [/path] with [input description] returns 204 with
+          + no response body — [observable side effect]                  
+      273 +                                                              
+      274 +Example: `POST /auth/logout with a valid access token returns 
+          +204 with no response body — all user's refresh tokens are revo
+          +ked`                                                          
+      275 +                                                              
+      276  **Database/persistence behavior** (constraint enforcement, ato
+           micity, data integrity):
+      277  
+      278      [operation description] — [expected persistence outcome or
+            constraint violation]
+
+● SKILL.md atualizado. Agora vou corrigir o phase-02-auth.md — primeiro os API
+  Contracts:
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 2 lines
+      488  **Request body:**
+      489  - token: string, required — the raw hex token from the confirm
+           ation email
+      490  
+      491 -**Response 200:**                                             
+      492 -- message: "Email confirmed successfully"                     
+      491 +**Response 204:** No content.                                 
+      492  
+      493  **Error responses:**
+      494  - 401 INVALID_TOKEN: when the token is not found or already us
+           ed
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 2 lines
+      505  **Request body:**
+      506  - email: string, required — valid email format
+      507  
+      508 -**Response 200:**                                             
+      509 -- message: "If the email exists and is unconfirmed, a new conf
+          -irmation email has been sent"                                 
+      508 +**Response 204:** No content.                                 
+      509  
+      510  **Error responses:**
+      511  - 400 validation error: when the request body fails schema val
+           idation
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 2 lines
+      556  **Request headers:**
+      557  - Authorization: Bearer <access_token>
+      558  
+      559 -**Response 200:**                                             
+      560 -- message: "Logged out successfully"                          
+      559 +**Response 204:** No content.                                 
+      560  
+      561  **Error responses:**
+      562  - 401: when the access token is missing or invalid
+
+● Update(docs/phases/phase-02-auth.md)  ⎿  Added 1 line, removed 2 lines
+      571  **Request body:**
+      572  - email: string, required — valid email format
+      573  
+      574 -**Response 200:**                                             
+      575 -- message: "If the email exists, a password reset link has bee
+          -n sent"                                                       
+      574 +**Response 204:** No content.                                 
+      575  
+      576  **Error responses:**
+      577  - 400 validation error: when the request body fails schema val
+           idation
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 2 lines
+      587  - token: string, required — the raw hex token from the reset e
+           mail
+      588  - new_password: string, required — min 8, max 128 characters
+      589  
+      590 -**Response 200:**                                             
+      591 -- message: "Password reset successfully"                      
+      590 +**Response 204:** No content.                                 
+      591  
+      592  **Error responses:**
+      593  - 401 INVALID_TOKEN: when the token is not found or already us
+           ed
+
+● Agora os SIs — technical actions, ACs e testes E2E:
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      190  - Implement `resendConfirmation(email: string): Promise<void>`
+            in `AuthService` — find user by email. If not found, return s
+           ilently (do not reveal email existence). If already confirmed,
+            return silently. Invalidate all unused confirmation tokens fo
+           r this user (`used_at = now`). Generate new token, store hash,
+            send confirmation email. Token expires in `CONFIRMATION_TOKEN
+           _EXPIRATION_HOURS`
+      191  - Create `src/auth/dto/confirm-email.dto.ts` — `ConfirmEmailDt
+           o` with `@IsString() @IsNotEmpty()` token
+      192  - Create `src/auth/dto/resend-confirmation.dto.ts` — `ResendCo
+           nfirmationDto` with `@IsEmail()` email
+      193 -- Add `@Post('confirm-email')` and `@Post('resend-confirmation
+          -')` to `AuthController` — confirm returns 200 `{ message: 'Ema
+          -il confirmed successfully' }`, resend returns 200 `{ message: 
+          -'If the email exists and is unconfirmed, a new confirmation em
+          -ail has been sent' }`                                         
+      193 +- Add `@Post('confirm-email')` and `@Post('resend-confirmation
+          +')` to `AuthController` — confirm returns 204 with no body, re
+          +send returns 204 with no body                                 
+      194  
+      195  **Tests:**
+      196  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      204  
+      205  **Acceptance criteria:**
+      206  
+      207 -- `POST /auth/confirm-email` with a valid, unused, non-expired
+          - token returns 200 and the user's `is_confirmed` becomes `true
+          -`                                                             
+      207 +- `POST /auth/confirm-email` with a valid, unused, non-expired
+          + token returns 204 with no response body — the user's `is_conf
+          +irmed` becomes `true`                                         
+      208  - `POST /auth/confirm-email` with an already-used token return
+           s 401 with `INVALID_TOKEN`
+      209  - `POST /auth/confirm-email` with an expired token returns 401
+            with `TOKEN_EXPIRED`
+      210  - `POST /auth/resend-confirmation` with a registered, unconfir
+           med email invalidates previous confirmation tokens, sends a ne
+           w confirmation email, and returns 200
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      207  - `POST /auth/confirm-email` with a valid, unused, non-expired
+            token returns 204 with no response body — the user's `is_conf
+           irmed` becomes `true`
+      208  - `POST /auth/confirm-email` with an already-used token return
+           s 401 with `INVALID_TOKEN`
+      209  - `POST /auth/confirm-email` with an expired token returns 401
+            with `TOKEN_EXPIRED`
+      210 -- `POST /auth/resend-confirmation` with a registered, unconfir
+          -med email invalidates previous confirmation tokens, sends a ne
+          -w confirmation email, and returns 200                         
+      210 +- `POST /auth/resend-confirmation` with a registered, unconfir
+          +med email invalidates previous confirmation tokens, sends a ne
+          +w confirmation email, and returns 204 with no response body   
+      211  - `POST /auth/resend-confirmation` with a non-existent or alre
+           ady-confirmed email returns 200 with the same message — email 
+           existence is not revealed
+      212  
+      213  ---
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      208  - `POST /auth/confirm-email` with an already-used token return
+           s 401 with `INVALID_TOKEN`
+      209  - `POST /auth/confirm-email` with an expired token returns 401
+            with `TOKEN_EXPIRED`
+      210  - `POST /auth/resend-confirmation` with a registered, unconfir
+           med email invalidates previous confirmation tokens, sends a ne
+           w confirmation email, and returns 204 with no response body
+      211 -- `POST /auth/resend-confirmation` with a non-existent or alre
+          -ady-confirmed email returns 200 with the same message — email 
+          -existence is not revealed                                     
+      211 +- `POST /auth/resend-confirmation` with a non-existent or alre
+          +ady-confirmed email returns 204 with no response body — email 
+          +existence is not revealed                                     
+      212  
+      213  ---
+      214  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      198  |------|-------|----------|
+      199  | `src/auth/auth.service.spec.ts` | Unit | Confirm: valid toke
+           n sets confirmed, expired token throws, used token throws; Res
+           end: invalidates old tokens, generates new token, silent on un
+           known email |
+      200  | `src/auth/auth.service.integration-spec.ts` | Integration | 
+           Confirm persists `is_confirmed = true` and `used_at` in DB; Re
+           send invalidates old tokens and creates new one |
+      201 -| `test/auth.e2e-spec.ts` | E2E | `POST /auth/confirm-email` 2
+          -00 with valid token, 401 with invalid/expired token; `POST /au
+          -th/resend-confirmation` 200 always (no leak) |                
+      201 +| `test/auth.e2e-spec.ts` | E2E | `POST /auth/confirm-email` 2
+          +04 with valid token, 401 with invalid/expired token; `POST /au
+          +th/resend-confirmation` 204 always (no leak) |                
+      202  
+      203  **Dependencies:** SI-02.6
+      204  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      313  **Technical actions:**
+      314  
+      315  - Implement `logout(userId: string): Promise<void>` in `AuthSe
+           rvice` — revoke all non-revoked refresh tokens for the user: `
+           UPDATE refresh_tokens SET revoked_at = now WHERE user_id = :us
+           erId AND revoked_at IS NULL`
+      316 -- Add `@Post('logout')` to `AuthController` (requires authenti
+          -cation — no `@Public()` decorator). Extract user ID from `@Cur
+          -rentUser()` decorator, call `authService.logout(userId)`, retu
+          -rn 200 with `{ message: 'Logged out successfully' }`          
+      316 +- Add `@Post('logout')` to `AuthController` (requires authenti
+          +cation — no `@Public()` decorator). Extract user ID from `@Cur
+          +rentUser()` decorator, call `authService.logout(userId)`, retu
+          +rn 204 with no body                                           
+      317  
+      318  **Tests:**
+      319  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      327  
+      328  **Acceptance criteria:**
+      329  
+      330 -- `POST /auth/logout` with a valid access token returns 200 an
+          -d all refresh tokens for that user are revoked                
+      330 +- `POST /auth/logout` with a valid access token returns 204 wi
+          +th no response body — all refresh tokens for that user are rev
+          +oked                                                          
+      331  - `POST /auth/logout` without an access token returns 401
+      332  - After logout, attempting to use any of the user's previous r
+           efresh tokens returns 401 with `TOKEN_REUSE_DETECTED` (beyond 
+           grace period) or `INVALID_TOKEN`
+      333  - Logout does not affect refresh tokens belonging to other use
+           rs
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      321  |------|-------|----------|
+      322  | `src/auth/auth.service.spec.ts` | Unit | Logout revokes all 
+           tokens for user |
+      323  | `src/auth/auth.service.integration-spec.ts` | Integration | 
+           After logout, all user's refresh tokens have `revoked_at` set;
+            tokens from other users are unaffected |
+      324 -| `test/auth.e2e-spec.ts` | E2E | `POST /auth/logout` 200 with
+          - valid access token, 401 without token; after logout, refresh 
+          -token is invalid |                                            
+      324 +| `test/auth.e2e-spec.ts` | E2E | `POST /auth/logout` 204 with
+          + valid access token, 401 without token; after logout, refresh 
+          +token is invalid |                                            
+      325  
+      326  **Dependencies:** SI-02.9, SI-02.10
+      327  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      344  - Implement `resetPassword(token: string, newPassword: string)
+           : Promise<void>` in `AuthService` — hash incoming token, look 
+           up in `verification_tokens` where `type = 'password_reset'`, `
+           used_at IS NULL`, `expires_at > now`. If not found, throw `Inv
+           alidTokenException`. If expired, throw `TokenExpiredException`
+           . Mark token as used. Hash new password with `argon2.hash()`. 
+           Update user's password. Revoke all refresh tokens for this use
+           r (reuse `logout()` logic)
+      345  - Create `src/auth/dto/forgot-password.dto.ts` — `ForgotPasswo
+           rdDto` with `@IsEmail()` email
+      346  - Create `src/auth/dto/reset-password.dto.ts` — `ResetPassword
+           Dto` with `@IsString() @IsNotEmpty()` token and `@IsString() @
+           MinLength(8) @MaxLength(128)` new_password
+      347 -- Add `@Public() @Post('forgot-password')` and `@Public() @Pos
+          -t('reset-password')` to `AuthController` — forgot returns 200 
+          -`{ message: 'If the email exists, a password reset link has be
+          -en sent' }`, reset returns 200 `{ message: 'Password reset suc
+          -cessfully' }`                                                 
+      347 +- Add `@Public() @Post('forgot-password')` and `@Public() @Pos
+          +t('reset-password')` to `AuthController` — forgot returns 204 
+          +with no body, reset returns 204 with no body                  
+      348  
+      349  **Tests:**
+      350  
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      359  **Acceptance criteria:**
+      360  
+      361  - `POST /auth/forgot-password` with a registered email causes 
+           a password reset email to be delivered containing the user's c
+           hannel name and a reset link with the token
+      362 -- `POST /auth/forgot-password` with a non-existent email retur
+          -ns 200 with the same generic message — email existence is not 
+          -revealed                                                      
+      362 +- `POST /auth/forgot-password` with a non-existent email retur
+          +ns 204 with no response body — email existence is not revealed
+      363  - `POST /auth/reset-password` with a valid, unused, non-expire
+           d token and a new password returns 200, updates the password, 
+           and revokes all refresh tokens for that user
+      364  - `POST /auth/reset-password` with an expired token returns 40
+           1 with `TOKEN_EXPIRED`
+      365  - `POST /auth/reset-password` with an already-used token retur
+           ns 401 with `INVALID_TOKEN`
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      360  
+      361  - `POST /auth/forgot-password` with a registered email causes 
+           a password reset email to be delivered containing the user's c
+           hannel name and a reset link with the token
+      362  - `POST /auth/forgot-password` with a non-existent email retur
+           ns 204 with no response body — email existence is not revealed
+      363 -- `POST /auth/reset-password` with a valid, unused, non-expire
+          -d token and a new password returns 200, updates the password, 
+          -and revokes all refresh tokens for that user                  
+      363 +- `POST /auth/reset-password` with a valid, unused, non-expire
+          +d token and a new password returns 204 with no response body —
+          + the password is updated and all refresh tokens for that user 
+          +are revoked                                                   
+      364  - `POST /auth/reset-password` with an expired token returns 40
+           1 with `TOKEN_EXPIRED`
+      365  - `POST /auth/reset-password` with an already-used token retur
+           ns 401 with `INVALID_TOKEN`
+      366  - After password reset, the user can login with the new passwo
+           rd and the old password no longer works
+
+● Update(docs/phases/phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      352  |------|-------|----------|
+      353  | `src/auth/auth.service.spec.ts` | Unit | Forgot: generates t
+           oken and sends email, silent on unknown email; Reset: validate
+           s token, hashes new password, revokes all refresh tokens |
+      354  | `src/auth/auth.service.integration-spec.ts` | Integration | 
+           Forgot persists token in DB; Reset updates password hash, mark
+           s token used, revokes refresh tokens |
+      355 -| `test/auth.e2e-spec.ts` | E2E | `POST /auth/forgot-password`
+          - 200 always; `POST /auth/reset-password` 200 with valid token,
+          - 401 with invalid/expired token |                             
+      355 +| `test/auth.e2e-spec.ts` | E2E | `POST /auth/forgot-password`
+          + 204 always; `POST /auth/reset-password` 204 with valid token,
+          + 401 with invalid/expired token |                             
+      356  
+      357  **Dependencies:** SI-02.7, SI-02.10
+      358  
+
+● Todas as edições feitas. Resumo do que foi alterado:
+
+  SKILL.md — 4 adições:
+  1. Nova seção "REST Conventions for API Contracts" com regras de status code
+  (200/201/204/202), regra de corpo de resposta, Location header para 201, e
+  distinção ação vs. recurso
+  2. Template do API Contract atualizado para refletir 204 e Location header
+  3. Referência às convenções REST na seção "API Contracts" das Technical
+  Specifications
+  4. Nova fórmula de AC para endpoints 204
+
+  phase-02-auth.md — 12 edições corrigindo os 5 endpoints afetados:
+  - confirm-email, resend-confirmation, logout, forgot-password, reset-password
+  → todos de 200 { message } para 204 No Content
+  - Technical actions, acceptance criteria e testes E2E dos SIs 02.7, 02.11 e
+  02.12 atualizados

@@ -15,9 +15,9 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Technical actions:**
 
 - Install production dependencies in nestjs-project: `argon2@^0.41.x`, `@nestjs/jwt@^11.0.0`, `@nestjs-modules/mailer@^2.x`, `handlebars@^4.x`, `@nestjs/throttler@^6.x`, `class-validator@^0.14.x`, `class-transformer@^0.5.x`
-- Create `src/config/auth.config.ts` — `registerAs('auth', ...)` reading `JWT_SECRET` (string, required), `JWT_ACCESS_EXPIRATION` (string, default `'15m'`), `JWT_REFRESH_EXPIRATION` (string, default `'7d'`), `CONFIRMATION_TOKEN_EXPIRATION_HOURS` (number, default `1`), `PASSWORD_RESET_TOKEN_EXPIRATION_HOURS` (number, default `1`)
+- Create `src/config/auth.config.ts` — `registerAs('auth', ...)` reading `JWT_SECRET` (string, required — used for access tokens), `JWT_REFRESH_SECRET` (string, required — separate secret for refresh tokens), `JWT_ACCESS_EXPIRATION` (string, default `'15m'`), `JWT_REFRESH_EXPIRATION` (string, default `'7d'`), `CONFIRMATION_TOKEN_EXPIRATION_HOURS` (number, default `1`), `PASSWORD_RESET_TOKEN_EXPIRATION_HOURS` (number, default `1`)
 - Create `src/config/mail.config.ts` — `registerAs('mail', ...)` reading `MAIL_HOST` (string, default `'mailpit'`), `MAIL_PORT` (number, default `1025`), `MAIL_FROM` (string, default `'"StreamTube" <noreply@streamtube.com>'`)
-- Update `src/config/env.validation.ts` — add all new environment variables to the Joi schema (`JWT_SECRET` required, others with defaults). Update `.env.example` with all new variables and Docker Compose-compatible defaults
+- Update `src/config/env.validation.ts` — add all new environment variables to the Joi schema (`JWT_SECRET` and `JWT_REFRESH_SECRET` required, others with defaults). Update `.env.example` with all new variables and Docker Compose-compatible defaults
 - Add Mailpit service to `nestjs-project/compose.yaml` — image `axllent/mailpit`, SMTP on port 1025, Web UI on port 8025, with `nestjs-api` depending on it
 
 **Dependencies:** None
@@ -190,7 +190,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 - Implement `resendConfirmation(email: string): Promise<void>` in `AuthService` — find user by email. If not found, return silently (do not reveal email existence). If already confirmed, return silently. Invalidate all unused confirmation tokens for this user (`used_at = now`). Generate new token, store hash, send confirmation email. Token expires in `CONFIRMATION_TOKEN_EXPIRATION_HOURS`
 - Create `src/auth/dto/confirm-email.dto.ts` — `ConfirmEmailDto` with `@IsString() @IsNotEmpty()` token
 - Create `src/auth/dto/resend-confirmation.dto.ts` — `ResendConfirmationDto` with `@IsEmail()` email
-- Add `@Post('confirm-email')` and `@Post('resend-confirmation')` to `AuthController` — confirm returns 200 `{ message: 'Email confirmed successfully' }`, resend returns 200 `{ message: 'If the email exists and is unconfirmed, a new confirmation email has been sent' }`
+- Add `@Post('confirm-email')` and `@Post('resend-confirmation')` to `AuthController` — confirm returns 204 with no body, resend returns 204 with no body
 
 **Tests:**
 
@@ -198,27 +198,27 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 |------|-------|----------|
 | `src/auth/auth.service.spec.ts` | Unit | Confirm: valid token sets confirmed, expired token throws, used token throws; Resend: invalidates old tokens, generates new token, silent on unknown email |
 | `src/auth/auth.service.integration-spec.ts` | Integration | Confirm persists `is_confirmed = true` and `used_at` in DB; Resend invalidates old tokens and creates new one |
-| `test/auth.e2e-spec.ts` | E2E | `POST /auth/confirm-email` 200 with valid token, 401 with invalid/expired token; `POST /auth/resend-confirmation` 200 always (no leak) |
+| `test/auth.e2e-spec.ts` | E2E | `POST /auth/confirm-email` 204 with valid token, 401 with invalid/expired token; `POST /auth/resend-confirmation` 204 always (no leak) |
 
 **Dependencies:** SI-02.6
 
 **Acceptance criteria:**
 
-- `POST /auth/confirm-email` with a valid, unused, non-expired token returns 200 and the user's `is_confirmed` becomes `true`
+- `POST /auth/confirm-email` with a valid, unused, non-expired token returns 204 with no response body — the user's `is_confirmed` becomes `true`
 - `POST /auth/confirm-email` with an already-used token returns 401 with `INVALID_TOKEN`
 - `POST /auth/confirm-email` with an expired token returns 401 with `TOKEN_EXPIRED`
-- `POST /auth/resend-confirmation` with a registered, unconfirmed email invalidates previous confirmation tokens, sends a new confirmation email, and returns 200
-- `POST /auth/resend-confirmation` with a non-existent or already-confirmed email returns 200 with the same message — email existence is not revealed
+- `POST /auth/resend-confirmation` with a registered, unconfirmed email invalidates previous confirmation tokens, sends a new confirmation email, and returns 204 with no response body
+- `POST /auth/resend-confirmation` with a non-existent or already-confirmed email returns 204 with no response body — email existence is not revealed
 
 ---
 
 ### SI-02.8 — Login with Credential Validation and Token Issuance
 
-**Description:** Implement the login endpoint that validates email/password, checks email confirmation status, and issues a JWT access token plus an opaque refresh token (starting a new rotation family).
+**Description:** Implement the login endpoint that validates email/password, checks email confirmation status, and issues a JWT access token plus a JWT refresh token (starting a new rotation family).
 
 **Technical actions:**
 
-- Implement `login(dto: LoginDto): Promise<{ access_token, refresh_token }>` in `AuthService` — find user by email with `addSelect('user.password')`. If not found, throw `InvalidCredentialsException`. Verify password with `argon2.verify()`. If invalid, throw `InvalidCredentialsException` (same error — do not reveal whether email exists). If `is_confirmed = false`, throw `EmailNotConfirmedException`. Generate JWT access token via `jwtService.sign({ sub: user.id, email: user.email }, { expiresIn: authConfig.jwtAccessExpiration })`. Generate opaque refresh token via `crypto.randomBytes(32)`, store SHA-256 hash in `refresh_tokens` with a new `family` UUID and `expires_at = now + JWT_REFRESH_EXPIRATION`. Return `{ access_token, refresh_token: rawHexToken }`
+- Implement `login(dto: LoginDto): Promise<{ access_token, refresh_token }>` in `AuthService` — find user by email with `addSelect('user.password')`. If not found, throw `InvalidCredentialsException`. Verify password with `argon2.verify()`. If invalid, throw `InvalidCredentialsException` (same error — do not reveal whether email exists). If `is_confirmed = false`, throw `EmailNotConfirmedException`. Generate JWT access token via `jwtService.sign({ sub: user.id, email: user.email }, { expiresIn: authConfig.jwtAccessExpiration })`. Generate JWT refresh token via `jwtService.sign({ sub: user.id, family: newFamilyUuid, jti: newTokenUuid }, { secret: authConfig.jwtRefreshSecret, expiresIn: authConfig.jwtRefreshExpiration })`, store SHA-256 hash of the signed JWT in `refresh_tokens` with the `family` UUID and `expires_at`. Return `{ access_token, refresh_token }`
 - Create `src/auth/dto/login.dto.ts` — `LoginDto` with `@IsEmail()` email and `@IsString() @IsNotEmpty()` password
 - Create `src/auth/auth.module.ts` — `AuthModule` importing `UsersModule`, `MailModule`, `JwtModule.registerAsync` (inject `authConfig.KEY`, configure `secret` and default `signOptions.expiresIn` from auth config), `TypeOrmModule.forFeature([RefreshToken, VerificationToken])`. Provide `AuthService`, export `AuthService` and `JwtModule`
 - Add `@Post('login')` to `AuthController` — returns 200 with `{ access_token, refresh_token }`
@@ -282,7 +282,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 
 **Technical actions:**
 
-- Implement `refresh(rawToken: string): Promise<{ access_token, refresh_token }>` in `AuthService` — hash incoming token with SHA-256, look up in `refresh_tokens`. If not found, throw `InvalidTokenException`. If expired (`expires_at < now`), throw `TokenExpiredException`. If revoked (`revoked_at IS NOT NULL`): check grace period — if `(now - revoked_at) <= 10 seconds`, find the latest non-revoked token in the same family and return a new access token paired with that token (do not create yet another token); if `(now - revoked_at) > 10 seconds`, this is reuse — revoke ALL tokens in the family (`UPDATE refresh_tokens SET revoked_at = now WHERE family = :family AND revoked_at IS NULL`), throw `TokenReuseDetectedException`. If valid: revoke current token (`revoked_at = now`), generate new refresh token in the same family, generate new access token, return both
+- Implement `refresh(rawToken: string): Promise<{ access_token, refresh_token }>` in `AuthService` — hash incoming token with SHA-256, look up in `refresh_tokens`. If not found, throw `InvalidTokenException`. If expired (`expires_at < now`), throw `TokenExpiredException`. If revoked (`revoked_at IS NOT NULL`): check grace period — if `(now - revoked_at) <= 10 seconds`, find the latest non-revoked token in the same family and return a new access token paired with that token (do not create yet another token); if `(now - revoked_at) > 10 seconds`, this is reuse — revoke ALL tokens in the family (`UPDATE refresh_tokens SET revoked_at = now WHERE family = :family AND revoked_at IS NULL`), throw `TokenReuseDetectedException`. If valid: revoke current token (`revoked_at = now`), generate new JWT refresh token in the same family (same `family` UUID, new `jti`), store its SHA-256 hash in `refresh_tokens`, generate new access token, return both
 - Create `src/auth/dto/refresh-token.dto.ts` — `RefreshTokenDto` with `@IsString() @IsNotEmpty()` refresh_token
 - Add `@Public() @Post('refresh')` to `AuthController` — accepts `{ refresh_token }`, returns 200 with `{ access_token, refresh_token }`
 
@@ -313,7 +313,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Technical actions:**
 
 - Implement `logout(userId: string): Promise<void>` in `AuthService` — revoke all non-revoked refresh tokens for the user: `UPDATE refresh_tokens SET revoked_at = now WHERE user_id = :userId AND revoked_at IS NULL`
-- Add `@Post('logout')` to `AuthController` (requires authentication — no `@Public()` decorator). Extract user ID from `@CurrentUser()` decorator, call `authService.logout(userId)`, return 200 with `{ message: 'Logged out successfully' }`
+- Add `@Post('logout')` to `AuthController` (requires authentication — no `@Public()` decorator). Extract user ID from `@CurrentUser()` decorator, call `authService.logout(userId)`, return 204 with no body
 
 **Tests:**
 
@@ -321,13 +321,13 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 |------|-------|----------|
 | `src/auth/auth.service.spec.ts` | Unit | Logout revokes all tokens for user |
 | `src/auth/auth.service.integration-spec.ts` | Integration | After logout, all user's refresh tokens have `revoked_at` set; tokens from other users are unaffected |
-| `test/auth.e2e-spec.ts` | E2E | `POST /auth/logout` 200 with valid access token, 401 without token; after logout, refresh token is invalid |
+| `test/auth.e2e-spec.ts` | E2E | `POST /auth/logout` 204 with valid access token, 401 without token; after logout, refresh token is invalid |
 
 **Dependencies:** SI-02.9, SI-02.10
 
 **Acceptance criteria:**
 
-- `POST /auth/logout` with a valid access token returns 200 and all refresh tokens for that user are revoked
+- `POST /auth/logout` with a valid access token returns 204 with no response body — all refresh tokens for that user are revoked
 - `POST /auth/logout` without an access token returns 401
 - After logout, attempting to use any of the user's previous refresh tokens returns 401 with `TOKEN_REUSE_DETECTED` (beyond grace period) or `INVALID_TOKEN`
 - Logout does not affect refresh tokens belonging to other users
@@ -344,7 +344,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 - Implement `resetPassword(token: string, newPassword: string): Promise<void>` in `AuthService` — hash incoming token, look up in `verification_tokens` where `type = 'password_reset'`, `used_at IS NULL`, `expires_at > now`. If not found, throw `InvalidTokenException`. If expired, throw `TokenExpiredException`. Mark token as used. Hash new password with `argon2.hash()`. Update user's password. Revoke all refresh tokens for this user (reuse `logout()` logic)
 - Create `src/auth/dto/forgot-password.dto.ts` — `ForgotPasswordDto` with `@IsEmail()` email
 - Create `src/auth/dto/reset-password.dto.ts` — `ResetPasswordDto` with `@IsString() @IsNotEmpty()` token and `@IsString() @MinLength(8) @MaxLength(128)` new_password
-- Add `@Public() @Post('forgot-password')` and `@Public() @Post('reset-password')` to `AuthController` — forgot returns 200 `{ message: 'If the email exists, a password reset link has been sent' }`, reset returns 200 `{ message: 'Password reset successfully' }`
+- Add `@Public() @Post('forgot-password')` and `@Public() @Post('reset-password')` to `AuthController` — forgot returns 204 with no body, reset returns 204 with no body
 
 **Tests:**
 
@@ -352,15 +352,15 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 |------|-------|----------|
 | `src/auth/auth.service.spec.ts` | Unit | Forgot: generates token and sends email, silent on unknown email; Reset: validates token, hashes new password, revokes all refresh tokens |
 | `src/auth/auth.service.integration-spec.ts` | Integration | Forgot persists token in DB; Reset updates password hash, marks token used, revokes refresh tokens |
-| `test/auth.e2e-spec.ts` | E2E | `POST /auth/forgot-password` 200 always; `POST /auth/reset-password` 200 with valid token, 401 with invalid/expired token |
+| `test/auth.e2e-spec.ts` | E2E | `POST /auth/forgot-password` 204 always; `POST /auth/reset-password` 204 with valid token, 401 with invalid/expired token |
 
 **Dependencies:** SI-02.7, SI-02.10
 
 **Acceptance criteria:**
 
 - `POST /auth/forgot-password` with a registered email causes a password reset email to be delivered containing the user's channel name and a reset link with the token
-- `POST /auth/forgot-password` with a non-existent email returns 200 with the same generic message — email existence is not revealed
-- `POST /auth/reset-password` with a valid, unused, non-expired token and a new password returns 200, updates the password, and revokes all refresh tokens for that user
+- `POST /auth/forgot-password` with a non-existent email returns 204 with no response body — email existence is not revealed
+- `POST /auth/reset-password` with a valid, unused, non-expired token and a new password returns 204 with no response body — the password is updated and all refresh tokens for that user are revoked
 - `POST /auth/reset-password` with an expired token returns 401 with `TOKEN_EXPIRED`
 - `POST /auth/reset-password` with an already-used token returns 401 with `INVALID_TOKEN`
 - After password reset, the user can login with the new password and the old password no longer works
@@ -432,7 +432,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | id | uuid | PK, generated | |
-| token_hash | varchar | not null | SHA-256 hash of the raw opaque token |
+| token_hash | varchar | not null | SHA-256 hash of the signed JWT refresh token |
 | family | uuid | not null | Groups tokens in the same rotation chain |
 | user_id | uuid | FK → users.id, not null | |
 | expires_at | timestamp | not null | |
@@ -488,8 +488,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Request body:**
 - token: string, required — the raw hex token from the confirmation email
 
-**Response 200:**
-- message: "Email confirmed successfully"
+**Response 204:** No content.
 
 **Error responses:**
 - 401 INVALID_TOKEN: when the token is not found or already used
@@ -506,8 +505,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Request body:**
 - email: string, required — valid email format
 
-**Response 200:**
-- message: "If the email exists and is unconfirmed, a new confirmation email has been sent"
+**Response 204:** No content.
 
 **Error responses:**
 - 400 validation error: when the request body fails schema validation
@@ -525,7 +523,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 
 **Response 200:**
 - access_token: string (JWT)
-- refresh_token: string (hex-encoded opaque token)
+- refresh_token: string (JWT)
 
 **Error responses:**
 - 401 INVALID_CREDENTIALS: when email does not exist OR password is wrong (same error for both)
@@ -540,11 +538,11 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 - Content-Type: application/json
 
 **Request body:**
-- refresh_token: string, required — the raw hex refresh token
+- refresh_token: string, required — the JWT refresh token
 
 **Response 200:**
 - access_token: string (JWT)
-- refresh_token: string (new hex-encoded opaque token)
+- refresh_token: string (new JWT refresh token)
 
 **Error responses:**
 - 401 INVALID_TOKEN: when the token is not found
@@ -558,8 +556,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Request headers:**
 - Authorization: Bearer <access_token>
 
-**Response 200:**
-- message: "Logged out successfully"
+**Response 204:** No content.
 
 **Error responses:**
 - 401: when the access token is missing or invalid
@@ -574,8 +571,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Request body:**
 - email: string, required — valid email format
 
-**Response 200:**
-- message: "If the email exists, a password reset link has been sent"
+**Response 204:** No content.
 
 **Error responses:**
 - 400 validation error: when the request body fails schema validation
@@ -591,8 +587,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 - token: string, required — the raw hex token from the reset email
 - new_password: string, required — min 8, max 128 characters
 
-**Response 200:**
-- message: "Password reset successfully"
+**Response 204:** No content.
 
 **Error responses:**
 - 401 INVALID_TOKEN: when the token is not found or already used
@@ -675,7 +670,7 @@ Linearized implementation order: SI-02.1 → SI-02.2, SI-02.3, SI-02.5 (parallel
 
 - [ ] User registration with automatic channel creation (nickname from email prefix, atomic transaction)
 - [ ] Email confirmation flow (confirm + resend, 1h token expiry)
-- [ ] Login with JWT access token + opaque refresh token (Argon2id password verification)
+- [ ] Login with JWT access token + JWT refresh token (Argon2id password verification)
 - [ ] Refresh token rotation with family-based theft detection and 10s grace period
 - [ ] Logout revokes all refresh tokens for the user
 - [ ] Password reset flow (forgot + reset, revokes all sessions)

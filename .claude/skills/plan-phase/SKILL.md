@@ -137,10 +137,11 @@ _(include only the subsections that apply to the phase — see applicability che
 **Request body:**
 - field: type, required/optional — constraints
 
-**Response NNN:**
-- field: type
+**Response 2XX:** _(choose based on REST Conventions: 200 for data, 201 for creation, 204 for no content)_
+- field: type _(omit entire section for 204 — no body)_
 
-**Response headers:** (if applicable)
+**Response headers:** _(if applicable)_
+- Location: /resource/:id _(for 201 when GET endpoint exists)_
 - Header-Name: description
 
 **Error responses:**
@@ -266,6 +267,12 @@ Use these sentence patterns. Replace the bracketed placeholders with specifics f
 
 Example: `POST /auth/register with an already-registered email returns 409 with EMAIL_ALREADY_EXISTS`
 
+For 204 No Content responses (action endpoints with no response body):
+
+    [METHOD] [/path] with [input description] returns 204 with no response body — [observable side effect]
+
+Example: `POST /auth/logout with a valid access token returns 204 with no response body — all user's refresh tokens are revoked`
+
 **Database/persistence behavior** (constraint enforcement, atomicity, data integrity):
 
     [operation description] — [expected persistence outcome or constraint violation]
@@ -365,6 +372,41 @@ Write the plan file incrementally, not in a single large write. This bounds each
 
 **Handling unresolved ambiguities during drafting:** If you reach a point where a decision is missing and was not caught during Validation, insert an inline marker `[DECIDE: option A | option B — brief context]` in the draft and continue. When the draft is complete, present all markers to the user via `AskUserQuestion` (one question per marker). `AskUserQuestion` accepts up to 4 questions per call, so if there are ≤4 markers use a single call; if there are more, issue sequential calls of up to 4 questions each until all markers are resolved. Apply the answers with targeted `Edit` calls. This avoids breaking the drafting flow with mid-stream questions.
 
+## REST Conventions for API Contracts
+
+When specifying API contracts, follow these conventions to ensure the plan produces RESTful, standards-compliant endpoint definitions.
+
+### Success Status Code Selection
+
+| Status | When to use | Response body |
+|--------|-------------|---------------|
+| **200 OK** | Operation succeeded and returns meaningful data (resource representation, token pair, search results, computed value) | Yes — the resource or data produced |
+| **201 Created** | POST that creates a new identifiable resource | Yes — representation of the created resource (at minimum: ID + essential fields) |
+| **204 No Content** | Operation succeeded with nothing meaningful to return | **None** — no response body at all |
+| **202 Accepted** | Operation accepted for asynchronous processing — result not yet available | Optional — reference to the job/task for polling |
+
+### Response Body Rules
+
+The body of a success response contains the **representation of the resource/data produced** or **nothing** (204). Never return `{ message: "..." }` as the sole content of a success response — the HTTP status code already communicates the outcome.
+
+Decision guide:
+
+- **Endpoint creates a resource** (register user, create video) → 201 + resource representation
+- **Endpoint returns data** (login → tokens, search → results) → 200 + data
+- **Endpoint executes an action without producing data** (logout, confirm email, revoke token, send email) → 204 with no body
+- **Security-neutral endpoint** (forgot-password, resend-confirmation — always returns the same response regardless of input to avoid leaking information) → 204 with no body (the absence of a body naturally prevents information leakage)
+
+### Location Header for 201 Created
+
+When the created resource has a retrieval endpoint (GET), include a `Location` response header pointing to the resource URI (e.g., `Location: /users/:id`). Omit when no GET endpoint exists for the resource in the current phase.
+
+### Action Endpoints vs. Resource Endpoints
+
+Not every endpoint maps to CRUD on a resource. Action endpoints (login, logout, confirm, reset) are valid in REST. The rule:
+
+- Action that **produces a result** (login → tokens) → 200 with the result
+- Action that **triggers a side effect without producing data** (logout, confirm) → 204 with no body
+
 ## How to write Technical Specifications
 
 Not every phase needs all specification sections. Use this checklist to decide which to include:
@@ -396,6 +438,8 @@ Specify for each endpoint:
 - Reference the step implementation that implements the endpoint (e.g., SI-02.1).
 
 When validation rules are simple (2-3 constraints per field), describe them inline in the request body. When extensive, group them in a separate **Validation Rules** subsection per endpoint or per entity.
+
+**Status code and response body:** Follow the REST conventions defined in "REST Conventions for API Contracts" above. In particular: use 204 No Content for endpoints that succeed without producing data — do not invent `{ message: "..." }` wrappers. Use 201 Created for POST endpoints that create resources.
 
 ### Authorization Matrix
 
