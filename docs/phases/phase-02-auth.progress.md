@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 2/13 completed
+**SIs:** 3/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -14,9 +14,11 @@
 - **Observations:** rodou comando de teste no host, em vez do container
 
 ### SI-02.3 — User and Channel Entities
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 11/11 passing (user.entity.integration-spec.ts, channel.entity.integration-spec.ts, users.module.spec.ts)
+- **Observations:** DB had leftover tables from a previous session (no migration files on disk); dropped tables and regenerated migration cleanly. Added `setupFiles: ["dotenv/config"]` to jest config so integration tests pick up DB_HOST from .env. Extended testRegex to `(spec|integration-spec).ts$` to discover integration test files.
+Review how env values are being used in tests (avoid localhost). And in UsersModule, better demonstrate that it's a unit test when using .spec, as it is using a database with .spec.
+
 
 ### SI-02.4 — RefreshToken and VerificationToken Entities
 - **Status:** pending
