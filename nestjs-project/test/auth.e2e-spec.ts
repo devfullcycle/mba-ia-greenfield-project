@@ -59,6 +59,16 @@ describe('Auth (e2e)', () => {
     return capturedToken;
   }
 
+  async function registerConfirmAndLogin(
+    email: string,
+    password = 'password123',
+  ): Promise<{ access_token: string; refresh_token: string }> {
+    const token = await captureConfirmationToken(email, password);
+    await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
+    const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
+    return { access_token: res.body.access_token, refresh_token: res.body.refresh_token };
+  }
+
   describe('POST /auth/register', () => {
     it('returns 201 with { id, email } on valid registration', async () => {
       const res = await request(app.getHttpServer())
@@ -209,16 +219,6 @@ describe('Auth (e2e)', () => {
   });
 
   describe('JWT Guard', () => {
-    async function registerConfirmAndLogin(
-      email: string,
-      password = 'password123',
-    ): Promise<{ access_token: string }> {
-      const token = await captureConfirmationToken(email, password);
-      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
-      const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
-      return { access_token: res.body.access_token };
-    }
-
     it('returns 401 on GET /auth/me without Authorization header', async () => {
       await request(app.getHttpServer()).get('/auth/me').expect(401);
     });
@@ -318,18 +318,6 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /auth/refresh', () => {
-    async function registerConfirmAndLogin(
-      email: string,
-      password = 'password123',
-    ): Promise<{ access_token: string; refresh_token: string }> {
-      const token = await captureConfirmationToken(email, password);
-      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
-      const res = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email, password });
-      return { access_token: res.body.access_token, refresh_token: res.body.refresh_token };
-    }
-
     it('returns 200 with new access_token and refresh_token on valid refresh token', async () => {
       const { refresh_token } = await registerConfirmAndLogin('refresh@example.com');
 
@@ -420,6 +408,39 @@ describe('Auth (e2e)', () => {
         .expect(400);
 
       expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('POST /auth/logout', () => {
+    it('returns 204 with a valid access token', async () => {
+      const { access_token } = await registerConfirmAndLogin('logout@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .set('Authorization', `Bearer ${access_token}`)
+        .expect(204);
+    });
+
+    it('returns 401 without an Authorization header', async () => {
+      await request(app.getHttpServer()).post('/auth/logout').expect(401);
+    });
+
+    it('revokes all refresh tokens so subsequent refresh calls return 401', async () => {
+      const { access_token, refresh_token } = await registerConfirmAndLogin(
+        'logoutrefresh@example.com',
+      );
+
+      await request(app.getHttpServer())
+        .post('/auth/logout')
+        .set('Authorization', `Bearer ${access_token}`)
+        .expect(204);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token })
+        .expect(401);
+
+      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(res.body.error);
     });
   });
 });

@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 10/13 completed
+**SIs:** 11/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -56,9 +56,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** JWT refresh tokens required jti: crypto.randomUUID() in the payload to guarantee uniqueness within the same second (same family+sub+iat would produce identical JWTs otherwise). Added jti to both login and refresh token signing. Grace period test returns rawToken back to the concurrent client (no new token created, no family revocation).
 
 ### SI-02.11 — Logout and Session Revocation
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 22 unit + 17 integration + 34 E2E passing (3 new logout tests; 0 regressions)
+- **Observations:** Grace period logic needed a fix: when all family tokens are revoked (e.g., by logout), the check for an active family token now throws InvalidTokenException instead of silently returning a token to a revoked session.
 
 ### SI-02.12 — Password Reset (Request and Execute)
 - **Status:** pending

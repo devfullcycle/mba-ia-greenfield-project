@@ -171,6 +171,12 @@ export class AuthService {
       const elapsedMs = now.getTime() - record.revoked_at.getTime();
 
       if (elapsedMs <= TOKEN_REUSE_GRACE_PERIOD_MS) {
+        const activeInFamily = await this.refreshTokenRepository.findOne({
+          where: { family: record.family, revoked_at: IsNull() },
+        });
+        if (!activeInFamily) {
+          throw new InvalidTokenException();
+        }
         return {
           access_token: this.generateAccessToken(record.user_id, record.user.email),
           refresh_token: rawToken,
@@ -210,6 +216,16 @@ export class AuthService {
       access_token: this.generateAccessToken(record.user_id, record.user.email),
       refresh_token: newRefreshToken,
     };
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.refreshTokenRepository
+      .createQueryBuilder()
+      .update(RefreshToken)
+      .set({ revoked_at: new Date() })
+      .where('user_id = :userId', { userId })
+      .andWhere('revoked_at IS NULL')
+      .execute();
   }
 
   private generateAccessToken(userId: string, email: string): string {

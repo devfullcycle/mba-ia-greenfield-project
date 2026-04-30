@@ -49,6 +49,12 @@ export class AuthController {
     return this.authService.refresh(dto.refresh_token);
   }
 
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@CurrentUser() user: JwtPayload): Promise<void> {
+    return this.authService.logout(user.sub);
+  }
+
   @Get('me')
   me(@CurrentUser() user: JwtPayload): JwtPayload {
     return user;

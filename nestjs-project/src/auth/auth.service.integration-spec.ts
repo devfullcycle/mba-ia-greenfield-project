@@ -55,6 +55,19 @@ function captureConfirmationToken(authService: AuthService): Promise<string> {
   });
 }
 
+async function registerConfirmAndLogin(
+  authService: AuthService,
+  email: string,
+  password: string,
+): Promise<{ userId: string; refreshToken: string }> {
+  const capturePromise = captureConfirmationToken(authService);
+  const { id: userId } = await authService.register({ email, password });
+  const confirmToken = await capturePromise;
+  await authService.confirm(confirmToken);
+  const { refresh_token: refreshToken } = await authService.login({ email, password });
+  return { userId, refreshToken };
+}
+
 describe('AuthService — register (integration)', () => {
   let authService: AuthService;
   let dataSource: DataSource;
@@ -327,20 +340,9 @@ describe('AuthService — refresh (integration)', () => {
     await clearMailpitMessages();
   });
 
-  async function registerConfirmAndLogin(
-    email: string,
-    password: string,
-  ): Promise<{ userId: string; refreshToken: string }> {
-    const capturePromise = captureConfirmationToken(authService);
-    const { id: userId } = await authService.register({ email, password });
-    const confirmToken = await capturePromise;
-    await authService.confirm(confirmToken);
-    const { refresh_token: refreshToken } = await authService.login({ email, password });
-    return { userId, refreshToken };
-  }
-
   it('rotates token: revokes old token and persists new token in DB', async () => {
     const { refreshToken: token1 } = await registerConfirmAndLogin(
+      authService,
       'rotate@example.com',
       'password123',
     );
@@ -362,7 +364,7 @@ describe('AuthService — refresh (integration)', () => {
   });
 
   it('access token from refresh is a valid JWT with correct sub and email', async () => {
-    const { refreshToken } = await registerConfirmAndLogin('jwtrefresh@example.com', 'password123');
+    const { refreshToken } = await registerConfirmAndLogin(authService, 'jwtrefresh@example.com', 'password123');
 
     const { access_token } = await authService.refresh(refreshToken);
 
@@ -373,6 +375,7 @@ describe('AuthService — refresh (integration)', () => {
 
   it('returns valid access token within grace period without revoking family', async () => {
     const { refreshToken: token1 } = await registerConfirmAndLogin(
+      authService,
       'grace@example.com',
       'password123',
     );
@@ -392,6 +395,7 @@ describe('AuthService — refresh (integration)', () => {
 
   it('revokes entire family and throws when reuse is detected beyond grace period', async () => {
     const { refreshToken: token1 } = await registerConfirmAndLogin(
+      authService,
       'reuse@example.com',
       'password123',
     );
@@ -412,5 +416,54 @@ describe('AuthService — refresh (integration)', () => {
     const allTokens = await refreshTokenRepository.findBy({ family });
     const anyActive = allTokens.some((t) => t.revoked_at === null);
     expect(anyActive).toBe(false);
+  });
+});
+
+describe('AuthService — logout (integration)', () => {
+  let authService: AuthService;
+  let dataSource: DataSource;
+  let refreshTokenRepository: Repository<RefreshToken>;
+
+  beforeAll(async () => {
+    const module = await createAuthTestModule();
+    authService = module.get(AuthService);
+    dataSource = module.get(DataSource);
+    refreshTokenRepository = dataSource.getRepository(RefreshToken);
+  });
+
+  afterAll(async () => {
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    await clearMailpitMessages();
+  });
+
+  it('revokes all active refresh tokens for the user after logout', async () => {
+    const { userId, refreshToken: token1 } = await registerConfirmAndLogin(
+      authService,
+      'logout@example.com',
+      'password123',
+    );
+
+    await authService.refresh(token1);
+    await authService.logout(userId);
+
+    const allTokens = await refreshTokenRepository.findBy({ user_id: userId });
+    expect(allTokens.length).toBeGreaterThan(0);
+    const anyActive = allTokens.some((t) => t.revoked_at === null);
+    expect(anyActive).toBe(false);
+  });
+
+  it('does not revoke tokens from other users', async () => {
+    const { userId: user1Id } = await registerConfirmAndLogin(authService, 'logout1@example.com', 'password123');
+    const { userId: user2Id } = await registerConfirmAndLogin(authService, 'logout2@example.com', 'password123');
+
+    await authService.logout(user1Id);
+
+    const user2Tokens = await refreshTokenRepository.findBy({ user_id: user2Id });
+    const anyUser2Active = user2Tokens.some((t) => t.revoked_at === null);
+    expect(anyUser2Active).toBe(true);
   });
 });

@@ -518,3 +518,32 @@ describe('AuthService — refresh', () => {
     expect(qbMock.where).toHaveBeenCalledWith('family = :family', { family: 'family-uuid' });
   });
 });
+
+describe('AuthService — logout', () => {
+  let authService: AuthService;
+  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+
+  beforeEach(async () => {
+    const module = await buildTestModule();
+    authService = module.get(AuthService);
+    refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
+  });
+
+  it('revokes all active refresh tokens for the user', async () => {
+    const qbMock = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+
+    await authService.logout('user-id-123');
+
+    expect(qbMock.set).toHaveBeenCalledWith({ revoked_at: expect.any(Date) });
+    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'user-id-123' });
+    expect(qbMock.andWhere).toHaveBeenCalledWith('revoked_at IS NULL');
+    expect(qbMock.execute).toHaveBeenCalled();
+  });
+});
