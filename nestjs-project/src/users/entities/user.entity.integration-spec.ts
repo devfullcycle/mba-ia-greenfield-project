@@ -1,22 +1,18 @@
 import { DataSource, Repository } from 'typeorm';
+import { RefreshToken } from '../../auth/entities/refresh-token.entity';
+import { VerificationToken } from '../../auth/entities/verification-token.entity';
+import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
 import { Channel } from './channel.entity';
 import { User } from './user.entity';
+
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
 describe('User entity (integration)', () => {
   let dataSource: DataSource;
   let userRepository: Repository<User>;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'db',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'streamtube',
-      password: process.env.DB_PASSWORD ?? 'streamtube',
-      database: process.env.DB_DATABASE ?? 'streamtube',
-      entities: [User, Channel],
-      synchronize: true,
-    });
+    dataSource = createTestDataSource(ALL_ENTITIES);
     await dataSource.initialize();
     userRepository = dataSource.getRepository(User);
   });
@@ -26,8 +22,7 @@ describe('User entity (integration)', () => {
   });
 
   beforeEach(async () => {
-    await dataSource.query('DELETE FROM "channels"');
-    await dataSource.query('DELETE FROM "users"');
+    await cleanAllTables(dataSource);
   });
 
   it('should auto-generate uuid, created_at, and updated_at', async () => {

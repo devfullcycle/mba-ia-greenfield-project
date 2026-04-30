@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 3/13 completed
+**SIs:** 4/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -21,9 +21,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 
 
 ### SI-02.4 — RefreshToken and VerificationToken Entities
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 15/15 passing (refresh-token.entity.integration-spec.ts, verification-token.entity.integration-spec.ts)
+- **Observations:** Dropped pre-existing token tables created by a previous session's synchronize before regenerating migration. Tests require --runInBand to avoid parallel FK violations between suites sharing the same DB.
 
 ### SI-02.5 — Mail Module and Email Templates
 - **Status:** pending

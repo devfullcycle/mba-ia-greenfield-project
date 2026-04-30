@@ -1,6 +1,11 @@
 import { DataSource, Repository } from 'typeorm';
+import { RefreshToken } from '../../auth/entities/refresh-token.entity';
+import { VerificationToken } from '../../auth/entities/verification-token.entity';
+import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
 import { Channel } from './channel.entity';
 import { User } from './user.entity';
+
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
 describe('Channel entity (integration)', () => {
   let dataSource: DataSource;
@@ -8,16 +13,7 @@ describe('Channel entity (integration)', () => {
   let channelRepository: Repository<Channel>;
 
   beforeAll(async () => {
-    dataSource = new DataSource({
-      type: 'postgres',
-      host: process.env.DB_HOST ?? 'db',
-      port: Number(process.env.DB_PORT ?? 5432),
-      username: process.env.DB_USERNAME ?? 'streamtube',
-      password: process.env.DB_PASSWORD ?? 'streamtube',
-      database: process.env.DB_DATABASE ?? 'streamtube',
-      entities: [User, Channel],
-      synchronize: true,
-    });
+    dataSource = createTestDataSource(ALL_ENTITIES);
     await dataSource.initialize();
     userRepository = dataSource.getRepository(User);
     channelRepository = dataSource.getRepository(Channel);
@@ -28,19 +24,19 @@ describe('Channel entity (integration)', () => {
   });
 
   beforeEach(async () => {
-    await dataSource.query('DELETE FROM "channels"');
-    await dataSource.query('DELETE FROM "users"');
+    await cleanAllTables(dataSource);
   });
 
-  async function createUser(email: string): Promise<User> {
+  let userCounter = 0;
+  async function createUser(): Promise<User> {
     return userRepository.save(
-      userRepository.create({ email, password: 'hashed' }),
+      userRepository.create({ email: `ch_user_${++userCounter}@example.com`, password: 'hashed' }),
     );
   }
 
   it('should enforce unique nickname constraint', async () => {
-    const user1 = await createUser('u1@example.com');
-    const user2 = await createUser('u2@example.com');
+    const user1 = await createUser();
+    const user2 = await createUser();
 
     await channelRepository.save(
       channelRepository.create({ name: 'Channel One', nickname: 'chan', user_id: user1.id }),
@@ -54,7 +50,7 @@ describe('Channel entity (integration)', () => {
   });
 
   it('should enforce nickname max length of 50 characters', async () => {
-    const user = await createUser('u@example.com');
+    const user = await createUser();
     const longNickname = 'a'.repeat(51);
 
     await expect(
@@ -65,7 +61,7 @@ describe('Channel entity (integration)', () => {
   });
 
   it('should allow null description', async () => {
-    const user = await createUser('u@example.com');
+    const user = await createUser();
     const channel = await channelRepository.save(
       channelRepository.create({ name: 'Chan', nickname: 'chan', user_id: user.id, description: null }),
     );
@@ -74,7 +70,7 @@ describe('Channel entity (integration)', () => {
   });
 
   it('should enforce one-to-one relation: one user_id per channel', async () => {
-    const user = await createUser('u@example.com');
+    const user = await createUser();
 
     await channelRepository.save(
       channelRepository.create({ name: 'Chan', nickname: 'chan1', user_id: user.id }),
@@ -88,7 +84,7 @@ describe('Channel entity (integration)', () => {
   });
 
   it('should load the related user via the OneToOne relation', async () => {
-    const user = await createUser('rel@example.com');
+    const user = await createUser();
     await channelRepository.save(
       channelRepository.create({ name: 'Chan', nickname: 'relchan', user_id: user.id }),
     );
@@ -98,6 +94,6 @@ describe('Channel entity (integration)', () => {
       relations: ['user'],
     });
 
-    expect(found?.user.email).toBe('rel@example.com');
+    expect(found?.user.email).toBe(user.email);
   });
 });
