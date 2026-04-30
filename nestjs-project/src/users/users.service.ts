@@ -66,4 +66,12 @@ export class UsersService {
       .where('user.email = :email', { email })
       .getOne();
   }
+
+  async findByEmailWithChannel(email: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { email }, relations: ['channel'] });
+  }
+
+  async save(user: User): Promise<User> {
+    return this.userRepository.save(user);
+  }
 }

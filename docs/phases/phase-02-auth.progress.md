@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 5/13 completed
+**SIs:** 7/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -36,9 +36,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** PostgreSQL aborts the transaction on unique constraint violation — used savepoints (SAVEPOINT/ROLLBACK TO SAVEPOINT) for nickname collision retry within the transaction. Added JWT_SECRET and JWT_REFRESH_SECRET to .env. Added setupFiles:["dotenv/config"] to jest-e2e.json. Removed MAIL_FROM with angle brackets from .env (causes shell parse error) — let mail.config.ts default handle it.
 
 ### SI-02.7 — Email Confirmation (Confirm and Resend)
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 36/36 passing (auth.service.spec: 12 unit, auth.service.integration-spec: 9 integration, auth.e2e-spec: 15 e2e)
+- **Observations:** TypeORM ignores `null` literal in `where` clause — must use `IsNull()` from typeorm to generate IS NULL SQL. Added `findByEmailWithChannel` and `save` methods to UsersService for confirm/resend flows.
 
 ### SI-02.8 — Login with Credential Validation and Token Issuance
 - **Status:** pending
