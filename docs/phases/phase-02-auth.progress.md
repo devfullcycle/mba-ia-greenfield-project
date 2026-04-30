@@ -31,9 +31,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** MailerModule.forRootAsync with inject:[mailConfig.KEY] requires ConfigModule.forRoot({ isGlobal: true }) in tests — the forRootAsync factory context does not inherit global providers without isGlobal; no imports:[ConfigModule] needed in forRootAsync when ConfigModule is global.
 
 ### SI-02.6 — User Registration with Automatic Channel Creation
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 28/28 passing (nickname.util.spec, auth.service.spec, users.service.integration-spec, auth.service.integration-spec, auth.e2e-spec)
+- **Observations:** PostgreSQL aborts the transaction on unique constraint violation — used savepoints (SAVEPOINT/ROLLBACK TO SAVEPOINT) for nickname collision retry within the transaction. Added JWT_SECRET and JWT_REFRESH_SECRET to .env. Added setupFiles:["dotenv/config"] to jest-e2e.json. Removed MAIL_FROM with angle brackets from .env (causes shell parse error) — let mail.config.ts default handle it.
 
 ### SI-02.7 — Email Confirmation (Confirm and Resend)
 - **Status:** pending
