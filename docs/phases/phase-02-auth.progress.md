@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 11/13 completed
+**SIs:** 12/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -61,9 +61,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** Grace period logic needed a fix: when all family tokens are revoked (e.g., by logout), the check for an active family token now throws InvalidTokenException instead of silently returning a token to a revoked session.
 
 ### SI-02.12 — Password Reset (Request and Execute)
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 25 unit + 7 integration passing (auth.service.spec + auth.service.integration-spec total: 52 tests); 43 E2E passing (9 new password-reset tests, 0 regressions)
+- **Observations:** Reused logout() to revoke refresh tokens after reset. Reused createVerificationToken helper for password_reset type. Added sendPasswordResetEmail mock to buildTestModule. Added argon2 import to integration spec.
 
 ### SI-02.13 — Rate Limiting on Auth Endpoints
 - **Status:** pending

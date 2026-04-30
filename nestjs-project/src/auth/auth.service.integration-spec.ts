@@ -7,8 +7,10 @@ import { DataSource, Repository } from 'typeorm';
 import appConfig from '../config/app.config';
 import authConfig from '../config/auth.config';
 import mailConfig from '../config/mail.config';
+import * as argon2 from 'argon2';
 import {
   EmailAlreadyExistsException,
+  InvalidCredentialsException,
   InvalidTokenException,
   TokenExpiredException,
   TokenReuseDetectedException,
@@ -465,5 +467,202 @@ describe('AuthService — logout (integration)', () => {
     const user2Tokens = await refreshTokenRepository.findBy({ user_id: user2Id });
     const anyUser2Active = user2Tokens.some((t) => t.revoked_at === null);
     expect(anyUser2Active).toBe(true);
+  });
+});
+
+function capturePasswordResetToken(authService: AuthService): Promise<string> {
+  return new Promise((resolve) => {
+    const mailServiceInstance = (authService as any).mailService;
+    jest
+      .spyOn(mailServiceInstance, 'sendPasswordResetEmail')
+      .mockImplementationOnce(async (_e: string, _n: string, t: string) => resolve(t));
+  });
+}
+
+describe('AuthService — forgotPassword (integration)', () => {
+  let authService: AuthService;
+  let dataSource: DataSource;
+  let verificationTokenRepository: Repository<VerificationToken>;
+
+  beforeAll(async () => {
+    const module = await createAuthTestModule();
+    authService = module.get(AuthService);
+    dataSource = module.get(DataSource);
+    verificationTokenRepository = dataSource.getRepository(VerificationToken);
+  });
+
+  afterAll(async () => {
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    await clearMailpitMessages();
+  });
+
+  it('persists a password reset token and sends an email containing the raw token', async () => {
+    const capturePromise = capturePasswordResetToken(authService);
+    const { id: userId } = await authService.register({
+      email: 'forgot@example.com',
+      password: 'password123',
+    });
+
+    await authService.forgotPassword('forgot@example.com');
+    const capturedRawToken = await capturePromise;
+
+    const expectedHash = crypto.createHash('sha256').update(capturedRawToken).digest('hex');
+    const tokens = await verificationTokenRepository.findBy({
+      user_id: userId,
+      type: VerificationTokenType.PASSWORD_RESET,
+    });
+    expect(tokens.length).toBe(1);
+    expect(tokens[0].token_hash).toBe(expectedHash);
+    expect(tokens[0].used_at).toBeNull();
+  });
+
+  it('invalidates previously issued unused reset tokens', async () => {
+    const capturePromise1 = capturePasswordResetToken(authService);
+    const { id: userId } = await authService.register({
+      email: 'reissue@example.com',
+      password: 'password123',
+    });
+    await authService.forgotPassword('reissue@example.com');
+    const firstRawToken = await capturePromise1;
+    const firstHash = crypto.createHash('sha256').update(firstRawToken).digest('hex');
+
+    const capturePromise2 = capturePasswordResetToken(authService);
+    await authService.forgotPassword('reissue@example.com');
+    await capturePromise2;
+
+    const oldRecord = await verificationTokenRepository.findOneBy({ token_hash: firstHash });
+    expect(oldRecord!.used_at).toBeInstanceOf(Date);
+
+    const allResetTokens = await verificationTokenRepository.findBy({
+      user_id: userId,
+      type: VerificationTokenType.PASSWORD_RESET,
+    });
+    const unusedCount = allResetTokens.filter((t) => t.used_at === null).length;
+    expect(unusedCount).toBe(1);
+  });
+
+  it('returns silently for an unregistered email', async () => {
+    await expect(authService.forgotPassword('nobody@example.com')).resolves.toBeUndefined();
+  });
+});
+
+describe('AuthService — resetPassword (integration)', () => {
+  let authService: AuthService;
+  let dataSource: DataSource;
+  let verificationTokenRepository: Repository<VerificationToken>;
+  let userRepository: Repository<User>;
+  let refreshTokenRepository: Repository<RefreshToken>;
+
+  beforeAll(async () => {
+    const module = await createAuthTestModule();
+    authService = module.get(AuthService);
+    dataSource = module.get(DataSource);
+    verificationTokenRepository = dataSource.getRepository(VerificationToken);
+    userRepository = dataSource.getRepository(User);
+    refreshTokenRepository = dataSource.getRepository(RefreshToken);
+  });
+
+  afterAll(async () => {
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    await clearMailpitMessages();
+  });
+
+  async function registerConfirmAndRequestReset(
+    email: string,
+    password: string,
+  ): Promise<{ userId: string; resetToken: string }> {
+    const { userId } = await registerConfirmAndLogin(authService, email, password);
+    const capturePromise = capturePasswordResetToken(authService);
+    await authService.forgotPassword(email);
+    const resetToken = await capturePromise;
+    return { userId, resetToken };
+  }
+
+  it('updates the password hash, marks token used, and revokes all refresh tokens', async () => {
+    const { userId, resetToken } = await registerConfirmAndRequestReset(
+      'reset@example.com',
+      'oldpassword',
+    );
+
+    await authService.resetPassword(resetToken, 'newpassword');
+
+    const user = await userRepository
+      .createQueryBuilder('u')
+      .addSelect('u.password')
+      .where('u.id = :id', { id: userId })
+      .getOne();
+    expect(user!.password).not.toBe('oldpassword');
+    expect(await argon2.verify(user!.password, 'newpassword')).toBe(true);
+
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const tokenRecord = await verificationTokenRepository.findOneBy({ token_hash: tokenHash });
+    expect(tokenRecord!.used_at).toBeInstanceOf(Date);
+
+    const userRefreshTokens = await refreshTokenRepository.findBy({ user_id: userId });
+    expect(userRefreshTokens.length).toBeGreaterThan(0);
+    const anyActive = userRefreshTokens.some((t) => t.revoked_at === null);
+    expect(anyActive).toBe(false);
+  });
+
+  it('throws InvalidTokenException for an unknown token', async () => {
+    await expect(authService.resetPassword('unknown', 'newpassword')).rejects.toThrow(
+      InvalidTokenException,
+    );
+  });
+
+  it('throws TokenExpiredException for an expired reset token', async () => {
+    const { resetToken } = await registerConfirmAndRequestReset(
+      'expired@example.com',
+      'oldpassword',
+    );
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    await verificationTokenRepository.update(
+      { token_hash: tokenHash },
+      { expires_at: new Date(Date.now() - 1000) },
+    );
+
+    await expect(authService.resetPassword(resetToken, 'newpassword')).rejects.toThrow(
+      TokenExpiredException,
+    );
+  });
+
+  it('throws InvalidTokenException when the same token is reused', async () => {
+    const { resetToken } = await registerConfirmAndRequestReset(
+      'reuse-reset@example.com',
+      'oldpassword',
+    );
+
+    await authService.resetPassword(resetToken, 'newpassword');
+
+    await expect(authService.resetPassword(resetToken, 'anotherpassword')).rejects.toThrow(
+      InvalidTokenException,
+    );
+  });
+
+  it('allows login with the new password and rejects the old one', async () => {
+    const { resetToken } = await registerConfirmAndRequestReset(
+      'newlogin@example.com',
+      'oldpassword',
+    );
+
+    await authService.resetPassword(resetToken, 'newpassword');
+
+    await expect(
+      authService.login({ email: 'newlogin@example.com', password: 'oldpassword' }),
+    ).rejects.toThrow(InvalidCredentialsException);
+
+    const result = await authService.login({
+      email: 'newlogin@example.com',
+      password: 'newpassword',
+    });
+    expect(result.access_token).toBeDefined();
   });
 });

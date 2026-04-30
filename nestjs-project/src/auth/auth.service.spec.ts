@@ -198,6 +198,7 @@ function buildTestModule() {
         provide: MailService,
         useValue: {
           sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+          sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
         },
       },
       {
@@ -544,6 +545,136 @@ describe('AuthService — logout', () => {
     expect(qbMock.set).toHaveBeenCalledWith({ revoked_at: expect.any(Date) });
     expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'user-id-123' });
     expect(qbMock.andWhere).toHaveBeenCalledWith('revoked_at IS NULL');
+    expect(qbMock.execute).toHaveBeenCalled();
+  });
+});
+
+describe('AuthService — forgotPassword', () => {
+  let authService: AuthService;
+  let usersService: jest.Mocked<UsersService>;
+  let mailService: jest.Mocked<MailService>;
+  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+
+  beforeEach(async () => {
+    const module = await buildTestModule();
+    authService = module.get(AuthService);
+    usersService = module.get(UsersService);
+    mailService = module.get(MailService);
+    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+  });
+
+  it('returns silently when email is not registered', async () => {
+    usersService.findByEmailWithChannel.mockResolvedValue(null);
+
+    await expect(authService.forgotPassword('unknown@example.com')).resolves.toBeUndefined();
+    expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
+  it('invalidates previous reset tokens and sends a reset email', async () => {
+    const user = {
+      id: 'u1',
+      email: 'user@example.com',
+      channel: { name: 'nick' },
+    } as any;
+    usersService.findByEmailWithChannel.mockResolvedValue(user);
+
+    const qbMock = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    verificationTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    verificationTokenRepository.create.mockReturnValue({} as any);
+
+    await authService.forgotPassword('user@example.com');
+
+    expect(qbMock.execute).toHaveBeenCalled();
+    expect(qbMock.andWhere).toHaveBeenCalledWith('type = :type', {
+      type: VerificationTokenType.PASSWORD_RESET,
+    });
+    expect(verificationTokenRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: VerificationTokenType.PASSWORD_RESET,
+        user_id: 'u1',
+      }),
+    );
+    expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+      'user@example.com',
+      'nick',
+      expect.stringMatching(/^[a-f0-9]{64}$/),
+    );
+  });
+});
+
+describe('AuthService — resetPassword', () => {
+  let authService: AuthService;
+  let usersService: jest.Mocked<UsersService>;
+  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+
+  beforeEach(async () => {
+    const module = await buildTestModule();
+    authService = module.get(AuthService);
+    usersService = module.get(UsersService);
+    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
+  });
+
+  it('throws InvalidTokenException when token is not found', async () => {
+    verificationTokenRepository.findOne.mockResolvedValue(null);
+
+    await expect(authService.resetPassword('badtoken', 'newpassword')).rejects.toThrow(
+      InvalidTokenException,
+    );
+  });
+
+  it('throws TokenExpiredException when token is expired', async () => {
+    const rawToken = 'c'.repeat(64);
+    const record = {
+      token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+      type: VerificationTokenType.PASSWORD_RESET,
+      used_at: null,
+      expires_at: new Date(Date.now() - 1000),
+      user: { id: 'u1', password: 'oldhash' },
+    } as any;
+    verificationTokenRepository.findOne.mockResolvedValue(record);
+
+    await expect(authService.resetPassword(rawToken, 'newpassword')).rejects.toThrow(
+      TokenExpiredException,
+    );
+  });
+
+  it('hashes the new password, marks token used, and revokes refresh tokens', async () => {
+    const rawToken = 'd'.repeat(64);
+    const user = { id: 'u1', password: 'oldhash' } as any;
+    const record = {
+      token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+      type: VerificationTokenType.PASSWORD_RESET,
+      used_at: null,
+      expires_at: new Date(Date.now() + 60_000),
+      user,
+    } as any;
+    verificationTokenRepository.findOne.mockResolvedValue(record);
+
+    const qbMock = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+
+    await authService.resetPassword(rawToken, 'newplaintext');
+
+    expect(record.used_at).toBeInstanceOf(Date);
+    expect(user.password).not.toBe('oldhash');
+    expect(user.password).toMatch(/^\$argon2/);
+    expect(verificationTokenRepository.save).toHaveBeenCalledWith(record);
+    expect(usersService.save).toHaveBeenCalledWith(user);
+    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'u1' });
     expect(qbMock.execute).toHaveBeenCalled();
   });
 });

@@ -98,26 +98,10 @@ export class AuthService {
   }
 
   async confirm(token: string): Promise<void> {
-    const tokenHash = this.hashToken(token);
-
-    const record = await this.verificationTokenRepository.findOne({
-      where: {
-        token_hash: tokenHash,
-        type: VerificationTokenType.EMAIL_CONFIRMATION,
-        used_at: IsNull(),
-      },
-      relations: ['user'],
-    });
-
-    if (!record) {
-      throw new InvalidTokenException();
-    }
-
-    if (record.expires_at < new Date()) {
-      throw new TokenExpiredException();
-    }
-
-    record.used_at = new Date();
+    const record = await this.consumeVerificationToken(
+      token,
+      VerificationTokenType.EMAIL_CONFIRMATION,
+    );
     record.user.is_confirmed = true;
 
     await Promise.all([
@@ -132,14 +116,10 @@ export class AuthService {
       return;
     }
 
-    await this.verificationTokenRepository
-      .createQueryBuilder()
-      .update(VerificationToken)
-      .set({ used_at: new Date() })
-      .where('user_id = :userId', { userId: user.id })
-      .andWhere('type = :type', { type: VerificationTokenType.EMAIL_CONFIRMATION })
-      .andWhere('used_at IS NULL')
-      .execute();
+    await this.invalidateActiveVerificationTokens(
+      user.id,
+      VerificationTokenType.EMAIL_CONFIRMATION,
+    );
 
     const rawToken = await this.createVerificationToken(
       user.id,
@@ -218,6 +198,37 @@ export class AuthService {
     };
   }
 
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.usersService.findByEmailWithChannel(email);
+    if (!user) {
+      return;
+    }
+
+    await this.invalidateActiveVerificationTokens(user.id, VerificationTokenType.PASSWORD_RESET);
+
+    const rawToken = await this.createVerificationToken(
+      user.id,
+      VerificationTokenType.PASSWORD_RESET,
+      this.authCfg.passwordResetTokenExpirationHours,
+    );
+    await this.mailService.sendPasswordResetEmail(user.email, user.channel.name, rawToken);
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const record = await this.consumeVerificationToken(
+      token,
+      VerificationTokenType.PASSWORD_RESET,
+    );
+    record.user.password = await argon2.hash(newPassword);
+
+    await Promise.all([
+      this.verificationTokenRepository.save(record),
+      this.usersService.save(record.user),
+    ]);
+
+    await this.logout(record.user.id);
+  }
+
   async logout(userId: string): Promise<void> {
     await this.refreshTokenRepository
       .createQueryBuilder()
@@ -244,6 +255,41 @@ export class AuthService {
 
   private hashToken(raw: string): string {
     return crypto.createHash('sha256').update(raw).digest('hex');
+  }
+
+  private async consumeVerificationToken(
+    token: string,
+    type: VerificationTokenType,
+  ): Promise<VerificationToken> {
+    const record = await this.verificationTokenRepository.findOne({
+      where: { token_hash: this.hashToken(token), type, used_at: IsNull() },
+      relations: ['user'],
+    });
+
+    if (!record) {
+      throw new InvalidTokenException();
+    }
+
+    if (record.expires_at < new Date()) {
+      throw new TokenExpiredException();
+    }
+
+    record.used_at = new Date();
+    return record;
+  }
+
+  private async invalidateActiveVerificationTokens(
+    userId: string,
+    type: VerificationTokenType,
+  ): Promise<void> {
+    await this.verificationTokenRepository
+      .createQueryBuilder()
+      .update(VerificationToken)
+      .set({ used_at: new Date() })
+      .where('user_id = :userId', { userId })
+      .andWhere('type = :type', { type })
+      .andWhere('used_at IS NULL')
+      .execute();
   }
 
   private async createVerificationToken(

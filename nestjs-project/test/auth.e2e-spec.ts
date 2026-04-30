@@ -443,4 +443,147 @@ describe('Auth (e2e)', () => {
       expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(res.body.error);
     });
   });
+
+  async function capturePasswordResetToken(email: string): Promise<string> {
+    const authService = app.get(AuthService);
+    const mailServiceInstance = (authService as any).mailService;
+    let captured = '';
+    jest
+      .spyOn(mailServiceInstance, 'sendPasswordResetEmail')
+      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+        captured = t;
+      });
+    await request(app.getHttpServer()).post('/auth/forgot-password').send({ email });
+    return captured;
+  }
+
+  describe('POST /auth/forgot-password', () => {
+    it('returns 204 for a registered email', async () => {
+      await registerConfirmAndLogin('forgot@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'forgot@example.com' })
+        .expect(204);
+    });
+
+    it('returns 204 for a non-existent email (no leak)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'nobody@example.com' })
+        .expect(204);
+    });
+
+    it('returns 400 with VALIDATION_ERROR on invalid email format', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'not-an-email' })
+        .expect(400);
+
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('POST /auth/reset-password', () => {
+    it('returns 204 with a valid token and updates the password', async () => {
+      await registerConfirmAndLogin('resetok@example.com', 'oldpassword');
+      const token = await capturePasswordResetToken('resetok@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token, new_password: 'newpassword' })
+        .expect(204);
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'resetok@example.com', password: 'oldpassword' })
+        .expect(401);
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'resetok@example.com', password: 'newpassword' })
+        .expect(200);
+      expect(loginRes.body.access_token).toBeDefined();
+    });
+
+    it('revokes all refresh tokens after reset', async () => {
+      const { refresh_token } = await registerConfirmAndLogin(
+        'resetrevoke@example.com',
+        'oldpassword',
+      );
+      const token = await capturePasswordResetToken('resetrevoke@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token, new_password: 'newpassword' })
+        .expect(204);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token })
+        .expect(401);
+      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(res.body.error);
+    });
+
+    it('returns 401 with INVALID_TOKEN on an unknown token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token: 'unknown', new_password: 'newpassword' })
+        .expect(401);
+
+      expect(res.body.error).toBe('INVALID_TOKEN');
+    });
+
+    it('returns 401 with INVALID_TOKEN on a reused token', async () => {
+      await registerConfirmAndLogin('resetreuse@example.com', 'oldpassword');
+      const token = await capturePasswordResetToken('resetreuse@example.com');
+
+      await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token, new_password: 'newpassword' })
+        .expect(204);
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token, new_password: 'anotherpass' })
+        .expect(401);
+
+      expect(res.body.error).toBe('INVALID_TOKEN');
+    });
+
+    it('returns 401 with TOKEN_EXPIRED on an expired token', async () => {
+      await registerConfirmAndLogin('resetexp@example.com', 'oldpassword');
+      const token = await capturePasswordResetToken('resetexp@example.com');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      await verificationTokenRepository.update(
+        { token_hash: tokenHash },
+        { expires_at: new Date(0) },
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token, new_password: 'newpassword' })
+        .expect(401);
+
+      expect(res.body.error).toBe('TOKEN_EXPIRED');
+    });
+
+    it('returns 400 with VALIDATION_ERROR on missing token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ new_password: 'newpassword' })
+        .expect(400);
+
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns 400 with VALIDATION_ERROR on short new_password', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/reset-password')
+        .send({ token: 'abc', new_password: 'short' })
+        .expect(400);
+
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+  });
 });
