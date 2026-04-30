@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 7/13 completed
+**SIs:** 8/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -41,9 +41,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** TypeORM ignores `null` literal in `where` clause — must use `IsNull()` from typeorm to generate IS NULL SQL. Added `findByEmailWithChannel` and `save` methods to UsersService for confirm/resend flows.
 
 ### SI-02.8 — Login with Credential Validation and Token Issuance
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 32/32 passing (auth.service.spec: 16 unit, auth.service.integration-spec: 11 integration, auth.module.spec: 1 module, auth.e2e-spec: 20 e2e)
+- **Observations:** Renamed private `createConfirmationToken` to `createVerificationToken(userId, type, expirationHours)` to be reused for password reset (SI-02.12). JwtModule.registerAsync added to AuthModule with JwtModule exported. Existing test modules updated to include JwtModule.register and RefreshToken repository mock.
 
 ### SI-02.9 — JWT Access Token Guard
 - **Status:** pending

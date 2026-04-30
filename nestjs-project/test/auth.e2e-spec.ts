@@ -214,4 +214,79 @@ describe('Auth (e2e)', () => {
       expect(res.body.error).toBe('VALIDATION_ERROR');
     });
   });
+
+  describe('POST /auth/login', () => {
+    async function registerAndConfirmUser(email: string, password: string): Promise<void> {
+      const authService = app.get(AuthService);
+      const mailServiceInstance = (authService as any).mailService;
+      let capturedToken = '';
+      jest.spyOn(mailServiceInstance, 'sendConfirmationEmail').mockImplementationOnce(
+        async (_e: string, _n: string, t: string) => { capturedToken = t; },
+      );
+
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email, password });
+
+      await request(app.getHttpServer())
+        .post('/auth/confirm-email')
+        .send({ token: capturedToken });
+    }
+
+    it('returns 200 with access_token and refresh_token on valid credentials', async () => {
+      await registerAndConfirmUser('login@example.com', 'password123');
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'login@example.com', password: 'password123' })
+        .expect(200);
+
+      expect(res.body.access_token).toBeDefined();
+      expect(res.body.refresh_token).toBeDefined();
+      expect(typeof res.body.access_token).toBe('string');
+      expect(typeof res.body.refresh_token).toBe('string');
+    });
+
+    it('returns 401 with INVALID_CREDENTIALS on wrong password', async () => {
+      await registerAndConfirmUser('wrongpass@example.com', 'password123');
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'wrongpass@example.com', password: 'incorrect' })
+        .expect(401);
+
+      expect(res.body.error).toBe('INVALID_CREDENTIALS');
+    });
+
+    it('returns 401 with INVALID_CREDENTIALS on unknown email', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'nobody@example.com', password: 'password123' })
+        .expect(401);
+
+      expect(res.body.error).toBe('INVALID_CREDENTIALS');
+    });
+
+    it('returns 403 with EMAIL_NOT_CONFIRMED when user is not confirmed', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'unconfirmed@example.com', password: 'password123' });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'unconfirmed@example.com', password: 'password123' })
+        .expect(403);
+
+      expect(res.body.error).toBe('EMAIL_NOT_CONFIRMED');
+    });
+
+    it('returns 400 with VALIDATION_ERROR on missing password', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'user@example.com' })
+        .expect(400);
+
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+  });
 });

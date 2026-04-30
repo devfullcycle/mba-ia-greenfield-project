@@ -1,16 +1,21 @@
+import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import authConfig from '../config/auth.config';
 import {
   EmailAlreadyExistsException,
+  EmailNotConfirmedException,
+  InvalidCredentialsException,
   InvalidTokenException,
   TokenExpiredException,
 } from '../common/exceptions/domain.exception';
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
+import { RefreshToken } from './entities/refresh-token.entity';
 import { VerificationToken, VerificationTokenType } from './entities/verification-token.entity';
 
 const mockAuthConfig = {
@@ -30,6 +35,9 @@ describe('AuthService — register', () => {
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
+      imports: [
+        JwtModule.register({ secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+      ],
       providers: [
         AuthService,
         {
@@ -49,6 +57,13 @@ describe('AuthService — register', () => {
           provide: getRepositoryToken(VerificationToken),
           useValue: {
             create: jest.fn(),
+            save: jest.fn().mockResolvedValue({}),
+          },
+        },
+        {
+          provide: getRepositoryToken(RefreshToken),
+          useValue: {
+            create: jest.fn().mockReturnValue({}),
             save: jest.fn().mockResolvedValue({}),
           },
         },
@@ -162,6 +177,9 @@ describe('AuthService — register', () => {
 
 function buildTestModule() {
   return Test.createTestingModule({
+    imports: [
+      JwtModule.register({ secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+    ],
     providers: [
       AuthService,
       {
@@ -186,6 +204,13 @@ function buildTestModule() {
           save: jest.fn().mockResolvedValue({}),
           findOne: jest.fn(),
           createQueryBuilder: jest.fn(),
+        },
+      },
+      {
+        provide: getRepositoryToken(RefreshToken),
+        useValue: {
+          create: jest.fn().mockReturnValue({}),
+          save: jest.fn().mockResolvedValue({}),
         },
       },
       {
@@ -312,5 +337,74 @@ describe('AuthService — resendConfirmation', () => {
       'nick',
       expect.any(String),
     );
+  });
+});
+
+describe('AuthService — login', () => {
+  let authService: AuthService;
+  let usersService: jest.Mocked<UsersService>;
+  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let hashedTestPassword: string;
+
+  beforeAll(async () => {
+    hashedTestPassword = await argon2.hash('correctpassword');
+  });
+
+  beforeEach(async () => {
+    const module = await buildTestModule();
+    authService = module.get(AuthService);
+    usersService = module.get(UsersService);
+    refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
+  });
+
+  it('throws InvalidCredentialsException when email is not found', async () => {
+    usersService.findByEmail.mockResolvedValue(null);
+
+    await expect(
+      authService.login({ email: 'nobody@example.com', password: 'password123' }),
+    ).rejects.toThrow(InvalidCredentialsException);
+  });
+
+  it('throws InvalidCredentialsException when password is wrong', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      id: 'u1',
+      email: 'user@example.com',
+      password: hashedTestPassword,
+      is_confirmed: true,
+    } as any);
+
+    await expect(
+      authService.login({ email: 'user@example.com', password: 'wrongpassword' }),
+    ).rejects.toThrow(InvalidCredentialsException);
+  });
+
+  it('throws EmailNotConfirmedException when user is not confirmed', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      id: 'u1',
+      email: 'user@example.com',
+      password: hashedTestPassword,
+      is_confirmed: false,
+    } as any);
+
+    await expect(
+      authService.login({ email: 'user@example.com', password: 'correctpassword' }),
+    ).rejects.toThrow(EmailNotConfirmedException);
+  });
+
+  it('returns access_token and refresh_token on valid credentials', async () => {
+    usersService.findByEmail.mockResolvedValue({
+      id: 'u1',
+      email: 'user@example.com',
+      password: hashedTestPassword,
+      is_confirmed: true,
+    } as any);
+
+    const result = await authService.login({ email: 'user@example.com', password: 'correctpassword' });
+
+    expect(result.access_token).toBeDefined();
+    expect(result.refresh_token).toBeDefined();
+    expect(typeof result.access_token).toBe('string');
+    expect(typeof result.refresh_token).toBe('string');
+    expect(refreshTokenRepository.save).toHaveBeenCalled();
   });
 });

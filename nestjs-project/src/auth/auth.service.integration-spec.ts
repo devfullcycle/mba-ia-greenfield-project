@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigType } from '@nestjs/config';
+import { JwtModule, JwtService } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import appConfig from '../config/app.config';
@@ -30,6 +31,13 @@ async function createAuthTestModule(): Promise<TestingModule> {
       ConfigModule.forRoot({ isGlobal: true, load: [appConfig, authConfig, mailConfig] }),
       TypeOrmModule.forRoot(ds.options),
       TypeOrmModule.forFeature([User, Channel, VerificationToken, RefreshToken]),
+      JwtModule.registerAsync({
+        inject: [authConfig.KEY],
+        useFactory: (cfg: ConfigType<typeof authConfig>) => ({
+          secret: cfg.jwtSecret,
+          signOptions: { expiresIn: cfg.jwtAccessExpiration },
+        }),
+      }),
       UsersModule,
       MailModule,
     ],
@@ -226,5 +234,71 @@ describe('AuthService — resendConfirmation (integration)', () => {
     await expect(
       authService.resendConfirmation('nobody@example.com'),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('AuthService — login (integration)', () => {
+  let authService: AuthService;
+  let jwtService: JwtService;
+  let dataSource: DataSource;
+  let refreshTokenRepository: Repository<RefreshToken>;
+
+  beforeAll(async () => {
+    const module = await createAuthTestModule();
+    authService = module.get(AuthService);
+    jwtService = module.get(JwtService);
+    dataSource = module.get(DataSource);
+    refreshTokenRepository = dataSource.getRepository(RefreshToken);
+  });
+
+  afterAll(async () => {
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    await clearMailpitMessages();
+  });
+
+  async function registerAndConfirmUser(email: string, password: string): Promise<string> {
+    const capturePromise = captureConfirmationToken(authService);
+    const { id } = await authService.register({ email, password });
+    const capturedToken = await capturePromise;
+    await authService.confirm(capturedToken);
+    return id;
+  }
+
+  it('persists a refresh token in DB with correct family UUID and expiry', async () => {
+    const userId = await registerAndConfirmUser('logintest@example.com', 'password123');
+
+    const { refresh_token } = await authService.login({
+      email: 'logintest@example.com',
+      password: 'password123',
+    });
+
+    const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+    const record = await refreshTokenRepository.findOneBy({ token_hash: tokenHash });
+
+    expect(record).not.toBeNull();
+    expect(record!.user_id).toBe(userId);
+    expect(record!.family).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(record!.expires_at).toBeInstanceOf(Date);
+    expect(record!.expires_at.getTime()).toBeGreaterThan(Date.now());
+    expect(record!.revoked_at).toBeNull();
+  });
+
+  it('returns a valid JWT access token with correct sub and email claims', async () => {
+    await registerAndConfirmUser('jwttest@example.com', 'password123');
+
+    const { access_token } = await authService.login({
+      email: 'jwttest@example.com',
+      password: 'password123',
+    });
+
+    const payload = jwtService.verify<{ sub: string; email: string }>(access_token);
+    expect(payload.sub).toBeDefined();
+    expect(payload.email).toBe('jwttest@example.com');
   });
 });
