@@ -16,6 +16,7 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_EXPIRATION: Joi.string().default('7d'),
   CONFIRMATION_TOKEN_EXPIRATION_HOURS: Joi.number().default(1),
   PASSWORD_RESET_TOKEN_EXPIRATION_HOURS: Joi.number().default(1),
+  APP_URL: Joi.string().uri().default('http://localhost:3000'),
   MAIL_HOST: Joi.string().default('mailpit'),
   MAIL_PORT: Joi.number().default(1025),
   MAIL_FROM: Joi.string().default('"StreamTube" <noreply@streamtube.com>'),
