@@ -11,6 +11,7 @@ import {
   InvalidCredentialsException,
   InvalidTokenException,
   TokenExpiredException,
+  TokenReuseDetectedException,
 } from '../common/exceptions/domain.exception';
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
@@ -65,6 +66,8 @@ describe('AuthService — register', () => {
           useValue: {
             create: jest.fn().mockReturnValue({}),
             save: jest.fn().mockResolvedValue({}),
+            findOne: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -211,6 +214,8 @@ function buildTestModule() {
         useValue: {
           create: jest.fn().mockReturnValue({}),
           save: jest.fn().mockResolvedValue({}),
+          findOne: jest.fn(),
+          createQueryBuilder: jest.fn(),
         },
       },
       {
@@ -406,5 +411,110 @@ describe('AuthService — login', () => {
     expect(typeof result.access_token).toBe('string');
     expect(typeof result.refresh_token).toBe('string');
     expect(refreshTokenRepository.save).toHaveBeenCalled();
+  });
+});
+
+describe('AuthService — refresh', () => {
+  let authService: AuthService;
+  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+
+  const mockUser = { id: 'u1', email: 'user@example.com' } as any;
+  const rawToken = 'a'.repeat(64);
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  beforeEach(async () => {
+    const module = await buildTestModule();
+    authService = module.get(AuthService);
+    refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
+  });
+
+  it('throws InvalidTokenException when token is not found', async () => {
+    refreshTokenRepository.findOne.mockResolvedValue(null);
+
+    await expect(authService.refresh(rawToken)).rejects.toThrow(InvalidTokenException);
+  });
+
+  it('throws TokenExpiredException when token is expired', async () => {
+    const record = {
+      token_hash: tokenHash,
+      family: 'family-uuid',
+      user_id: 'u1',
+      user: mockUser,
+      expires_at: new Date(Date.now() - 1000),
+      revoked_at: null,
+    } as any;
+    refreshTokenRepository.findOne.mockResolvedValue(record);
+
+    await expect(authService.refresh(rawToken)).rejects.toThrow(TokenExpiredException);
+  });
+
+  it('rotates token: revokes old, persists new, returns both tokens', async () => {
+    const record = {
+      token_hash: tokenHash,
+      family: 'family-uuid',
+      user_id: 'u1',
+      user: mockUser,
+      expires_at: new Date(Date.now() + 60_000),
+      revoked_at: null,
+    } as any;
+    refreshTokenRepository.findOne.mockResolvedValue(record);
+    refreshTokenRepository.create.mockReturnValue({} as any);
+
+    const result = await authService.refresh(rawToken);
+
+    expect(record.revoked_at).toBeInstanceOf(Date);
+    expect(refreshTokenRepository.save).toHaveBeenCalledWith(record);
+    expect(refreshTokenRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ family: 'family-uuid', user_id: 'u1' }),
+    );
+    expect(result.access_token).toBeDefined();
+    expect(result.refresh_token).toBeDefined();
+    expect(result.refresh_token).not.toBe(rawToken);
+  });
+
+  it('returns new access token without revoking family when reuse is within grace period', async () => {
+    const revokedAt = new Date(Date.now() - 5_000);
+    const record = {
+      token_hash: tokenHash,
+      family: 'family-uuid',
+      user_id: 'u1',
+      user: mockUser,
+      expires_at: new Date(Date.now() + 60_000),
+      revoked_at: revokedAt,
+    } as any;
+    refreshTokenRepository.findOne.mockResolvedValue(record);
+
+    const result = await authService.refresh(rawToken);
+
+    expect(result.access_token).toBeDefined();
+    expect(result.refresh_token).toBe(rawToken);
+    expect(refreshTokenRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('revokes entire family and throws TokenReuseDetectedException beyond grace period', async () => {
+    const revokedAt = new Date(Date.now() - 15_000);
+    const record = {
+      token_hash: tokenHash,
+      family: 'family-uuid',
+      user_id: 'u1',
+      user: mockUser,
+      expires_at: new Date(Date.now() + 60_000),
+      revoked_at: revokedAt,
+    } as any;
+    refreshTokenRepository.findOne.mockResolvedValue(record);
+
+    const qbMock = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+
+    await expect(authService.refresh(rawToken)).rejects.toThrow(TokenReuseDetectedException);
+
+    expect(qbMock.execute).toHaveBeenCalled();
+    expect(qbMock.where).toHaveBeenCalledWith('family = :family', { family: 'family-uuid' });
   });
 });

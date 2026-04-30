@@ -11,6 +11,7 @@ import {
   EmailAlreadyExistsException,
   InvalidTokenException,
   TokenExpiredException,
+  TokenReuseDetectedException,
 } from '../common/exceptions/domain.exception';
 import { MailModule } from '../mail/mail.module';
 import { Channel } from '../users/entities/channel.entity';
@@ -300,5 +301,116 @@ describe('AuthService — login (integration)', () => {
     const payload = jwtService.verify<{ sub: string; email: string }>(access_token);
     expect(payload.sub).toBeDefined();
     expect(payload.email).toBe('jwttest@example.com');
+  });
+});
+
+describe('AuthService — refresh (integration)', () => {
+  let authService: AuthService;
+  let jwtService: JwtService;
+  let dataSource: DataSource;
+  let refreshTokenRepository: Repository<RefreshToken>;
+
+  beforeAll(async () => {
+    const module = await createAuthTestModule();
+    authService = module.get(AuthService);
+    jwtService = module.get(JwtService);
+    dataSource = module.get(DataSource);
+    refreshTokenRepository = dataSource.getRepository(RefreshToken);
+  });
+
+  afterAll(async () => {
+    await dataSource.destroy();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    await clearMailpitMessages();
+  });
+
+  async function registerConfirmAndLogin(
+    email: string,
+    password: string,
+  ): Promise<{ userId: string; refreshToken: string }> {
+    const capturePromise = captureConfirmationToken(authService);
+    const { id: userId } = await authService.register({ email, password });
+    const confirmToken = await capturePromise;
+    await authService.confirm(confirmToken);
+    const { refresh_token: refreshToken } = await authService.login({ email, password });
+    return { userId, refreshToken };
+  }
+
+  it('rotates token: revokes old token and persists new token in DB', async () => {
+    const { refreshToken: token1 } = await registerConfirmAndLogin(
+      'rotate@example.com',
+      'password123',
+    );
+
+    const { refresh_token: token2, access_token } = await authService.refresh(token1);
+
+    expect(token2).not.toBe(token1);
+    expect(access_token).toBeDefined();
+
+    const hash1 = crypto.createHash('sha256').update(token1).digest('hex');
+    const old = await refreshTokenRepository.findOneBy({ token_hash: hash1 });
+    expect(old!.revoked_at).toBeInstanceOf(Date);
+
+    const hash2 = crypto.createHash('sha256').update(token2).digest('hex');
+    const fresh = await refreshTokenRepository.findOneBy({ token_hash: hash2 });
+    expect(fresh).not.toBeNull();
+    expect(fresh!.revoked_at).toBeNull();
+    expect(fresh!.family).toBe(old!.family);
+  });
+
+  it('access token from refresh is a valid JWT with correct sub and email', async () => {
+    const { refreshToken } = await registerConfirmAndLogin('jwtrefresh@example.com', 'password123');
+
+    const { access_token } = await authService.refresh(refreshToken);
+
+    const payload = jwtService.verify<{ sub: string; email: string }>(access_token);
+    expect(payload.sub).toBeDefined();
+    expect(payload.email).toBe('jwtrefresh@example.com');
+  });
+
+  it('returns valid access token within grace period without revoking family', async () => {
+    const { refreshToken: token1 } = await registerConfirmAndLogin(
+      'grace@example.com',
+      'password123',
+    );
+
+    await authService.refresh(token1);
+
+    const hash1 = crypto.createHash('sha256').update(token1).digest('hex');
+    const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: hash1 });
+    const family = revokedRecord!.family;
+
+    const { access_token } = await authService.refresh(token1);
+    expect(access_token).toBeDefined();
+
+    const activeTokens = await refreshTokenRepository.findBy({ family, revoked_at: null } as any);
+    expect(activeTokens.length).toBeGreaterThan(0);
+  });
+
+  it('revokes entire family and throws when reuse is detected beyond grace period', async () => {
+    const { refreshToken: token1 } = await registerConfirmAndLogin(
+      'reuse@example.com',
+      'password123',
+    );
+
+    await authService.refresh(token1);
+
+    const hash1 = crypto.createHash('sha256').update(token1).digest('hex');
+    const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: hash1 });
+    const family = revokedRecord!.family;
+
+    await refreshTokenRepository.update(
+      { token_hash: hash1 },
+      { revoked_at: new Date(Date.now() - 15_000) },
+    );
+
+    await expect(authService.refresh(token1)).rejects.toThrow(TokenReuseDetectedException);
+
+    const allTokens = await refreshTokenRepository.findBy({ family });
+    const anyActive = allTokens.some((t) => t.revoked_at === null);
+    expect(anyActive).toBe(false);
   });
 });

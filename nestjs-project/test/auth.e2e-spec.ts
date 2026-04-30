@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { AuthService } from '../src/auth/auth.service';
+import { RefreshToken } from '../src/auth/entities/refresh-token.entity';
 import { VerificationToken } from '../src/auth/entities/verification-token.entity';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
@@ -15,6 +16,7 @@ describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
+  let refreshTokenRepository: Repository<RefreshToken>;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -30,6 +32,7 @@ describe('Auth (e2e)', () => {
 
     dataSource = moduleFixture.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
+    refreshTokenRepository = dataSource.getRepository(RefreshToken);
   });
 
   afterAll(async () => {
@@ -308,6 +311,112 @@ describe('Auth (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: 'user@example.com' })
+        .expect(400);
+
+      expect(res.body.error).toBe('VALIDATION_ERROR');
+    });
+  });
+
+  describe('POST /auth/refresh', () => {
+    async function registerConfirmAndLogin(
+      email: string,
+      password = 'password123',
+    ): Promise<{ access_token: string; refresh_token: string }> {
+      const token = await captureConfirmationToken(email, password);
+      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password });
+      return { access_token: res.body.access_token, refresh_token: res.body.refresh_token };
+    }
+
+    it('returns 200 with new access_token and refresh_token on valid refresh token', async () => {
+      const { refresh_token } = await registerConfirmAndLogin('refresh@example.com');
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token })
+        .expect(200);
+
+      expect(res.body.access_token).toBeDefined();
+      expect(res.body.refresh_token).toBeDefined();
+      expect(res.body.refresh_token).not.toBe(refresh_token);
+    });
+
+    it('returns 401 with INVALID_TOKEN on an unknown refresh token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token: 'not-a-real-token' })
+        .expect(401);
+
+      expect(res.body.error).toBe('INVALID_TOKEN');
+    });
+
+    it('returns 401 with TOKEN_EXPIRED on an expired refresh token', async () => {
+      const { refresh_token } = await registerConfirmAndLogin('refreshexp@example.com');
+      const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+      await refreshTokenRepository.update({ token_hash: tokenHash }, { expires_at: new Date(0) });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token })
+        .expect(401);
+
+      expect(res.body.error).toBe('TOKEN_EXPIRED');
+    });
+
+    it('returns 200 with valid access token when reuse is within grace period', async () => {
+      const { refresh_token: token1 } = await registerConfirmAndLogin('grace2@example.com');
+
+      await request(app.getHttpServer()).post('/auth/refresh').send({ refresh_token: token1 });
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token: token1 })
+        .expect(200);
+
+      expect(res.body.access_token).toBeDefined();
+
+      const tokenHash = crypto.createHash('sha256').update(token1).digest('hex');
+      const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: tokenHash });
+      const activeTokens = await refreshTokenRepository
+        .createQueryBuilder('rt')
+        .where('rt.family = :family', { family: revokedRecord!.family })
+        .andWhere('rt.revoked_at IS NULL')
+        .getMany();
+      expect(activeTokens.length).toBeGreaterThan(0);
+    });
+
+    it('returns 401 with TOKEN_REUSE_DETECTED when reuse is beyond grace period', async () => {
+      const { refresh_token: token1 } = await registerConfirmAndLogin('reuse2@example.com');
+
+      await request(app.getHttpServer()).post('/auth/refresh').send({ refresh_token: token1 });
+
+      const tokenHash = crypto.createHash('sha256').update(token1).digest('hex');
+      await refreshTokenRepository.update(
+        { token_hash: tokenHash },
+        { revoked_at: new Date(Date.now() - 15_000) },
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token: token1 })
+        .expect(401);
+
+      expect(res.body.error).toBe('TOKEN_REUSE_DETECTED');
+
+      const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: tokenHash });
+      const allInFamily = await refreshTokenRepository.findBy({
+        family: revokedRecord!.family,
+      });
+      const anyActive = allInFamily.some((t) => t.revoked_at === null);
+      expect(anyActive).toBe(false);
+    });
+
+    it('returns 400 with VALIDATION_ERROR on missing refresh_token field', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({})
         .expect(400);
 
       expect(res.body.error).toBe('VALIDATION_ERROR');

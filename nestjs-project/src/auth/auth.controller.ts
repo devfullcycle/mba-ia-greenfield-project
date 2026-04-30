@@ -5,6 +5,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { ConfirmEmailDto } from './dto/confirm-email.dto';
 import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
 
@@ -37,6 +38,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto): Promise<{ access_token: string; refresh_token: string }> {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Body() dto: RefreshTokenDto,
+  ): Promise<{ access_token: string; refresh_token: string }> {
+    return this.authService.refresh(dto.refresh_token);
   }
 
   @Get('me')

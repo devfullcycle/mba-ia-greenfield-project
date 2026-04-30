@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 9/13 completed
+**SIs:** 10/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -51,9 +51,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** Added GET /auth/me (protected, no @Public) to AuthController to demonstrate guard protection in E2E tests — needed to satisfy ACs requiring a protected endpoint. Added @Public() to all existing auth endpoints and AppController.getHello(). Registered JwtAuthGuard as APP_GUARD in AuthModule providers.
 
 ### SI-02.10 — Refresh Token Rotation
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 36/36 unit+integration passing (auth.service.spec: 21 unit, auth.service.integration-spec: 15 integration); 31/31 E2E passing (auth.e2e-spec: 6 new refresh tests + 25 existing)
+- **Observations:** JWT refresh tokens required jti: crypto.randomUUID() in the payload to guarantee uniqueness within the same second (same family+sub+iat would produce identical JWTs otherwise). Added jti to both login and refresh token signing. Grace period test returns rawToken back to the concurrent client (no new token created, no family revocation).
 
 ### SI-02.11 — Logout and Session Revocation
 - **Status:** pending

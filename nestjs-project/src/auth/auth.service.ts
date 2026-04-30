@@ -12,11 +12,13 @@ import {
   InvalidCredentialsException,
   InvalidTokenException,
   TokenExpiredException,
+  TokenReuseDetectedException,
 } from '../common/exceptions/domain.exception';
 import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { TOKEN_REUSE_GRACE_PERIOD_MS } from './auth.constants';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { VerificationToken, VerificationTokenType } from './entities/verification-token.entity';
 
@@ -75,17 +77,8 @@ export class AuthService {
       throw new EmailNotConfirmedException();
     }
 
-    const accessToken = this.jwtService.sign(
-      { sub: user.id, email: user.email },
-      { expiresIn: this.authCfg.jwtAccessExpiration },
-    );
-
     const family = crypto.randomUUID();
-    const refreshToken = this.jwtService.sign(
-      { sub: user.id, family },
-      { secret: this.authCfg.jwtRefreshSecret, expiresIn: this.authCfg.jwtRefreshExpiration },
-    );
-
+    const refreshToken = this.generateRefreshToken(user.id, family);
     const tokenHash = this.hashToken(refreshToken);
     const expiresAt = new Date(Date.now() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration));
 
@@ -98,7 +91,10 @@ export class AuthService {
     });
     await this.refreshTokenRepository.save(refreshTokenRecord);
 
-    return { access_token: accessToken, refresh_token: refreshToken };
+    return {
+      access_token: this.generateAccessToken(user.id, user.email),
+      refresh_token: refreshToken,
+    };
   }
 
   async confirm(token: string): Promise<void> {
@@ -151,6 +147,83 @@ export class AuthService {
       this.authCfg.confirmationTokenExpirationHours,
     );
     await this.mailService.sendConfirmationEmail(user.email, user.channel.name, rawToken);
+  }
+
+  async refresh(rawToken: string): Promise<{ access_token: string; refresh_token: string }> {
+    const tokenHash = this.hashToken(rawToken);
+
+    const record = await this.refreshTokenRepository.findOne({
+      where: { token_hash: tokenHash },
+      relations: ['user'],
+    });
+
+    if (!record) {
+      throw new InvalidTokenException();
+    }
+
+    const now = new Date();
+
+    if (record.expires_at < now) {
+      throw new TokenExpiredException();
+    }
+
+    if (record.revoked_at !== null) {
+      const elapsedMs = now.getTime() - record.revoked_at.getTime();
+
+      if (elapsedMs <= TOKEN_REUSE_GRACE_PERIOD_MS) {
+        return {
+          access_token: this.generateAccessToken(record.user_id, record.user.email),
+          refresh_token: rawToken,
+        };
+      }
+
+      await this.refreshTokenRepository
+        .createQueryBuilder()
+        .update(RefreshToken)
+        .set({ revoked_at: now })
+        .where('family = :family', { family: record.family })
+        .andWhere('revoked_at IS NULL')
+        .execute();
+      throw new TokenReuseDetectedException();
+    }
+
+    record.revoked_at = now;
+
+    const newRefreshToken = this.generateRefreshToken(record.user_id, record.family);
+    const newTokenHash = this.hashToken(newRefreshToken);
+    const expiresAt = new Date(now.getTime() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration));
+
+    const newRecord = this.refreshTokenRepository.create({
+      token_hash: newTokenHash,
+      family: record.family,
+      user_id: record.user_id,
+      expires_at: expiresAt,
+      revoked_at: null,
+    });
+
+    await Promise.all([
+      this.refreshTokenRepository.save(record),
+      this.refreshTokenRepository.save(newRecord),
+    ]);
+
+    return {
+      access_token: this.generateAccessToken(record.user_id, record.user.email),
+      refresh_token: newRefreshToken,
+    };
+  }
+
+  private generateAccessToken(userId: string, email: string): string {
+    return this.jwtService.sign(
+      { sub: userId, email },
+      { expiresIn: this.authCfg.jwtAccessExpiration },
+    );
+  }
+
+  private generateRefreshToken(userId: string, family: string): string {
+    return this.jwtService.sign(
+      { sub: userId, family, jti: crypto.randomUUID() },
+      { secret: this.authCfg.jwtRefreshSecret, expiresIn: this.authCfg.jwtRefreshExpiration },
+    );
   }
 
   private hashToken(raw: string): string {
