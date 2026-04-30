@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** in_progress
-**SIs:** 8/13 completed
+**SIs:** 9/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -46,9 +46,9 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** Renamed private `createConfirmationToken` to `createVerificationToken(userId, type, expirationHours)` to be reused for password reset (SI-02.12). JwtModule.registerAsync added to AuthModule with JwtModule exported. Existing test modules updated to include JwtModule.register and RefreshToken repository mock.
 
 ### SI-02.9 — JWT Access Token Guard
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 30/30 passing (jwt-auth.guard.spec.ts: 5 unit, auth.e2e-spec.ts: 25 e2e — 5 new guard tests + 20 existing)
+- **Observations:** Added GET /auth/me (protected, no @Public) to AuthController to demonstrate guard protection in E2E tests — needed to satisfy ACs requiring a protected endpoint. Added @Public() to all existing auth endpoints and AppController.getHello(). Registered JwtAuthGuard as APP_GUARD in AuthModule providers.
 
 ### SI-02.10 — Refresh Token Rotation
 - **Status:** pending

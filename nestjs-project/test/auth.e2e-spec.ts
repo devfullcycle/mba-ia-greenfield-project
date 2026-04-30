@@ -40,6 +40,22 @@ describe('Auth (e2e)', () => {
     await cleanAllTables(dataSource);
   });
 
+  async function captureConfirmationToken(
+    email: string,
+    password = 'password123',
+  ): Promise<string> {
+    const authService = app.get(AuthService);
+    const mailServiceInstance = (authService as any).mailService;
+    let capturedToken = '';
+    jest
+      .spyOn(mailServiceInstance, 'sendConfirmationEmail')
+      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+        capturedToken = t;
+      });
+    await request(app.getHttpServer()).post('/auth/register').send({ email, password });
+    return capturedToken;
+  }
+
   describe('POST /auth/register', () => {
     it('returns 201 with { id, email } on valid registration', async () => {
       const res = await request(app.getHttpServer())
@@ -102,25 +118,8 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /auth/confirm-email', () => {
-    async function registerAndCaptureToken(email: string): Promise<string> {
-      let capturedToken = '';
-      const authService = app.get(AuthService);
-      const mailServiceInstance = (authService as any).mailService;
-      jest
-        .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-        .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
-          capturedToken = t;
-        });
-
-      await request(app.getHttpServer())
-        .post('/auth/register')
-        .send({ email, password: 'password123' });
-
-      return capturedToken;
-    }
-
     it('returns 204 with a valid, unused, non-expired token', async () => {
-      const token = await registerAndCaptureToken('toconfirm@example.com');
+      const token = await captureConfirmationToken('toconfirm@example.com');
 
       await request(app.getHttpServer())
         .post('/auth/confirm-email')
@@ -129,7 +128,7 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 401 with INVALID_TOKEN on an already-used token', async () => {
-      const token = await registerAndCaptureToken('usedtoken@example.com');
+      const token = await captureConfirmationToken('usedtoken@example.com');
 
       await request(app.getHttpServer()).post('/auth/confirm-email').send({ token }).expect(204);
 
@@ -142,7 +141,7 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 401 with TOKEN_EXPIRED on an expired token', async () => {
-      const token = await registerAndCaptureToken('expired@example.com');
+      const token = await captureConfirmationToken('expired@example.com');
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
       await verificationTokenRepository.update({ token_hash: tokenHash }, { expires_at: new Date(0) });
 
@@ -184,20 +183,11 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 204 for an already-confirmed email (no leak)', async () => {
-      let capturedToken = '';
-      const authService = app.get(AuthService);
-      const mailServiceInstance = (authService as any).mailService;
-      jest.spyOn(mailServiceInstance, 'sendConfirmationEmail').mockImplementationOnce(
-        async (_e: string, _n: string, t: string) => { capturedToken = t; },
-      );
-
-      await request(app.getHttpServer())
-        .post('/auth/register')
-        .send({ email: 'alreadyconfirmed@example.com', password: 'password123' });
+      const token = await captureConfirmationToken('alreadyconfirmed@example.com');
 
       await request(app.getHttpServer())
         .post('/auth/confirm-email')
-        .send({ token: capturedToken });
+        .send({ token });
 
       await request(app.getHttpServer())
         .post('/auth/resend-confirmation')
@@ -215,22 +205,56 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  describe('JWT Guard', () => {
+    async function registerConfirmAndLogin(
+      email: string,
+      password = 'password123',
+    ): Promise<{ access_token: string }> {
+      const token = await captureConfirmationToken(email, password);
+      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
+      const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
+      return { access_token: res.body.access_token };
+    }
+
+    it('returns 401 on GET /auth/me without Authorization header', async () => {
+      await request(app.getHttpServer()).get('/auth/me').expect(401);
+    });
+
+    it('returns 401 on GET /auth/me with an invalid token', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', 'Bearer not-a-valid-jwt')
+        .expect(401);
+    });
+
+    it('returns 200 on GET /auth/me with a valid access token', async () => {
+      const { access_token } = await registerConfirmAndLogin('me@example.com');
+
+      const res = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${access_token}`)
+        .expect(200);
+
+      expect(res.body.sub).toBeDefined();
+      expect(res.body.email).toBe('me@example.com');
+    });
+
+    it('GET / is accessible without any Authorization header (@Public)', async () => {
+      await request(app.getHttpServer()).get('/').expect(200);
+    });
+
+    it('POST /auth/register is accessible without Authorization header (@Public)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'guardtest@example.com', password: 'password123' });
+      expect(res.status).toBe(201);
+    });
+  });
+
   describe('POST /auth/login', () => {
     async function registerAndConfirmUser(email: string, password: string): Promise<void> {
-      const authService = app.get(AuthService);
-      const mailServiceInstance = (authService as any).mailService;
-      let capturedToken = '';
-      jest.spyOn(mailServiceInstance, 'sendConfirmationEmail').mockImplementationOnce(
-        async (_e: string, _n: string, t: string) => { capturedToken = t; },
-      );
-
-      await request(app.getHttpServer())
-        .post('/auth/register')
-        .send({ email, password });
-
-      await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({ token: capturedToken });
+      const token = await captureConfirmationToken(email, password);
+      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
     }
 
     it('returns 200 with access_token and refresh_token on valid credentials', async () => {
