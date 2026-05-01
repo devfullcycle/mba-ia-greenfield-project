@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
-**Status:** in_progress
-**SIs:** 12/13 completed
+**Status:** completed
+**SIs:** 13/13 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -66,6 +66,6 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Observations:** Reused logout() to revoke refresh tokens after reset. Reused createVerificationToken helper for password_reset type. Added sendPasswordResetEmail mock to buildTestModule. Added argon2 import to integration spec.
 
 ### SI-02.13 — Rate Limiting on Auth Endpoints
-- **Status:** pending
-- **Tests:** pending
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 2 E2E passing (rate-limiting describe block: 429 on 11th request; GET / not throttled); 46/46 E2E total, 117/117 unit+integration (--runInBand)
+- **Observations:** overrideProvider(ThrottlerGuard) does not intercept useClass-based APP_GUARD registration; correct isolation is done by injecting ThrottlerStorage (Symbol token) and calling .storage.clear() in beforeEach of all E2E describe blocks.

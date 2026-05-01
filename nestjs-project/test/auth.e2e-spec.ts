@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { AuthService } from '../src/auth/auth.service';
 import { RefreshToken } from '../src/auth/entities/refresh-token.entity';
@@ -17,6 +18,7 @@ describe('Auth (e2e)', () => {
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
   let refreshTokenRepository: Repository<RefreshToken>;
+  let throttlerStorage: ThrottlerStorageService;
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -33,6 +35,7 @@ describe('Auth (e2e)', () => {
     dataSource = moduleFixture.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
     refreshTokenRepository = dataSource.getRepository(RefreshToken);
+    throttlerStorage = moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
   });
 
   afterAll(async () => {
@@ -41,6 +44,7 @@ describe('Auth (e2e)', () => {
 
   beforeEach(async () => {
     await cleanAllTables(dataSource);
+    throttlerStorage.storage.clear();
   });
 
   async function captureConfirmationToken(
@@ -585,5 +589,56 @@ describe('Auth (e2e)', () => {
 
       expect(res.body.error).toBe('VALIDATION_ERROR');
     });
+  });
+});
+
+describe('Rate Limiting (e2e)', () => {
+  let app: INestApplication<App>;
+  let dataSource: DataSource;
+  let throttlerStorage: ThrottlerStorageService;
+
+  beforeAll(async () => {
+    const moduleFixture = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
+    app.useGlobalFilters(new DomainExceptionFilter(), new ValidationExceptionFilter());
+    await app.init();
+
+    dataSource = moduleFixture.get(DataSource);
+    throttlerStorage = moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(async () => {
+    await cleanAllTables(dataSource);
+    throttlerStorage.storage.clear();
+  });
+
+  it('returns 429 on the 11th request to an auth endpoint within the ttl window', async () => {
+    for (let i = 0; i < 10; i++) {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({ email: 'throttle@example.com' })
+        .expect(204);
+    }
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'throttle@example.com' })
+      .expect(429);
+  });
+
+  it('does not rate-limit the non-auth GET / endpoint', async () => {
+    for (let i = 0; i < 11; i++) {
+      await request(app.getHttpServer()).get('/').expect(200);
+    }
   });
 });
