@@ -1,10 +1,15 @@
 import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
-import { cleanAllTables, createTestDataSource } from '../test/create-test-data-source';
-import { Channel } from './entities/channel.entity';
+import { Channel } from '../channels/entities/channel.entity';
+import { ChannelsService } from '../channels/channels.service';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../test/create-test-data-source';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
+import { TestingModule } from '@nestjs/testing';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
@@ -19,7 +24,8 @@ describe('UsersService (integration)', () => {
     await dataSource.initialize();
     userRepository = dataSource.getRepository(User);
     channelRepository = dataSource.getRepository(Channel);
-    usersService = new UsersService(userRepository, channelRepository, dataSource);
+    const channelsService = new ChannelsService(dataSource);
+    usersService = new UsersService(userRepository, channelsService);
   });
 
   afterAll(async () => {
@@ -31,8 +37,11 @@ describe('UsersService (integration)', () => {
   });
 
   describe('createUserWithChannel', () => {
-    it('creates a user and channel atomically', async () => {
-      const user = await usersService.createUserWithChannel('test@example.com', 'hashed');
+    it('creates a user and channel', async () => {
+      const user = await usersService.createUserWithChannel(
+        'test@example.com',
+        'hashed',
+      );
 
       expect(user.id).toBeDefined();
       expect(user.email).toBe('test@example.com');
@@ -47,29 +56,44 @@ describe('UsersService (integration)', () => {
     });
 
     it('derives nickname from email prefix', async () => {
-      const user = await usersService.createUserWithChannel('john.doe+tag@example.com', 'hashed');
+      const user = await usersService.createUserWithChannel(
+        'john.doe+tag@example.com',
+        'hashed',
+      );
       expect(user.channel.nickname).toBe('johndoetag');
     });
 
     it('handles nickname collision by appending a random suffix', async () => {
       await usersService.createUserWithChannel('test@example.com', 'hashed');
-      const user2 = await usersService.createUserWithChannel('test@other.com', 'hashed');
+      const user2 = await usersService.createUserWithChannel(
+        'test@other.com',
+        'hashed',
+      );
 
       expect(user2.channel.nickname).toMatch(/^test_[a-z0-9]{3}$/);
     });
 
-    it('rolls back user creation if channel save fails irrecoverably', async () => {
-      await usersService.createUserWithChannel('taken@example.com', 'hashed');
+    it('compensates by deleting the user when channel creation fails irrecoverably', async () => {
+      const failingChannelsService = new ChannelsService(dataSource);
+      jest
+        .spyOn(failingChannelsService, 'createChannel')
+        .mockRejectedValue(new Error('channel creation failed'));
 
-      // Force all 5 retry attempts to fail by pre-creating channels for every possible suffix
-      // Instead, we simulate an unrecoverable error by using a duplicate email
+      const compensatingService = new UsersService(
+        userRepository,
+        failingChannelsService,
+      );
+
       await expect(
-        usersService.createUserWithChannel('taken@example.com', 'hashed2'),
-      ).rejects.toThrow();
+        compensatingService.createUserWithChannel('orphan@example.com', 'hash'),
+      ).rejects.toThrow('channel creation failed');
 
-      const count = await userRepository.count({ where: { email: 'taken@example.com' } });
-      expect(count).toBe(1);
+      const count = await userRepository.count({
+        where: { email: 'orphan@example.com' },
+      });
+      expect(count).toBe(0);
     });
+
   });
 
   describe('findByEmail', () => {
@@ -80,7 +104,10 @@ describe('UsersService (integration)', () => {
 
     it('returns the user with password selected', async () => {
       await userRepository.save(
-        userRepository.create({ email: 'user@example.com', password: 'secret_hash' }),
+        userRepository.create({
+          email: 'user@example.com',
+          password: 'secret_hash',
+        }),
       );
 
       const result = await usersService.findByEmail('user@example.com');

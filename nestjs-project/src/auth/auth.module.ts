@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
+import type { StringValue } from 'ms';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -21,7 +22,7 @@ import { VerificationToken } from './entities/verification-token.entity';
       inject: [authConfig.KEY],
       useFactory: (cfg: ConfigType<typeof authConfig>) => ({
         secret: cfg.jwtSecret,
-        signOptions: { expiresIn: cfg.jwtAccessExpiration },
+        signOptions: { expiresIn: cfg.jwtAccessExpiration as StringValue },
       }),
     }),
     TypeOrmModule.forFeature([RefreshToken, VerificationToken]),

@@ -17,7 +17,10 @@ import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { RefreshToken } from './entities/refresh-token.entity';
-import { VerificationToken, VerificationTokenType } from './entities/verification-token.entity';
+import {
+  VerificationToken,
+  VerificationTokenType,
+} from './entities/verification-token.entity';
 
 const mockAuthConfig = {
   jwtSecret: 'test-secret',
@@ -37,7 +40,10 @@ describe('AuthService — register', () => {
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       imports: [
-        JwtModule.register({ secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+        JwtModule.register({
+          secret: 'test-secret',
+          signOptions: { expiresIn: '15m' },
+        }),
       ],
       providers: [
         AuthService,
@@ -80,14 +86,22 @@ describe('AuthService — register', () => {
     authService = module.get(AuthService);
     usersService = module.get(UsersService);
     mailService = module.get(MailService);
-    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    verificationTokenRepository = module.get(
+      getRepositoryToken(VerificationToken),
+    );
   });
 
   it('throws EmailAlreadyExistsException when email is already registered', async () => {
-    usersService.findByEmail.mockResolvedValue({ id: 'u1', email: 'test@example.com' } as any);
+    usersService.findByEmail.mockResolvedValue({
+      id: 'u1',
+      email: 'test@example.com',
+    } as any);
 
     await expect(
-      authService.register({ email: 'test@example.com', password: 'password123' }),
+      authService.register({
+        email: 'test@example.com',
+        password: 'password123',
+      }),
     ).rejects.toThrow(EmailAlreadyExistsException);
   });
 
@@ -100,7 +114,10 @@ describe('AuthService — register', () => {
     } as any);
     verificationTokenRepository.create.mockReturnValue({} as any);
 
-    await authService.register({ email: 'new@example.com', password: 'plaintext' });
+    await authService.register({
+      email: 'new@example.com',
+      password: 'plaintext',
+    });
 
     const [, hashedPassword] = usersService.createUserWithChannel.mock.calls[0];
     expect(hashedPassword).not.toBe('plaintext');
@@ -116,7 +133,10 @@ describe('AuthService — register', () => {
     } as any);
     verificationTokenRepository.create.mockReturnValue({} as any);
 
-    await authService.register({ email: 'new@example.com', password: 'password123' });
+    await authService.register({
+      email: 'new@example.com',
+      password: 'password123',
+    });
 
     expect(usersService.createUserWithChannel).toHaveBeenCalledWith(
       'new@example.com',
@@ -131,10 +151,15 @@ describe('AuthService — register', () => {
       email: 'new@example.com',
       channel: { name: 'new' },
     } as any);
-    const createdToken = { type: VerificationTokenType.EMAIL_CONFIRMATION } as VerificationToken;
+    const createdToken = {
+      type: VerificationTokenType.EMAIL_CONFIRMATION,
+    } as VerificationToken;
     verificationTokenRepository.create.mockReturnValue(createdToken);
 
-    await authService.register({ email: 'new@example.com', password: 'password123' });
+    await authService.register({
+      email: 'new@example.com',
+      password: 'password123',
+    });
 
     expect(verificationTokenRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -154,7 +179,10 @@ describe('AuthService — register', () => {
     } as any);
     verificationTokenRepository.create.mockReturnValue({} as any);
 
-    await authService.register({ email: 'new@example.com', password: 'password123' });
+    await authService.register({
+      email: 'new@example.com',
+      password: 'password123',
+    });
 
     expect(mailService.sendConfirmationEmail).toHaveBeenCalledWith(
       'new@example.com',
@@ -172,7 +200,10 @@ describe('AuthService — register', () => {
     } as any);
     verificationTokenRepository.create.mockReturnValue({} as any);
 
-    const result = await authService.register({ email: 'new@example.com', password: 'password123' });
+    const result = await authService.register({
+      email: 'new@example.com',
+      password: 'password123',
+    });
 
     expect(result).toEqual({ id: 'u1', email: 'new@example.com' });
   });
@@ -181,7 +212,10 @@ describe('AuthService — register', () => {
 function buildTestModule() {
   return Test.createTestingModule({
     imports: [
-      JwtModule.register({ secret: 'test-secret', signOptions: { expiresIn: '15m' } }),
+      JwtModule.register({
+        secret: 'test-secret',
+        signOptions: { expiresIn: '15m' },
+      }),
     ],
     providers: [
       AuthService,
@@ -236,12 +270,17 @@ describe('AuthService — confirm', () => {
     const module = await buildTestModule();
     authService = module.get(AuthService);
     usersService = module.get(UsersService);
-    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    verificationTokenRepository = module.get(
+      getRepositoryToken(VerificationToken),
+    );
   });
 
   it('marks user as confirmed and token as used for a valid token', async () => {
     const rawToken = 'a'.repeat(64);
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const tokenHash = crypto
+      .createHash('sha256')
+      .update(rawToken)
+      .digest('hex');
     const user = { id: 'u1', is_confirmed: false } as any;
     const record = {
       token_hash: tokenHash,
@@ -264,7 +303,9 @@ describe('AuthService — confirm', () => {
   it('throws InvalidTokenException when token is not found', async () => {
     verificationTokenRepository.findOne.mockResolvedValue(null);
 
-    await expect(authService.confirm('nonexistent-token')).rejects.toThrow(InvalidTokenException);
+    await expect(authService.confirm('nonexistent-token')).rejects.toThrow(
+      InvalidTokenException,
+    );
   });
 
   it('throws TokenExpiredException when token is expired', async () => {
@@ -279,7 +320,9 @@ describe('AuthService — confirm', () => {
 
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
-    await expect(authService.confirm(rawToken)).rejects.toThrow(TokenExpiredException);
+    await expect(authService.confirm(rawToken)).rejects.toThrow(
+      TokenExpiredException,
+    );
   });
 });
 
@@ -294,13 +337,17 @@ describe('AuthService — resendConfirmation', () => {
     authService = module.get(AuthService);
     usersService = module.get(UsersService);
     mailService = module.get(MailService);
-    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    verificationTokenRepository = module.get(
+      getRepositoryToken(VerificationToken),
+    );
   });
 
   it('returns silently when email is not found', async () => {
     usersService.findByEmailWithChannel.mockResolvedValue(null);
 
-    await expect(authService.resendConfirmation('unknown@example.com')).resolves.toBeUndefined();
+    await expect(
+      authService.resendConfirmation('unknown@example.com'),
+    ).resolves.toBeUndefined();
     expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
   });
 
@@ -311,12 +358,19 @@ describe('AuthService — resendConfirmation', () => {
       channel: { name: 'nick' },
     } as any);
 
-    await expect(authService.resendConfirmation('confirmed@example.com')).resolves.toBeUndefined();
+    await expect(
+      authService.resendConfirmation('confirmed@example.com'),
+    ).resolves.toBeUndefined();
     expect(mailService.sendConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it('invalidates old tokens and sends a new confirmation email', async () => {
-    const user = { id: 'u1', email: 'user@example.com', is_confirmed: false, channel: { name: 'nick' } } as any;
+    const user = {
+      id: 'u1',
+      email: 'user@example.com',
+      is_confirmed: false,
+      channel: { name: 'nick' },
+    } as any;
     usersService.findByEmailWithChannel.mockResolvedValue(user);
 
     const qbMock = {
@@ -326,7 +380,9 @@ describe('AuthService — resendConfirmation', () => {
       andWhere: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
-    verificationTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    verificationTokenRepository.createQueryBuilder.mockReturnValue(
+      qbMock as any,
+    );
     verificationTokenRepository.create.mockReturnValue({} as any);
 
     await authService.resendConfirmation('user@example.com');
@@ -367,7 +423,10 @@ describe('AuthService — login', () => {
     usersService.findByEmail.mockResolvedValue(null);
 
     await expect(
-      authService.login({ email: 'nobody@example.com', password: 'password123' }),
+      authService.login({
+        email: 'nobody@example.com',
+        password: 'password123',
+      }),
     ).rejects.toThrow(InvalidCredentialsException);
   });
 
@@ -380,7 +439,10 @@ describe('AuthService — login', () => {
     } as any);
 
     await expect(
-      authService.login({ email: 'user@example.com', password: 'wrongpassword' }),
+      authService.login({
+        email: 'user@example.com',
+        password: 'wrongpassword',
+      }),
     ).rejects.toThrow(InvalidCredentialsException);
   });
 
@@ -393,7 +455,10 @@ describe('AuthService — login', () => {
     } as any);
 
     await expect(
-      authService.login({ email: 'user@example.com', password: 'correctpassword' }),
+      authService.login({
+        email: 'user@example.com',
+        password: 'correctpassword',
+      }),
     ).rejects.toThrow(EmailNotConfirmedException);
   });
 
@@ -405,7 +470,10 @@ describe('AuthService — login', () => {
       is_confirmed: true,
     } as any);
 
-    const result = await authService.login({ email: 'user@example.com', password: 'correctpassword' });
+    const result = await authService.login({
+      email: 'user@example.com',
+      password: 'correctpassword',
+    });
 
     expect(result.access_token).toBeDefined();
     expect(result.refresh_token).toBeDefined();
@@ -432,7 +500,9 @@ describe('AuthService — refresh', () => {
   it('throws InvalidTokenException when token is not found', async () => {
     refreshTokenRepository.findOne.mockResolvedValue(null);
 
-    await expect(authService.refresh(rawToken)).rejects.toThrow(InvalidTokenException);
+    await expect(authService.refresh(rawToken)).rejects.toThrow(
+      InvalidTokenException,
+    );
   });
 
   it('throws TokenExpiredException when token is expired', async () => {
@@ -446,7 +516,9 @@ describe('AuthService — refresh', () => {
     } as any;
     refreshTokenRepository.findOne.mockResolvedValue(record);
 
-    await expect(authService.refresh(rawToken)).rejects.toThrow(TokenExpiredException);
+    await expect(authService.refresh(rawToken)).rejects.toThrow(
+      TokenExpiredException,
+    );
   });
 
   it('rotates token: revokes old, persists new, returns both tokens', async () => {
@@ -513,10 +585,14 @@ describe('AuthService — refresh', () => {
     };
     refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
 
-    await expect(authService.refresh(rawToken)).rejects.toThrow(TokenReuseDetectedException);
+    await expect(authService.refresh(rawToken)).rejects.toThrow(
+      TokenReuseDetectedException,
+    );
 
     expect(qbMock.execute).toHaveBeenCalled();
-    expect(qbMock.where).toHaveBeenCalledWith('family = :family', { family: 'family-uuid' });
+    expect(qbMock.where).toHaveBeenCalledWith('family = :family', {
+      family: 'family-uuid',
+    });
   });
 });
 
@@ -543,7 +619,9 @@ describe('AuthService — logout', () => {
     await authService.logout('user-id-123');
 
     expect(qbMock.set).toHaveBeenCalledWith({ revoked_at: expect.any(Date) });
-    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'user-id-123' });
+    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', {
+      userId: 'user-id-123',
+    });
     expect(qbMock.andWhere).toHaveBeenCalledWith('revoked_at IS NULL');
     expect(qbMock.execute).toHaveBeenCalled();
   });
@@ -560,13 +638,17 @@ describe('AuthService — forgotPassword', () => {
     authService = module.get(AuthService);
     usersService = module.get(UsersService);
     mailService = module.get(MailService);
-    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    verificationTokenRepository = module.get(
+      getRepositoryToken(VerificationToken),
+    );
   });
 
   it('returns silently when email is not registered', async () => {
     usersService.findByEmailWithChannel.mockResolvedValue(null);
 
-    await expect(authService.forgotPassword('unknown@example.com')).resolves.toBeUndefined();
+    await expect(
+      authService.forgotPassword('unknown@example.com'),
+    ).resolves.toBeUndefined();
     expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
   });
 
@@ -585,7 +667,9 @@ describe('AuthService — forgotPassword', () => {
       andWhere: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
-    verificationTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    verificationTokenRepository.createQueryBuilder.mockReturnValue(
+      qbMock as any,
+    );
     verificationTokenRepository.create.mockReturnValue({} as any);
 
     await authService.forgotPassword('user@example.com');
@@ -618,16 +702,18 @@ describe('AuthService — resetPassword', () => {
     const module = await buildTestModule();
     authService = module.get(AuthService);
     usersService = module.get(UsersService);
-    verificationTokenRepository = module.get(getRepositoryToken(VerificationToken));
+    verificationTokenRepository = module.get(
+      getRepositoryToken(VerificationToken),
+    );
     refreshTokenRepository = module.get(getRepositoryToken(RefreshToken));
   });
 
   it('throws InvalidTokenException when token is not found', async () => {
     verificationTokenRepository.findOne.mockResolvedValue(null);
 
-    await expect(authService.resetPassword('badtoken', 'newpassword')).rejects.toThrow(
-      InvalidTokenException,
-    );
+    await expect(
+      authService.resetPassword('badtoken', 'newpassword'),
+    ).rejects.toThrow(InvalidTokenException);
   });
 
   it('throws TokenExpiredException when token is expired', async () => {
@@ -641,9 +727,9 @@ describe('AuthService — resetPassword', () => {
     } as any;
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
-    await expect(authService.resetPassword(rawToken, 'newpassword')).rejects.toThrow(
-      TokenExpiredException,
-    );
+    await expect(
+      authService.resetPassword(rawToken, 'newpassword'),
+    ).rejects.toThrow(TokenExpiredException);
   });
 
   it('hashes the new password, marks token used, and revokes refresh tokens', async () => {
@@ -674,7 +760,9 @@ describe('AuthService — resetPassword', () => {
     expect(user.password).toMatch(/^\$argon2/);
     expect(verificationTokenRepository.save).toHaveBeenCalledWith(record);
     expect(usersService.save).toHaveBeenCalledWith(user);
-    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', { userId: 'u1' });
+    expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', {
+      userId: 'u1',
+    });
     expect(qbMock.execute).toHaveBeenCalled();
   });
 });

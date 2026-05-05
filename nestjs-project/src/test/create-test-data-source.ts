@@ -1,6 +1,15 @@
-import { DataSource, EntityTarget, ObjectLiteral } from 'typeorm';
+import { DataSource, EntitySchema, MigrationInterface } from 'typeorm';
 
-export function createTestDataSource(entities: EntityTarget<ObjectLiteral>[]): DataSource {
+interface TestDataSourceOptions {
+  synchronize?: boolean;
+  migrations?: (new () => MigrationInterface)[];
+}
+
+export function createTestDataSource(
+  entities: (Function | string | EntitySchema<any>)[],
+  options: TestDataSourceOptions = {},
+): DataSource {
+  const { synchronize = true, migrations } = options;
   return new DataSource({
     type: 'postgres',
     host: process.env.DB_HOST ?? 'db',
@@ -9,7 +18,8 @@ export function createTestDataSource(entities: EntityTarget<ObjectLiteral>[]): D
     password: process.env.DB_PASSWORD ?? 'streamtube',
     database: process.env.DB_DATABASE ?? 'streamtube',
     entities,
-    synchronize: true,
+    synchronize,
+    ...(migrations !== undefined && { migrations, migrationsRun: false }),
   });
 }
 

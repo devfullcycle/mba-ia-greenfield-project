@@ -1,9 +1,12 @@
 import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../../auth/entities/verification-token.entity';
-import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../../test/create-test-data-source';
+import { User } from '../../users/entities/user.entity';
 import { Channel } from './channel.entity';
-import { User } from './user.entity';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
@@ -30,7 +33,10 @@ describe('Channel entity (integration)', () => {
   let userCounter = 0;
   async function createUser(): Promise<User> {
     return userRepository.save(
-      userRepository.create({ email: `ch_user_${++userCounter}@example.com`, password: 'hashed' }),
+      userRepository.create({
+        email: `ch_user_${++userCounter}@example.com`,
+        password: 'hashed',
+      }),
     );
   }
 
@@ -39,12 +45,20 @@ describe('Channel entity (integration)', () => {
     const user2 = await createUser();
 
     await channelRepository.save(
-      channelRepository.create({ name: 'Channel One', nickname: 'chan', user_id: user1.id }),
+      channelRepository.create({
+        name: 'Channel One',
+        nickname: 'chan',
+        user_id: user1.id,
+      }),
     );
 
     await expect(
       channelRepository.save(
-        channelRepository.create({ name: 'Channel Two', nickname: 'chan', user_id: user2.id }),
+        channelRepository.create({
+          name: 'Channel Two',
+          nickname: 'chan',
+          user_id: user2.id,
+        }),
       ),
     ).rejects.toThrow();
   });
@@ -55,7 +69,11 @@ describe('Channel entity (integration)', () => {
 
     await expect(
       channelRepository.save(
-        channelRepository.create({ name: 'Chan', nickname: longNickname, user_id: user.id }),
+        channelRepository.create({
+          name: 'Chan',
+          nickname: longNickname,
+          user_id: user.id,
+        }),
       ),
     ).rejects.toThrow();
   });
@@ -63,7 +81,12 @@ describe('Channel entity (integration)', () => {
   it('should allow null description', async () => {
     const user = await createUser();
     const channel = await channelRepository.save(
-      channelRepository.create({ name: 'Chan', nickname: 'chan', user_id: user.id, description: null }),
+      channelRepository.create({
+        name: 'Chan',
+        nickname: 'chan',
+        user_id: user.id,
+        description: null,
+      }),
     );
 
     expect(channel.description).toBeNull();
@@ -73,12 +96,20 @@ describe('Channel entity (integration)', () => {
     const user = await createUser();
 
     await channelRepository.save(
-      channelRepository.create({ name: 'Chan', nickname: 'chan1', user_id: user.id }),
+      channelRepository.create({
+        name: 'Chan',
+        nickname: 'chan1',
+        user_id: user.id,
+      }),
     );
 
     await expect(
       channelRepository.save(
-        channelRepository.create({ name: 'Chan2', nickname: 'chan2', user_id: user.id }),
+        channelRepository.create({
+          name: 'Chan2',
+          nickname: 'chan2',
+          user_id: user.id,
+        }),
       ),
     ).rejects.toThrow();
   });
@@ -86,7 +117,11 @@ describe('Channel entity (integration)', () => {
   it('should load the related user via the OneToOne relation', async () => {
     const user = await createUser();
     await channelRepository.save(
-      channelRepository.create({ name: 'Chan', nickname: 'relchan', user_id: user.id }),
+      channelRepository.create({
+        name: 'Chan',
+        nickname: 'relchan',
+        user_id: user.id,
+      }),
     );
 
     const found = await channelRepository.findOne({

@@ -26,8 +26,16 @@ describe('JwtAuthGuard', () => {
     mockReflector = { getAllAndOverride: jest.fn() };
 
     const module = await Test.createTestingModule({
-      imports: [JwtModule.register({ secret: TEST_SECRET, signOptions: { expiresIn: '15m' } })],
-      providers: [JwtAuthGuard, { provide: Reflector, useValue: mockReflector }],
+      imports: [
+        JwtModule.register({
+          secret: TEST_SECRET,
+          signOptions: { expiresIn: '15m' },
+        }),
+      ],
+      providers: [
+        JwtAuthGuard,
+        { provide: Reflector, useValue: mockReflector },
+      ],
     }).compile();
 
     guard = module.get(JwtAuthGuard);
@@ -46,12 +54,16 @@ describe('JwtAuthGuard', () => {
 
   it('passes with a valid JWT and attaches payload to request.user', async () => {
     const token = jwtService.sign({ sub: 'user-1', email: 'a@example.com' });
-    const request: Record<string, unknown> = { headers: { authorization: `Bearer ${token}` } };
+    const request: Record<string, unknown> = {
+      headers: { authorization: `Bearer ${token}` },
+    };
     const ctx = makeContext(request);
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect((request.user as Record<string, unknown>)?.sub).toBe('user-1');
-    expect((request.user as Record<string, unknown>)?.email).toBe('a@example.com');
+    expect((request.user as Record<string, unknown>)?.email).toBe(
+      'a@example.com',
+    );
   });
 
   it('throws UnauthorizedException when Authorization header is missing', async () => {
@@ -60,7 +72,9 @@ describe('JwtAuthGuard', () => {
   });
 
   it('throws UnauthorizedException on malformed Bearer token', async () => {
-    const ctx = makeContext({ headers: { authorization: 'Bearer not-a-valid-jwt' } });
+    const ctx = makeContext({
+      headers: { authorization: 'Bearer not-a-valid-jwt' },
+    });
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 
@@ -69,7 +83,9 @@ describe('JwtAuthGuard', () => {
       { sub: 'user-1', email: 'a@example.com' },
       { expiresIn: -60 },
     );
-    const ctx = makeContext({ headers: { authorization: `Bearer ${expiredToken}` } });
+    const ctx = makeContext({
+      headers: { authorization: `Bearer ${expiredToken}` },
+    });
     await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
   });
 });

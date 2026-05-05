@@ -4,11 +4,16 @@ import { randomBytes } from 'crypto';
 const MAX_BASE_LENGTH = 46;
 
 function randomHex(length: number): string {
-  return randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+  return randomBytes(Math.ceil(length / 2))
+    .toString('hex')
+    .slice(0, length);
 }
 
 export function sanitizeNickname(emailPrefix: string): string {
-  const sanitized = emailPrefix.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, MAX_BASE_LENGTH);
+  const sanitized = emailPrefix
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, MAX_BASE_LENGTH);
   if (!sanitized) {
     return 'user_' + randomHex(8);
   }

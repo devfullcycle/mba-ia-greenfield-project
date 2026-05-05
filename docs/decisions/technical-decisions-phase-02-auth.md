@@ -219,6 +219,35 @@
 
 ---
 
+## TD-10: Nickname Generation from Email Prefix
+
+**Context:** On registration, a default nickname (channel handle) must be generated automatically from the user's email prefix (the part before `@`). This handle is used as the user's public identifier and must be URL-safe, unique, and reproducible even when the email prefix contains only non-ASCII or special characters.
+
+> **Note:** This decision was made during implementation of SI-02 and documented retroactively. The chosen approach was implemented directly without a pre-implementation decision round.
+
+**Options:**
+
+### Option A: Strict allowlist — `[a-z0-9_]` only, empty fallback to `user_<random>`
+- Lowercase the email prefix, strip all characters outside `[a-z0-9_]`, truncate to 46 characters (reserving 4 for the `_xxx` uniqueness suffix within the 50-char column limit). If the sanitized result is empty, generate `user_` + 8 random hex characters.
+- **Pros:** Produces URL-safe, predictable handles. Handles the worst case (prefix is all special chars) with a well-formed fallback. Consistent character set regardless of locale or email provider.
+- **Cons:** Strips hyphens (`-`), which are common in email addresses (e.g., `first-last@...`). May produce very short handles if the prefix is mostly non-ASCII.
+
+### Option B: Broader allowlist — `[a-z0-9_-]` (include hyphen)
+- Same as Option A but allows hyphens in the handle.
+- **Pros:** Preserves hyphenated email prefixes (common pattern). Fewer characters stripped from real-world emails.
+- **Cons:** Hyphens at the start/end of the handle require additional trimming logic. Some platforms disallow leading/trailing hyphens in usernames. Slightly more validation complexity.
+
+### Option C: Transliteration before sanitization
+- Transliterate non-ASCII characters to ASCII equivalents (e.g., `ñ → n`, `ü → u`) before applying the allowlist. Falls back to random if transliteration yields nothing.
+- **Pros:** Preserves more of the original email prefix intent (especially for non-Latin scripts). Lower rate of fallback to random handles.
+- **Cons:** Requires a transliteration library (e.g., `transliteration` or `any-ascii`). Transliteration output varies by locale — `ä` may map to `ae` or `a`. Adds a dependency for an edge case. Non-deterministic across library versions.
+
+**Recommendation:** **Option A** — The platform is a video sharing service with URL-based channel handles. A strict `[a-z0-9_]` allowlist is the simplest and most portable choice: no extra dependencies, no edge cases around hyphen positioning, and the `user_<random>` fallback provides a valid handle even for extreme email prefixes. Hyphens can always be added in a future iteration if user feedback justifies it.
+
+**Decision:** A — `[a-z0-9_]` allowlist with `user_<8-char-random>` fallback when the prefix yields an empty string.
+
+---
+
 ## Decisions Summary
 
 | ID | Decision | Recommendation | Choice |
@@ -232,3 +261,4 @@
 | TD-07 | Error Response Standardization | Custom Domain Exception Filter | A (Custom Domain Exception Filter) |
 | TD-08 | Rate Limiting Strategy | @nestjs/throttler | A (@nestjs/throttler) |
 | TD-09 | Refresh Token Format | Opaque (random bytes) | A (JWT) |
+| TD-10 | Nickname Generation from Email Prefix | `[a-z0-9_]` allowlist + random fallback | A (`[a-z0-9_]` + `user_<random>` fallback) |

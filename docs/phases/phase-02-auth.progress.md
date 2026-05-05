@@ -1,7 +1,7 @@
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
 
 **Status:** completed
-**SIs:** 13/13 completed
+**SIs:** 18/18 completed
 
 ### SI-02.1 — Dependencies, Configuration Namespaces, and Docker Compose
 - **Status:** completed
@@ -69,3 +69,28 @@ Review how env values are being used in tests (avoid localhost). And in UsersMod
 - **Status:** completed
 - **Tests:** 2 E2E passing (rate-limiting describe block: 429 on 11th request; GET / not throttled); 46/46 E2E total, 117/117 unit+integration (--runInBand)
 - **Observations:** overrideProvider(ThrottlerGuard) does not intercept useClass-based APP_GUARD registration; correct isolation is done by injecting ThrottlerStorage (Symbol token) and calling .storage.clear() in beforeEach of all E2E describe blocks.
+
+### SI-02.14 — TypeScript Compilation Error Fixes
+- **Status:** completed
+- **Tests:** no tests — `npx tsc --noEmit` exits with code 0
+- **Observations:** Fixed 6 files: import type for JwtPayload (auth.controller), ConfigType (auth.service, mail.service, auth.module), StringValue import+casts for expiresIn in auth.module/auth.service/auth.service.integration-spec, port fallback in main.ts, entities type in create-test-data-source.ts.
+
+### SI-02.15 — ChannelsModule Extraction, Nickname Ownership, and Pre-Check Refactor
+- **Status:** completed
+- **Tests:** 32/32 passing — nickname.util.spec: 11 unit, channels.service.spec: 6 unit, channels.service.integration-spec: 5 integration, channels.module.spec: 1 module, users.service.integration-spec: 7 integration, users.module.spec: 1 module
+- **Observations:** Moved nickname.util to src/channels/; ChannelsService now injects Repository<Channel> and DataSource, derives nickname from email internally, manages its own transaction via dataSource.transaction; UsersService uses userRepository.save() directly and compensates by deleting the saved user if channel creation fails. Unit test for channels.service mocks dataSource.transaction by calling its callback with a mock manager; integration test for users.service uses jest.spyOn to simulate irrecoverable channel failure for the compensation test.
+
+### SI-02.16 — Migration Runner Integration Test
+- **Status:** completed
+- **Tests:** 2/2 passing (migrations.integration-spec.ts)
+- **Observations:** Imported migration classes directly (not via glob) to ensure ts-jest resolves them correctly in the test environment.
+
+### SI-02.17 — Fix confirm-email Endpoint: POST → GET with Query Token
+- **Status:** completed
+- **Tests:** 46/46 E2E passing (auth.e2e-spec.ts updated; all confirm-email calls changed to GET with .query())
+- **Observations:** Found two bugs from SI-02.15: (1) ChannelsModule was missing TypeOrmModule.forFeature([Channel]), causing autoLoadEntities to miss Channel and breaking E2E app startup; (2) migrations.integration-spec.ts left DB without token tables after undoLastMigration — fixed by re-running migrations in afterAll to restore DB state.
+
+### SI-02.18 — Mail Template Asset Copying
+- **Status:** completed
+- **Tests:** no tests — `npm run build` produces confirmation.hbs and password-reset.hbs in dist/mail/templates/
+- **Observations:** none

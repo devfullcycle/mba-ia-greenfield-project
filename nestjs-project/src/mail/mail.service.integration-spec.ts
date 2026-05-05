@@ -2,7 +2,11 @@ import { Test } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import appConfig from '../config/app.config';
 import mailConfig from '../config/mail.config';
-import { clearMailpitMessages, getMailpitMessage, getMailpitMessages } from '../test/mailpit';
+import {
+  clearMailpitMessages,
+  getMailpitMessage,
+  getMailpitMessages,
+} from '../test/mailpit';
 import { MAIL_SUBJECTS } from './mail.constants';
 import { MailModule } from './mail.module';
 import { MailService } from './mail.service';
@@ -26,7 +30,11 @@ describe('MailService (integration)', () => {
   });
 
   it('sendConfirmationEmail delivers to Mailpit with correct subject and recipient', async () => {
-    await mailService.sendConfirmationEmail('user@example.com', 'Alice', 'token123');
+    await mailService.sendConfirmationEmail(
+      'user@example.com',
+      'Alice',
+      'token123',
+    );
 
     const messages = await getMailpitMessages();
     expect(messages).toHaveLength(1);
@@ -35,7 +43,11 @@ describe('MailService (integration)', () => {
   });
 
   it('sendConfirmationEmail renders the confirmation URL in the body', async () => {
-    await mailService.sendConfirmationEmail('user@example.com', 'Alice', 'mytoken');
+    await mailService.sendConfirmationEmail(
+      'user@example.com',
+      'Alice',
+      'mytoken',
+    );
 
     const messages = await getMailpitMessages();
     const detail = await getMailpitMessage(messages[0].ID);
@@ -46,7 +58,11 @@ describe('MailService (integration)', () => {
   });
 
   it('sendPasswordResetEmail delivers to Mailpit with correct subject and recipient', async () => {
-    await mailService.sendPasswordResetEmail('user@example.com', 'Bob', 'resettoken');
+    await mailService.sendPasswordResetEmail(
+      'user@example.com',
+      'Bob',
+      'resettoken',
+    );
 
     const messages = await getMailpitMessages();
     expect(messages).toHaveLength(1);
@@ -55,7 +71,11 @@ describe('MailService (integration)', () => {
   });
 
   it('sendPasswordResetEmail renders the reset URL and expiry notice in the body', async () => {
-    await mailService.sendPasswordResetEmail('user@example.com', 'Bob', 'resettoken');
+    await mailService.sendPasswordResetEmail(
+      'user@example.com',
+      'Bob',
+      'resettoken',
+    );
 
     const messages = await getMailpitMessages();
     const detail = await getMailpitMessage(messages[0].ID);
@@ -70,8 +90,10 @@ describe('MailService (integration)', () => {
     await mailService.sendConfirmationEmail('user@example.com', 'Alice', 'tok');
 
     const messages = await getMailpitMessages();
-    const configuredFrom = process.env.MAIL_FROM ?? '"StreamTube" <noreply@streamtube.com>';
-    const expectedAddress = configuredFrom.match(/<(.+)>/)?.[1] ?? configuredFrom;
+    const configuredFrom =
+      process.env.MAIL_FROM ?? '"StreamTube" <noreply@streamtube.com>';
+    const expectedAddress =
+      configuredFrom.match(/<(.+)>/)?.[1] ?? configuredFrom;
     expect(messages[0].From.Address).toBe(expectedAddress);
   });
 });

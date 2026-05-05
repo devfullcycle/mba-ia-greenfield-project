@@ -41,6 +41,10 @@ export class TokenExpiredException extends DomainException {
 
 export class TokenReuseDetectedException extends DomainException {
   constructor() {
-    super('TOKEN_REUSE_DETECTED', 401, 'Token reuse detected — all sessions revoked');
+    super(
+      'TOKEN_REUSE_DETECTED',
+      401,
+      'Token reuse detected — all sessions revoked',
+    );
   }
 }

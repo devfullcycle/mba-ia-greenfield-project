@@ -1,7 +1,10 @@
 import { DataSource, Repository } from 'typeorm';
-import { Channel } from '../../users/entities/channel.entity';
+import { Channel } from '../../channels/entities/channel.entity';
 import { User } from '../../users/entities/user.entity';
-import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../../test/create-test-data-source';
 import { RefreshToken } from './refresh-token.entity';
 import { VerificationToken } from './verification-token.entity';
 
@@ -30,11 +33,17 @@ describe('RefreshToken entity (integration)', () => {
   let userCounter = 0;
   async function createUser(): Promise<User> {
     return userRepository.save(
-      userRepository.create({ email: `rt_user_${++userCounter}@example.com`, password: 'hashed' }),
+      userRepository.create({
+        email: `rt_user_${++userCounter}@example.com`,
+        password: 'hashed',
+      }),
     );
   }
 
-  function buildToken(userId: string, overrides: Partial<RefreshToken> = {}): Partial<RefreshToken> {
+  function buildToken(
+    userId: string,
+    overrides: Partial<RefreshToken> = {},
+  ): Partial<RefreshToken> {
     return {
       token_hash: 'abc123hash',
       family: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
@@ -71,7 +80,9 @@ describe('RefreshToken entity (integration)', () => {
     const user = await createUser();
     const revokedAt = new Date();
     const token = await refreshTokenRepository.save(
-      refreshTokenRepository.create(buildToken(user.id, { revoked_at: revokedAt })),
+      refreshTokenRepository.create(
+        buildToken(user.id, { revoked_at: revokedAt }),
+      ),
     );
 
     expect(token.revoked_at).toBeInstanceOf(Date);
@@ -91,10 +102,14 @@ describe('RefreshToken entity (integration)', () => {
   it('should find a token by token_hash using the index', async () => {
     const user = await createUser();
     await refreshTokenRepository.save(
-      refreshTokenRepository.create(buildToken(user.id, { token_hash: 'unique_hash_xyz' })),
+      refreshTokenRepository.create(
+        buildToken(user.id, { token_hash: 'unique_hash_xyz' }),
+      ),
     );
 
-    const found = await refreshTokenRepository.findOneBy({ token_hash: 'unique_hash_xyz' });
+    const found = await refreshTokenRepository.findOneBy({
+      token_hash: 'unique_hash_xyz',
+    });
     expect(found).not.toBeNull();
     expect(found?.user_id).toBe(user.id);
   });
@@ -107,11 +122,13 @@ describe('RefreshToken entity (integration)', () => {
       refreshTokenRepository.create(buildToken(user.id, { family: familyId })),
     );
     await refreshTokenRepository.save(
-      refreshTokenRepository.create(buildToken(user.id, {
-        family: familyId,
-        token_hash: 'second_hash',
-        revoked_at: new Date(),
-      })),
+      refreshTokenRepository.create(
+        buildToken(user.id, {
+          family: familyId,
+          token_hash: 'second_hash',
+          revoked_at: new Date(),
+        }),
+      ),
     );
 
     const tokens = await refreshTokenRepository.findBy({ family: familyId });
@@ -121,7 +138,9 @@ describe('RefreshToken entity (integration)', () => {
   it('should load the related user via ManyToOne relation', async () => {
     const user = await createUser();
     await refreshTokenRepository.save(
-      refreshTokenRepository.create(buildToken(user.id, { token_hash: 'rel_hash' })),
+      refreshTokenRepository.create(
+        buildToken(user.id, { token_hash: 'rel_hash' }),
+      ),
     );
 
     const found = await refreshTokenRepository.findOne({

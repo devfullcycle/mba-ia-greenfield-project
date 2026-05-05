@@ -1,7 +1,8 @@
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
+import type { StringValue } from 'ms';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
@@ -20,13 +21,21 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { TOKEN_REUSE_GRACE_PERIOD_MS } from './auth.constants';
 import { RefreshToken } from './entities/refresh-token.entity';
-import { VerificationToken, VerificationTokenType } from './entities/verification-token.entity';
+import {
+  VerificationToken,
+  VerificationTokenType,
+} from './entities/verification-token.entity';
 
 function jwtExpirationToMs(exp: string): number {
   const match = exp.match(/^(\d+)([smhd])$/);
   if (!match) return 0;
   const n = parseInt(match[1], 10);
-  const units: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  const units: Record<string, number> = {
+    s: 1000,
+    m: 60_000,
+    h: 3_600_000,
+    d: 86_400_000,
+  };
   return n * (units[match[2]] ?? 0);
 }
 
@@ -40,7 +49,8 @@ export class AuthService {
     private readonly verificationTokenRepository: Repository<VerificationToken>,
     @InjectRepository(RefreshToken)
     private readonly refreshTokenRepository: Repository<RefreshToken>,
-    @Inject(authConfig.KEY) private readonly authCfg: ConfigType<typeof authConfig>,
+    @Inject(authConfig.KEY)
+    private readonly authCfg: ConfigType<typeof authConfig>,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ id: string; email: string }> {
@@ -50,19 +60,28 @@ export class AuthService {
     }
 
     const hashedPassword = await argon2.hash(dto.password);
-    const user = await this.usersService.createUserWithChannel(dto.email, hashedPassword);
+    const user = await this.usersService.createUserWithChannel(
+      dto.email,
+      hashedPassword,
+    );
 
     const rawToken = await this.createVerificationToken(
       user.id,
       VerificationTokenType.EMAIL_CONFIRMATION,
       this.authCfg.confirmationTokenExpirationHours,
     );
-    await this.mailService.sendConfirmationEmail(user.email, user.channel.name, rawToken);
+    await this.mailService.sendConfirmationEmail(
+      user.email,
+      user.channel.name,
+      rawToken,
+    );
 
     return { id: user.id, email: user.email };
   }
 
-  async login(dto: LoginDto): Promise<{ access_token: string; refresh_token: string }> {
+  async login(
+    dto: LoginDto,
+  ): Promise<{ access_token: string; refresh_token: string }> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
       throw new InvalidCredentialsException();
@@ -80,7 +99,9 @@ export class AuthService {
     const family = crypto.randomUUID();
     const refreshToken = this.generateRefreshToken(user.id, family);
     const tokenHash = this.hashToken(refreshToken);
-    const expiresAt = new Date(Date.now() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration));
+    const expiresAt = new Date(
+      Date.now() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration),
+    );
 
     const refreshTokenRecord = this.refreshTokenRepository.create({
       token_hash: tokenHash,
@@ -126,10 +147,16 @@ export class AuthService {
       VerificationTokenType.EMAIL_CONFIRMATION,
       this.authCfg.confirmationTokenExpirationHours,
     );
-    await this.mailService.sendConfirmationEmail(user.email, user.channel.name, rawToken);
+    await this.mailService.sendConfirmationEmail(
+      user.email,
+      user.channel.name,
+      rawToken,
+    );
   }
 
-  async refresh(rawToken: string): Promise<{ access_token: string; refresh_token: string }> {
+  async refresh(
+    rawToken: string,
+  ): Promise<{ access_token: string; refresh_token: string }> {
     const tokenHash = this.hashToken(rawToken);
 
     const record = await this.refreshTokenRepository.findOne({
@@ -158,7 +185,10 @@ export class AuthService {
           throw new InvalidTokenException();
         }
         return {
-          access_token: this.generateAccessToken(record.user_id, record.user.email),
+          access_token: this.generateAccessToken(
+            record.user_id,
+            record.user.email,
+          ),
           refresh_token: rawToken,
         };
       }
@@ -175,9 +205,14 @@ export class AuthService {
 
     record.revoked_at = now;
 
-    const newRefreshToken = this.generateRefreshToken(record.user_id, record.family);
+    const newRefreshToken = this.generateRefreshToken(
+      record.user_id,
+      record.family,
+    );
     const newTokenHash = this.hashToken(newRefreshToken);
-    const expiresAt = new Date(now.getTime() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration));
+    const expiresAt = new Date(
+      now.getTime() + jwtExpirationToMs(this.authCfg.jwtRefreshExpiration),
+    );
 
     const newRecord = this.refreshTokenRepository.create({
       token_hash: newTokenHash,
@@ -204,14 +239,21 @@ export class AuthService {
       return;
     }
 
-    await this.invalidateActiveVerificationTokens(user.id, VerificationTokenType.PASSWORD_RESET);
+    await this.invalidateActiveVerificationTokens(
+      user.id,
+      VerificationTokenType.PASSWORD_RESET,
+    );
 
     const rawToken = await this.createVerificationToken(
       user.id,
       VerificationTokenType.PASSWORD_RESET,
       this.authCfg.passwordResetTokenExpirationHours,
     );
-    await this.mailService.sendPasswordResetEmail(user.email, user.channel.name, rawToken);
+    await this.mailService.sendPasswordResetEmail(
+      user.email,
+      user.channel.name,
+      rawToken,
+    );
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
@@ -242,14 +284,17 @@ export class AuthService {
   private generateAccessToken(userId: string, email: string): string {
     return this.jwtService.sign(
       { sub: userId, email },
-      { expiresIn: this.authCfg.jwtAccessExpiration },
+      { expiresIn: this.authCfg.jwtAccessExpiration as StringValue },
     );
   }
 
   private generateRefreshToken(userId: string, family: string): string {
     return this.jwtService.sign(
       { sub: userId, family, jti: crypto.randomUUID() },
-      { secret: this.authCfg.jwtRefreshSecret, expiresIn: this.authCfg.jwtRefreshExpiration },
+      {
+        secret: this.authCfg.jwtRefreshSecret,
+        expiresIn: this.authCfg.jwtRefreshExpiration as StringValue,
+      },
     );
   }
 

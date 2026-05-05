@@ -27,15 +27,23 @@ describe('Auth (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
-    app.useGlobalFilters(new DomainExceptionFilter(), new ValidationExceptionFilter());
+    app.useGlobalFilters(
+      new DomainExceptionFilter(),
+      new ValidationExceptionFilter(),
+    );
     await app.init();
 
     dataSource = moduleFixture.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
     refreshTokenRepository = dataSource.getRepository(RefreshToken);
-    throttlerStorage = moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    throttlerStorage =
+      moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
   });
 
   afterAll(async () => {
@@ -59,7 +67,9 @@ describe('Auth (e2e)', () => {
       .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
         capturedToken = t;
       });
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password });
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password });
     return capturedToken;
   }
 
@@ -68,9 +78,16 @@ describe('Auth (e2e)', () => {
     password = 'password123',
   ): Promise<{ access_token: string; refresh_token: string }> {
     const token = await captureConfirmationToken(email, password);
-    await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
-    const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
-    return { access_token: res.body.access_token, refresh_token: res.body.refresh_token };
+    await request(app.getHttpServer())
+      .get('/auth/confirm-email')
+      .query({ token });
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password });
+    return {
+      access_token: res.body.access_token,
+      refresh_token: res.body.refresh_token,
+    };
   }
 
   describe('POST /auth/register', () => {
@@ -127,31 +144,38 @@ describe('Auth (e2e)', () => {
     it('returns 400 with VALIDATION_ERROR on unknown extra fields', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/register')
-        .send({ email: 'user@example.com', password: 'password123', admin: true })
+        .send({
+          email: 'user@example.com',
+          password: 'password123',
+          admin: true,
+        })
         .expect(400);
 
       expect(res.body.error).toBe('VALIDATION_ERROR');
     });
   });
 
-  describe('POST /auth/confirm-email', () => {
+  describe('GET /auth/confirm-email', () => {
     it('returns 204 with a valid, unused, non-expired token', async () => {
       const token = await captureConfirmationToken('toconfirm@example.com');
 
       await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({ token })
+        .get('/auth/confirm-email')
+        .query({ token })
         .expect(204);
     });
 
     it('returns 401 with INVALID_TOKEN on an already-used token', async () => {
       const token = await captureConfirmationToken('usedtoken@example.com');
 
-      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token }).expect(204);
+      await request(app.getHttpServer())
+        .get('/auth/confirm-email')
+        .query({ token })
+        .expect(204);
 
       const res = await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({ token })
+        .get('/auth/confirm-email')
+        .query({ token })
         .expect(401);
 
       expect(res.body.error).toBe('INVALID_TOKEN');
@@ -160,20 +184,22 @@ describe('Auth (e2e)', () => {
     it('returns 401 with TOKEN_EXPIRED on an expired token', async () => {
       const token = await captureConfirmationToken('expired@example.com');
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-      await verificationTokenRepository.update({ token_hash: tokenHash }, { expires_at: new Date(0) });
+      await verificationTokenRepository.update(
+        { token_hash: tokenHash },
+        { expires_at: new Date(0) },
+      );
 
       const res = await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({ token })
+        .get('/auth/confirm-email')
+        .query({ token })
         .expect(401);
 
       expect(res.body.error).toBe('TOKEN_EXPIRED');
     });
 
-    it('returns 400 with VALIDATION_ERROR on missing token field', async () => {
+    it('returns 400 with VALIDATION_ERROR on missing token query param', async () => {
       const res = await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({})
+        .get('/auth/confirm-email')
         .expect(400);
 
       expect(res.body.error).toBe('VALIDATION_ERROR');
@@ -200,11 +226,13 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 204 for an already-confirmed email (no leak)', async () => {
-      const token = await captureConfirmationToken('alreadyconfirmed@example.com');
+      const token = await captureConfirmationToken(
+        'alreadyconfirmed@example.com',
+      );
 
       await request(app.getHttpServer())
-        .post('/auth/confirm-email')
-        .send({ token });
+        .get('/auth/confirm-email')
+        .query({ token });
 
       await request(app.getHttpServer())
         .post('/auth/resend-confirmation')
@@ -259,9 +287,14 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /auth/login', () => {
-    async function registerAndConfirmUser(email: string, password: string): Promise<void> {
+    async function registerAndConfirmUser(
+      email: string,
+      password: string,
+    ): Promise<void> {
       const token = await captureConfirmationToken(email, password);
-      await request(app.getHttpServer()).post('/auth/confirm-email').send({ token });
+      await request(app.getHttpServer())
+        .get('/auth/confirm-email')
+        .query({ token });
     }
 
     it('returns 200 with access_token and refresh_token on valid credentials', async () => {
@@ -323,7 +356,9 @@ describe('Auth (e2e)', () => {
 
   describe('POST /auth/refresh', () => {
     it('returns 200 with new access_token and refresh_token on valid refresh token', async () => {
-      const { refresh_token } = await registerConfirmAndLogin('refresh@example.com');
+      const { refresh_token } = await registerConfirmAndLogin(
+        'refresh@example.com',
+      );
 
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
@@ -345,9 +380,17 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 401 with TOKEN_EXPIRED on an expired refresh token', async () => {
-      const { refresh_token } = await registerConfirmAndLogin('refreshexp@example.com');
-      const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
-      await refreshTokenRepository.update({ token_hash: tokenHash }, { expires_at: new Date(0) });
+      const { refresh_token } = await registerConfirmAndLogin(
+        'refreshexp@example.com',
+      );
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(refresh_token)
+        .digest('hex');
+      await refreshTokenRepository.update(
+        { token_hash: tokenHash },
+        { expires_at: new Date(0) },
+      );
 
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
@@ -358,9 +401,12 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 200 with valid access token when reuse is within grace period', async () => {
-      const { refresh_token: token1 } = await registerConfirmAndLogin('grace2@example.com');
+      const { refresh_token: token1 } =
+        await registerConfirmAndLogin('grace2@example.com');
 
-      await request(app.getHttpServer()).post('/auth/refresh').send({ refresh_token: token1 });
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token: token1 });
 
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
@@ -369,8 +415,13 @@ describe('Auth (e2e)', () => {
 
       expect(res.body.access_token).toBeDefined();
 
-      const tokenHash = crypto.createHash('sha256').update(token1).digest('hex');
-      const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: tokenHash });
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(token1)
+        .digest('hex');
+      const revokedRecord = await refreshTokenRepository.findOneBy({
+        token_hash: tokenHash,
+      });
       const activeTokens = await refreshTokenRepository
         .createQueryBuilder('rt')
         .where('rt.family = :family', { family: revokedRecord!.family })
@@ -380,11 +431,17 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns 401 with TOKEN_REUSE_DETECTED when reuse is beyond grace period', async () => {
-      const { refresh_token: token1 } = await registerConfirmAndLogin('reuse2@example.com');
+      const { refresh_token: token1 } =
+        await registerConfirmAndLogin('reuse2@example.com');
 
-      await request(app.getHttpServer()).post('/auth/refresh').send({ refresh_token: token1 });
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .send({ refresh_token: token1 });
 
-      const tokenHash = crypto.createHash('sha256').update(token1).digest('hex');
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(token1)
+        .digest('hex');
       await refreshTokenRepository.update(
         { token_hash: tokenHash },
         { revoked_at: new Date(Date.now() - 15_000) },
@@ -397,7 +454,9 @@ describe('Auth (e2e)', () => {
 
       expect(res.body.error).toBe('TOKEN_REUSE_DETECTED');
 
-      const revokedRecord = await refreshTokenRepository.findOneBy({ token_hash: tokenHash });
+      const revokedRecord = await refreshTokenRepository.findOneBy({
+        token_hash: tokenHash,
+      });
       const allInFamily = await refreshTokenRepository.findBy({
         family: revokedRecord!.family,
       });
@@ -417,7 +476,8 @@ describe('Auth (e2e)', () => {
 
   describe('POST /auth/logout', () => {
     it('returns 204 with a valid access token', async () => {
-      const { access_token } = await registerConfirmAndLogin('logout@example.com');
+      const { access_token } =
+        await registerConfirmAndLogin('logout@example.com');
 
       await request(app.getHttpServer())
         .post('/auth/logout')
@@ -444,7 +504,9 @@ describe('Auth (e2e)', () => {
         .send({ refresh_token })
         .expect(401);
 
-      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(res.body.error);
+      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(
+        res.body.error,
+      );
     });
   });
 
@@ -457,7 +519,9 @@ describe('Auth (e2e)', () => {
       .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
         captured = t;
       });
-    await request(app.getHttpServer()).post('/auth/forgot-password').send({ email });
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email });
     return captured;
   }
 
@@ -526,7 +590,9 @@ describe('Auth (e2e)', () => {
         .post('/auth/refresh')
         .send({ refresh_token })
         .expect(401);
-      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(res.body.error);
+      expect(['INVALID_TOKEN', 'TOKEN_REUSE_DETECTED']).toContain(
+        res.body.error,
+      );
     });
 
     it('returns 401 with INVALID_TOKEN on an unknown token', async () => {
@@ -604,13 +670,21 @@ describe('Rate Limiting (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
-    app.useGlobalFilters(new DomainExceptionFilter(), new ValidationExceptionFilter());
+    app.useGlobalFilters(
+      new DomainExceptionFilter(),
+      new ValidationExceptionFilter(),
+    );
     await app.init();
 
     dataSource = moduleFixture.get(DataSource);
-    throttlerStorage = moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    throttlerStorage =
+      moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
   });
 
   afterAll(async () => {

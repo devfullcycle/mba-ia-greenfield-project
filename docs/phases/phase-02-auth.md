@@ -394,6 +394,139 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 
 ---
 
+### SI-02.14 — TypeScript Compilation Error Fixes
+
+**Description:** Fix 11 pre-existing TypeScript errors across five patterns: `import type` for interface types used in decorated signatures (TS1272), `StringValue` cast for JWT `expiresIn` values (TS2322/TS2769), `undefined` coalescing for `port` in `main.ts` (TS2345), and correct `entities` parameter type in `create-test-data-source.ts` (TS2322).
+
+**Technical actions:**
+
+- In `src/auth/auth.controller.ts`: change `import { JwtPayload }` to `import type { JwtPayload }` from `./auth.types` — fixes TS1272 on the `logout` and `me` method signatures where `JwtPayload` appears as a type-only reference in decorated parameter positions
+- In `src/auth/auth.service.ts`: change `import { ConfigType }` to `import type { ConfigType }` from `@nestjs/config` — fixes TS1272 on the `@Inject(authConfig.KEY)` constructor parameter
+- In `src/mail/mail.service.ts`: change `import { ConfigType }` to `import type { ConfigType }` from `@nestjs/config` — fixes TS1272 on the `@Inject(appConfig.KEY)` constructor parameter
+- In `src/auth/auth.module.ts`, `src/auth/auth.service.ts`, and `src/auth/auth.service.integration-spec.ts`: add `import type { StringValue } from 'ms'` (transitive dep of `@nestjs/jwt`, no install needed) and cast each `expiresIn` string value as `StringValue` — e.g. `expiresIn: cfg.jwtAccessExpiration as StringValue` — fixes TS2322 in `auth.module.ts` (JwtModule `signOptions`) and TS2769 in `auth.service.ts` (`generateAccessToken` / `generateRefreshToken` calls to `jwtService.sign`)
+- In `src/main.ts`: add `?? 3000` fallback when reading port — `configService.get<number>('app.port') ?? 3000` — fixes TS2345 (`number | undefined` not assignable to `string | number` in `app.listen()`)
+- In `src/test/create-test-data-source.ts`: change the `entities` parameter type from `EntityTarget<ObjectLiteral>[]` to `(Function | string | EntitySchema<any>)[]`, importing `EntitySchema` from `typeorm` — fixes TS2322 where the broader `EntityTarget` union included object literal shapes not compatible with `DataSourceOptions.entities`
+
+**Dependencies:** None
+
+**Acceptance criteria:**
+
+- `npx tsc --noEmit` reports zero errors after applying all fixes
+- All existing unit and integration tests continue to pass (`npm test -- --runInBand`)
+- All existing E2E tests continue to pass (`npm run test:e2e`)
+
+---
+
+### SI-02.15 — ChannelsModule Extraction, Nickname Ownership, and Pre-Check Refactor
+
+**Description:** Move the `Channel` entity and nickname utilities into a new `ChannelsModule`. `ChannelsService` owns the full channel creation lifecycle — injecting `Repository<Channel>` and `DataSource`, deriving the nickname from email internally, and managing its own transaction. `UsersService` delegates channel creation by passing only the user ID and email; it no longer injects `DataSource`, handles nickname logic, or opens transactions — it compensates if channel creation fails.
+
+**Technical actions:**
+
+- Move `src/users/entities/channel.entity.ts` to `src/channels/entities/channel.entity.ts` and `src/users/entities/channel.entity.integration-spec.ts` to `src/channels/entities/channel.entity.integration-spec.ts`. Move `src/common/nickname.util.ts` and `src/common/nickname.util.spec.ts` to `src/channels/nickname.util.ts` and `src/channels/nickname.util.spec.ts`. Update all import paths across the codebase that reference the old locations.
+- Create `src/channels/channels.service.ts` — `ChannelsService` injecting `@InjectRepository(Channel) private readonly channelRepository: Repository<Channel>` and `private readonly dataSource: DataSource`. Implement `createChannel(userId: string, email: string): Promise<Channel>`: open `this.dataSource.transaction(async (manager) => { ... })` and inside: (1) derive `baseNickname` via `sanitizeNickname(email.split('@')[0])`; (2) use `manager.findOne(Channel, { where: { nickname } })` — if a row exists, generate a suffix candidate via `appendRandomSuffix(baseNickname)` and re-check (up to `maxRetries = 5`); (3) call `manager.save(manager.create(Channel, { name: baseNickname, nickname, user_id: userId }))`; (4) catch `QueryFailedError` with PostgreSQL code `'23505'` and detail containing `'nickname'` → generate new suffix and retry from step 2; (5) throw after exhausting retries.
+- Create `src/channels/channels.module.ts` — `ChannelsModule` with `TypeOrmModule.forFeature([Channel])` in imports, `ChannelsService` in providers, and `[TypeOrmModule, ChannelsService]` in exports.
+- Update `src/users/users.module.ts` — remove `Channel` from `TypeOrmModule.forFeature`, leaving only `User`; add `ChannelsModule` to imports and exports.
+- Update `src/users/users.service.ts` — remove `DataSource` injection, all transaction logic, and any `sanitizeNickname` import; save user via `this.userRepository.save()`; call `this.channelsService.createChannel(savedUser.id, email)` — no manager passed; wrap in try/catch: on failure, compensate by deleting the saved user with `this.userRepository.delete(savedUser.id)` and re-throwing.
+- Create `src/channels/channels.module.spec.ts` — module compilation test verifying `ChannelsModule` resolves with `TypeOrmModule.forFeature([Channel])` and `ChannelsService`.
+
+**Tests:**
+
+| File | Layer | Verifies |
+|------|-------|----------|
+| `src/channels/nickname.util.spec.ts` | Unit | `sanitizeNickname` and `appendRandomSuffix` correctness (moved from `src/common/`) |
+| `src/channels/channels.service.spec.ts` | Unit | `createChannel`: mocks `dataSource.transaction` to invoke its callback with a mock manager; derives nickname from email; pre-check finds existing → retries with suffix; pre-check passes → saves; concurrent unique violation → retries; max retries → throws; constructor receives `(channelRepository, dataSource)` |
+| `src/channels/channels.service.integration-spec.ts` | Integration | `createChannel(userId, email)` persists channel with nickname derived from email (no outer transaction wrapper needed); collision resolved by suffix; transaction managed internally; constructor receives `(channelRepository, dataSource)` |
+| `src/channels/channels.module.spec.ts` | Unit | `ChannelsModule` compiles with `TypeOrmModule.forFeature([Channel])` and `ChannelsService` wiring |
+| `src/users/users.service.integration-spec.ts` | Integration | `createUserWithChannel` creates user+channel; compensation: user is deleted when channel creation fails irrecoverably; constructor receives `(userRepository, channelsService)` — no `DataSource` |
+| `src/users/users.module.spec.ts` | Unit | `UsersModule` compiles with `ChannelsModule` dependency |
+
+**Dependencies:** SI-02.14
+
+**Acceptance criteria:**
+
+- `Channel` entity, `Repository<Channel>`, `DataSource` for channel ops, nickname utilities, and nickname derivation logic all live within `ChannelsModule` — `UsersModule` contains no reference to `Channel`, `sanitizeNickname`, or `appendRandomSuffix`
+- `ChannelsService.createChannel(userId, email)` accepts no `EntityManager` parameter — it opens its own transaction internally via the injected `DataSource`
+- `UsersService` no longer injects `DataSource` — user creation uses `Repository<User>.save()` directly
+- If channel creation fails after exhausting retries, `UsersService` compensates by deleting the saved user row — no orphaned users remain
+- Nickname collision is resolved by querying before insert — savepoints (`SAVEPOINT`/`ROLLBACK TO SAVEPOINT`) are no longer used in the channel creation flow
+- On a concurrent unique constraint violation (another process inserted between the pre-check and the save), the retry logic resolves the collision without propagating an unhandled exception
+
+---
+
+### SI-02.16 — Migration Runner Integration Test
+
+**Description:** Add an integration test that programmatically runs all pending migrations against a test database via `DataSource.runMigrations()`, verifies all expected tables are present in `information_schema`, and confirms bidirectional integrity by reverting the last migration with `dataSource.undoLastMigration()`.
+
+**Technical actions:**
+
+- Create `src/database/migrations.integration-spec.ts` — instantiate a dedicated `DataSource` with `type: 'postgres'`, connection params from the same environment variables used by `create-test-data-source.ts`, `synchronize: false`, `migrationsRun: false`, and the migrations glob `src/database/migrations/*.ts`. This DataSource must register all four entity classes (User, Channel, RefreshToken, VerificationToken) so TypeORM can resolve foreign key metadata
+- In `beforeAll`: `initialize()` the DataSource. Drop all managed tables and the `migrations` tracking table if they exist (using `dataSource.query(...)` with `DROP TABLE IF EXISTS ... CASCADE`) to guarantee a clean schema before the test; then call `dataSource.runMigrations()` and store the result
+- Assert that `runMigrations()` returns an array of exactly two migration objects (corresponding to `CreateUsersAndChannels` and `CreateAuthTokens`). Query `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY(ARRAY['users','channels','refresh_tokens','verification_tokens'])` and assert all four table names are returned
+- Call `dataSource.undoLastMigration()` to revert the most recent migration. Re-query `information_schema.tables` for `refresh_tokens` and `verification_tokens` and assert neither is present (confirming the `CreateAuthTokens` migration was reversed)
+- In `afterAll`: `destroy()` the DataSource
+
+**Tests:**
+
+| File | Layer | Verifies |
+|------|-------|----------|
+| `src/database/migrations.integration-spec.ts` | Integration | `runMigrations` applies both migrations and all four tables exist; `undoLastMigration` removes the token tables |
+
+**Dependencies:** SI-02.14
+
+**Acceptance criteria:**
+
+- After `dataSource.runMigrations()`, the `users`, `channels`, `refresh_tokens`, and `verification_tokens` tables are present in the database
+- `runMigrations()` returns an array of exactly two migration records
+- After `dataSource.undoLastMigration()`, `refresh_tokens` and `verification_tokens` no longer exist in `information_schema.tables`
+
+---
+
+### SI-02.17 — Fix confirm-email Endpoint: POST → GET with Query Token
+
+**Description:** Change `POST /auth/confirm-email` (token in request body) to `GET /auth/confirm-email?token=xxx` (token in query string), aligning the endpoint with how email confirmation links are opened in a browser. The outgoing email URL is already formatted as a query string link, so only the controller and E2E tests change.
+
+**Technical actions:**
+
+- Update `src/auth/auth.controller.ts` — replace `@Post('confirm-email')` with `@Get('confirm-email')`; change the parameter decorator from `@Body() dto: ConfirmEmailDto` to `@Query() dto: ConfirmEmailDto`; keep `@HttpCode(HttpStatus.NO_CONTENT)` and `@Public()` decorators unchanged. The global `ValidationPipe` with `transform: true` validates query params against `ConfirmEmailDto` the same way it validates bodies
+- Update `test/auth.e2e-spec.ts` — change all confirm-email test cases from `.post('/auth/confirm-email').send({ token })` to `.get('/auth/confirm-email').query({ token })`
+
+**Tests:**
+
+| File | Layer | Verifies |
+|------|-------|----------|
+| `test/auth.e2e-spec.ts` | E2E | `GET /auth/confirm-email?token=<valid>` returns 204; `?token=<invalid>` returns 401 INVALID_TOKEN; `?token=<expired>` returns 401 TOKEN_EXPIRED; missing token query param returns 400 |
+
+**Dependencies:** None
+
+**Acceptance criteria:**
+
+- `GET /auth/confirm-email?token=<valid-token>` returns 204 with no response body — the user's `is_confirmed` becomes `true`
+- `GET /auth/confirm-email?token=<invalid-token>` returns 401 with `INVALID_TOKEN`
+- `GET /auth/confirm-email?token=<expired-token>` returns 401 with `TOKEN_EXPIRED`
+- `GET /auth/confirm-email` without a `token` query parameter returns 400 with a validation error
+- The confirmation link generated in outgoing emails (`${appUrl}/auth/confirm-email?token=${token}`) opens correctly when clicked in a browser
+
+---
+
+### SI-02.18 — Mail Template Asset Copying
+
+**Description:** Configure `nest-cli.json` to treat `.hbs` files in `src/mail/templates/` as build assets, ensuring they are copied to `dist/mail/templates/` during `nest build` and watched for changes during `nest start --watch`.
+
+**Technical actions:**
+
+- Update `nestjs-project/nest-cli.json` — inside `compilerOptions`, add `"assets": [{ "include": "mail/templates/**/*.hbs", "watchAssets": true }]` alongside the existing `"deleteOutDir": true` entry. The Nest CLI copies each matched file relative to `sourceRoot` into the same relative path under `outDir`
+
+**Dependencies:** None
+
+**Acceptance criteria:**
+
+- `npm run build` copies `src/mail/templates/confirmation.hbs` and `src/mail/templates/password-reset.hbs` to `dist/mail/templates/` — both files are present after a clean build
+- `npm run start:dev` watches `.hbs` file changes and reloads without requiring a full restart
+- The production entrypoint (`npm run start:prod`) sends confirmation and password reset emails successfully — no "template not found" error at runtime
+
+---
+
 ## Technical Specifications
 
 ### Data Model
@@ -480,12 +613,9 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 
 ---
 
-#### POST /auth/confirm-email (SI-02.7)
+#### GET /auth/confirm-email (SI-02.7, corrected in SI-02.17)
 
-**Request headers:**
-- Content-Type: application/json
-
-**Request body:**
+**Request query parameters:**
 - token: string, required — the raw hex token from the confirmation email
 
 **Response 204:** No content.
@@ -493,7 +623,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 **Error responses:**
 - 401 INVALID_TOKEN: when the token is not found or already used
 - 401 TOKEN_EXPIRED: when the token has expired
-- 400 validation error: when the request body fails schema validation
+- 400 validation error: when `token` query parameter is missing or empty
 
 ---
 
@@ -609,7 +739,7 @@ Deliver the complete authentication lifecycle — registration with automatic ch
 | Endpoint | Public | Authenticated | Notes |
 |----------|--------|---------------|-------|
 | POST /auth/register | ✓ | | |
-| POST /auth/confirm-email | ✓ | | |
+| GET /auth/confirm-email | ✓ | | Token in query string (corrected in SI-02.17) |
 | POST /auth/resend-confirmation | ✓ | | |
 | POST /auth/login | ✓ | | |
 | POST /auth/refresh | ✓ | | Uses refresh token, not access token |
@@ -632,8 +762,8 @@ The `error` field carries the domain error code from the catalog (e.g., `"EMAIL_
 | EMAIL_ALREADY_EXISTS | 409 | Email is already registered | POST /auth/register with an email that exists in users table |
 | INVALID_CREDENTIALS | 401 | Invalid email or password | POST /auth/login with unknown email OR wrong password (same code for both — do not reveal which) |
 | EMAIL_NOT_CONFIRMED | 403 | Email not confirmed | POST /auth/login when user's `is_confirmed = false` |
-| INVALID_TOKEN | 401 | Invalid or already used token | POST /auth/confirm-email, /auth/reset-password, or /auth/refresh with a token not found in DB or already consumed |
-| TOKEN_EXPIRED | 401 | Token has expired | POST /auth/confirm-email, /auth/reset-password, or /auth/refresh with an expired token |
+| INVALID_TOKEN | 401 | Invalid or already used token | GET /auth/confirm-email, POST /auth/reset-password, or POST /auth/refresh with a token not found in DB or already consumed |
+| TOKEN_EXPIRED | 401 | Token has expired | GET /auth/confirm-email, POST /auth/reset-password, or POST /auth/refresh with an expired token |
 | TOKEN_REUSE_DETECTED | 401 | Token reuse detected — all sessions revoked | POST /auth/refresh with an already-revoked refresh token beyond the 10s grace period |
 
 ---
@@ -662,9 +792,18 @@ SI-02.9 + SI-02.10
 
 SI-02.7 + SI-02.10
 └── SI-02.12
+
+SI-02.14 (no deps — corrections, independent of original SI chain)
+├── SI-02.15
+└── SI-02.16
+
+SI-02.17 (no deps)
+SI-02.18 (no deps)
 ```
 
 Linearized implementation order: SI-02.1 → SI-02.2, SI-02.3, SI-02.5 (parallel) → SI-02.4 → SI-02.6 → SI-02.7 → SI-02.8 → SI-02.9, SI-02.10, SI-02.13 (parallel) → SI-02.11 → SI-02.12
+
+Corrections (SI-02.14–18) are independent of the original chain and applied after the original phase is complete: SI-02.14 → SI-02.15, SI-02.16 (parallel); SI-02.17 and SI-02.18 anytime
 
 ## Deliverables
 
@@ -680,7 +819,13 @@ Linearized implementation order: SI-02.1 → SI-02.2, SI-02.3, SI-02.5 (parallel
 - [ ] Global ValidationPipe with whitelist and transform
 - [ ] Mailpit service in Docker Compose for local email testing
 - [ ] Email templates (confirmation, password reset) via Handlebars
-- [ ] All SI tests pass (`docker compose exec nestjs-api npm test`)
+- [ ] Zero TypeScript compilation errors (`npx tsc --noEmit` exits with code 0)
+- [ ] `Channel` entity and creation logic extracted to `ChannelsModule` with independent `ChannelsService`
+- [ ] Nickname collision resolved by pre-check query before insert — no savepoints in the creation path
+- [ ] Migration runner integration test verifying bidirectional migration apply/revert
+- [ ] `GET /auth/confirm-email?token=xxx` replaces `POST /auth/confirm-email` — email links open correctly in browser
+- [ ] `.hbs` templates copied to `dist/mail/templates/` on every `nest build`
+- [ ] All SI tests pass (`docker compose exec nestjs-api npm test -- --runInBand`)
 - [ ] E2E tests pass (`docker compose exec nestjs-api npm run test:e2e`)
 - [ ] Type/compilation check passes (`docker compose exec nestjs-api npx tsc --noEmit`)
 - [ ] Project builds successfully (`docker compose exec nestjs-api npm run build`)

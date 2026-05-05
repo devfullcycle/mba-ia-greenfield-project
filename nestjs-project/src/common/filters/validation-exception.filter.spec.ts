@@ -27,7 +27,10 @@ describe('ValidationExceptionFilter', () => {
 
   it('normalizes array of class-validator messages', () => {
     const exception = new BadRequestException({
-      message: ['email must be an email', 'password must be longer than or equal to 8 characters'],
+      message: [
+        'email must be an email',
+        'password must be longer than or equal to 8 characters',
+      ],
       error: 'Bad Request',
       statusCode: 400,
     });
@@ -38,7 +41,10 @@ describe('ValidationExceptionFilter', () => {
     expect(mockJson).toHaveBeenCalledWith({
       statusCode: 400,
       error: 'VALIDATION_ERROR',
-      message: ['email must be an email', 'password must be longer than or equal to 8 characters'],
+      message: [
+        'email must be an email',
+        'password must be longer than or equal to 8 characters',
+      ],
     });
   });
 

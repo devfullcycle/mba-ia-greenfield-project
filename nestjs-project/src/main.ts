@@ -8,7 +8,7 @@ import { ValidationExceptionFilter } from './common/filters/validation-exception
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('app.port');
+  const port = configService.get<number>('app.port') ?? 3000;
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -18,7 +18,10 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new DomainExceptionFilter(), new ValidationExceptionFilter());
+  app.useGlobalFilters(
+    new DomainExceptionFilter(),
+    new ValidationExceptionFilter(),
+  );
 
   await app.listen(port);
 }

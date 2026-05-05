@@ -1,0 +1,120 @@
+@baseUrl = http://localhost:3000
+@contentType = application/json
+
+# Credenciais do usuário de teste
+@userEmail = user@example.com
+@userPassword = password123
+
+# Tokens capturados automaticamente dos responses de login/refresh
+# (preenchidos pelo REST Client via @name + response variables)
+@accessToken = {{login.response.body.$.access_token}}
+@refreshToken = {{login.response.body.$.refresh_token}}
+
+# Tokens obtidos via e-mail — preencher manualmente após consultar http://localhost:8025
+@confirmationToken = <token do e-mail de confirmacao>
+@resetToken = <token do e-mail de reset>
+
+
+###
+# ─────────────────────────────────────────────
+# HEALTH CHECK
+# ─────────────────────────────────────────────
+
+### GET / — verifica se a API está no ar
+GET {{baseUrl}}/
+
+
+###
+# ─────────────────────────────────────────────
+# REGISTRO E CONFIRMAÇÃO DE EMAIL
+# ─────────────────────────────────────────────
+
+### 1. Registrar novo usuário
+# Após o registro, consulte http://localhost:8025 para obter o token de confirmação
+POST {{baseUrl}}/auth/register
+Content-Type: {{contentType}}
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+
+### 2. Confirmar email com token recebido
+# Cole o token do e-mail em @confirmationToken acima
+GET {{baseUrl}}/auth/confirm-email?token={{confirmationToken}}
+
+### 3. Reenviar email de confirmação
+POST {{baseUrl}}/auth/resend-confirmation
+Content-Type: {{contentType}}
+
+{
+  "email": "{{userEmail}}"
+}
+
+
+###
+# ─────────────────────────────────────────────
+# LOGIN E TOKENS
+# ─────────────────────────────────────────────
+
+### 4. Login — access_token e refresh_token capturados automaticamente
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+
+### 5. Renovar tokens — access_token e refresh_token atualizados automaticamente
+# @name login
+POST {{baseUrl}}/auth/refresh
+Content-Type: {{contentType}}
+
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+
+###
+# ─────────────────────────────────────────────
+# USUÁRIO AUTENTICADO
+# ─────────────────────────────────────────────
+
+### 6. Dados do usuário autenticado
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+
+### 7. Logout — revoga todos os refresh tokens do usuário
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{accessToken}}
+
+
+###
+# ─────────────────────────────────────────────
+# RECUPERAÇÃO DE SENHA
+# ─────────────────────────────────────────────
+
+### 8. Solicitar redefinição de senha
+# Após a solicitação, consulte http://localhost:8025 para obter o token de reset
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: {{contentType}}
+
+{
+  "email": "{{userEmail}}"
+}
+
+
+### 9. Redefinir senha com token recebido
+# Cole o token do e-mail em @resetToken acima
+POST {{baseUrl}}/auth/reset-password
+Content-Type: {{contentType}}
+
+{
+  "token": "{{resetToken}}",
+  "new_password": "new-password123"
+}

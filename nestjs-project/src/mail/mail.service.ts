@@ -1,6 +1,6 @@
 import { MailerService } from '@nestjs-modules/mailer';
 import { Inject, Injectable } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
+import type { ConfigType } from '@nestjs/config';
 import appConfig from '../config/app.config';
 import { MAIL_SUBJECTS, MAIL_TEMPLATES } from './mail.constants';
 
@@ -15,7 +15,11 @@ export class MailService {
     this.appUrl = app.url;
   }
 
-  async sendConfirmationEmail(email: string, name: string, token: string): Promise<void> {
+  async sendConfirmationEmail(
+    email: string,
+    name: string,
+    token: string,
+  ): Promise<void> {
     const confirmationUrl = `${this.appUrl}/auth/confirm-email?token=${token}`;
     await this.mailerService.sendMail({
       to: email,
@@ -25,7 +29,11 @@ export class MailService {
     });
   }
 
-  async sendPasswordResetEmail(email: string, name: string, token: string): Promise<void> {
+  async sendPasswordResetEmail(
+    email: string,
+    name: string,
+    token: string,
+  ): Promise<void> {
     const resetUrl = `${this.appUrl}/auth/reset-password?token=${token}`;
     await this.mailerService.sendMail({
       to: email,

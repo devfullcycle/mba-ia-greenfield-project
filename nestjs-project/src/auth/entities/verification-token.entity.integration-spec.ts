@@ -1,9 +1,15 @@
 import { DataSource, Repository } from 'typeorm';
-import { Channel } from '../../users/entities/channel.entity';
+import { Channel } from '../../channels/entities/channel.entity';
 import { User } from '../../users/entities/user.entity';
-import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../../test/create-test-data-source';
 import { RefreshToken } from './refresh-token.entity';
-import { VerificationToken, VerificationTokenType } from './verification-token.entity';
+import {
+  VerificationToken,
+  VerificationTokenType,
+} from './verification-token.entity';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
@@ -30,11 +36,17 @@ describe('VerificationToken entity (integration)', () => {
   let userCounter = 0;
   async function createUser(): Promise<User> {
     return userRepository.save(
-      userRepository.create({ email: `vt_user_${++userCounter}@example.com`, password: 'hashed' }),
+      userRepository.create({
+        email: `vt_user_${++userCounter}@example.com`,
+        password: 'hashed',
+      }),
     );
   }
 
-  function buildToken(userId: string, overrides: Partial<VerificationToken> = {}): Partial<VerificationToken> {
+  function buildToken(
+    userId: string,
+    overrides: Partial<VerificationToken> = {},
+  ): Partial<VerificationToken> {
     return {
       token_hash: 'hashvalue',
       type: VerificationTokenType.EMAIL_CONFIRMATION,
@@ -60,7 +72,9 @@ describe('VerificationToken entity (integration)', () => {
   it('should persist a verification token of type password_reset', async () => {
     const user = await createUser();
     const token = await verificationTokenRepository.save(
-      verificationTokenRepository.create(buildToken(user.id, { type: VerificationTokenType.PASSWORD_RESET })),
+      verificationTokenRepository.create(
+        buildToken(user.id, { type: VerificationTokenType.PASSWORD_RESET }),
+      ),
     );
 
     expect(token.type).toBe(VerificationTokenType.PASSWORD_RESET);
@@ -81,7 +95,9 @@ describe('VerificationToken entity (integration)', () => {
   it('should allow used_at to be null', async () => {
     const user = await createUser();
     const token = await verificationTokenRepository.save(
-      verificationTokenRepository.create(buildToken(user.id, { used_at: null })),
+      verificationTokenRepository.create(
+        buildToken(user.id, { used_at: null }),
+      ),
     );
 
     expect(token.used_at).toBeNull();
@@ -91,7 +107,9 @@ describe('VerificationToken entity (integration)', () => {
     const user = await createUser();
     const usedAt = new Date();
     const token = await verificationTokenRepository.save(
-      verificationTokenRepository.create(buildToken(user.id, { used_at: usedAt })),
+      verificationTokenRepository.create(
+        buildToken(user.id, { used_at: usedAt }),
+      ),
     );
 
     expect(token.used_at).toBeInstanceOf(Date);
@@ -111,10 +129,14 @@ describe('VerificationToken entity (integration)', () => {
   it('should find a token by token_hash using the index', async () => {
     const user = await createUser();
     await verificationTokenRepository.save(
-      verificationTokenRepository.create(buildToken(user.id, { token_hash: 'unique_token_hash' })),
+      verificationTokenRepository.create(
+        buildToken(user.id, { token_hash: 'unique_token_hash' }),
+      ),
     );
 
-    const found = await verificationTokenRepository.findOneBy({ token_hash: 'unique_token_hash' });
+    const found = await verificationTokenRepository.findOneBy({
+      token_hash: 'unique_token_hash',
+    });
     expect(found).not.toBeNull();
     expect(found?.user_id).toBe(user.id);
   });
@@ -122,7 +144,9 @@ describe('VerificationToken entity (integration)', () => {
   it('should load the related user via ManyToOne relation', async () => {
     const user = await createUser();
     await verificationTokenRepository.save(
-      verificationTokenRepository.create(buildToken(user.id, { token_hash: 'rel_hash' })),
+      verificationTokenRepository.create(
+        buildToken(user.id, { token_hash: 'rel_hash' }),
+      ),
     );
 
     const found = await verificationTokenRepository.findOne({

@@ -4,7 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import appConfig from '../config/app.config';
 import authConfig from '../config/auth.config';
 import mailConfig from '../config/mail.config';
-import { Channel } from '../users/entities/channel.entity';
+import { Channel } from '../channels/entities/channel.entity';
 import { User } from '../users/entities/user.entity';
 import { createTestDataSource } from '../test/create-test-data-source';
 import { AuthModule } from './auth.module';
@@ -17,7 +17,10 @@ describe('AuthModule', () => {
   it('should compile successfully with JwtModule, TypeOrmModule, UsersModule, and MailModule', async () => {
     const module = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({ isGlobal: true, load: [appConfig, authConfig, mailConfig] }),
+        ConfigModule.forRoot({
+          isGlobal: true,
+          load: [appConfig, authConfig, mailConfig],
+        }),
         TypeOrmModule.forRoot(createTestDataSource(ALL_ENTITIES).options),
         AuthModule,
       ],

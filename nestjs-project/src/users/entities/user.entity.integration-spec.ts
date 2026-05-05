@@ -1,8 +1,11 @@
 import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../../auth/entities/verification-token.entity';
-import { cleanAllTables, createTestDataSource } from '../../test/create-test-data-source';
-import { Channel } from './channel.entity';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../../test/create-test-data-source';
+import { Channel } from '../../channels/entities/channel.entity';
 import { User } from './user.entity';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
@@ -26,7 +29,10 @@ describe('User entity (integration)', () => {
   });
 
   it('should auto-generate uuid, created_at, and updated_at', async () => {
-    const user = userRepository.create({ email: 'test@example.com', password: 'hashed' });
+    const user = userRepository.create({
+      email: 'test@example.com',
+      password: 'hashed',
+    });
     const saved = await userRepository.save(user);
 
     expect(saved.id).toBeDefined();
@@ -35,7 +41,10 @@ describe('User entity (integration)', () => {
   });
 
   it('should default is_confirmed to false', async () => {
-    const user = userRepository.create({ email: 'new@example.com', password: 'hashed' });
+    const user = userRepository.create({
+      email: 'new@example.com',
+      password: 'hashed',
+    });
     const saved = await userRepository.save(user);
 
     expect(saved.is_confirmed).toBe(false);
@@ -55,10 +64,15 @@ describe('User entity (integration)', () => {
 
   it('should exclude password from default select', async () => {
     await userRepository.save(
-      userRepository.create({ email: 'secret@example.com', password: 'secret' }),
+      userRepository.create({
+        email: 'secret@example.com',
+        password: 'secret',
+      }),
     );
 
-    const found = await userRepository.findOneBy({ email: 'secret@example.com' });
+    const found = await userRepository.findOneBy({
+      email: 'secret@example.com',
+    });
     expect(found?.password).toBeUndefined();
   });
 

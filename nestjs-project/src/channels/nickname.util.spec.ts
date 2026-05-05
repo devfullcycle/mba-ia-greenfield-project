@@ -35,7 +35,6 @@ describe('sanitizeNickname', () => {
   it('produces different fallbacks on repeated empty-prefix calls', () => {
     const a = sanitizeNickname('!!!');
     const b = sanitizeNickname('!!!');
-    // Random — they may collide rarely, but we just verify format
     expect(a).toMatch(/^user_[a-z0-9]{8}$/);
     expect(b).toMatch(/^user_[a-z0-9]{8}$/);
   });
