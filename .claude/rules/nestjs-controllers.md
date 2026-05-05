@@ -6,6 +6,24 @@ description: 'Controller conventions — REST compliance, no silent errors, pref
 
 # Controller Rules
 
+## Authentication: Default-Protected Endpoints
+
+The application registers a JWT guard globally via `APP_GUARD`. **Every endpoint is protected by default.** Public endpoints must opt out explicitly with the `@Public()` decorator:
+
+```typescript
+import { Public } from '../auth/decorators/public.decorator';
+
+@Public()
+@Get()
+list() { ... }
+```
+
+When you add a new controller anywhere in the project (videos, comments, channels, etc.), decide per-method which routes should be public and annotate them. Forgetting `@Public()` on what should be a public route causes a 401 on calls that should succeed; forgetting it on what should be authenticated is far worse — it leaks a protected endpoint.
+
+Do not invert the convention by trying to apply the JWT guard locally — the guard is global and stays global.
+
+For auth-domain rules (token rotation, `jti`, password reset flow, etc.) see `auth-jwt.md`.
+
 ## REST Compliance
 
 Controllers are the HTTP layer — they must follow the REST. When editing a controller, enforce:
