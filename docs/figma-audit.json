@@ -1,13 +1,13 @@
 {
   "schema_version": "2.0",
-  "generated_at": "2026-05-09T13:00:00Z",
+  "generated_at": "2026-05-10T14:51:38Z",
   "figma": {
     "fileKey": "Doz7n3FsRhfvelYrPhTZAG",
     "branchKey": null,
-    "nodeId": "0:1"
+    "nodeId": "87:8725"
   },
   "css_file": "next-frontend/app/globals.css",
-  "css_file_sha": "fe8846b5ccbf2137590e7b007a90cf6fe676363e32bf8ef0cd49179b4b57b1b1",
+  "css_file_sha": "8d843ec524d33010f2ab4ce7f76cc4ca45ff160dfc2648b5c59cc25ea447f152",
   "css_blocks": [
     { "selector": ":root", "condition": null },
     { "selector": "@theme inline", "condition": null },
@@ -19,75 +19,23 @@
       "Dark":  { "selector": ":root", "condition": "@media (prefers-color-scheme: dark)" }
     },
     "unmapped_modes": [],
-    "styles_capture": "local-only"
+    "styles_capture": "complete"
   },
   "items": [],
   "figma_styles": [
-    {
-      "name": "Inter/Display",
-      "type": "text",
-      "decomposed": { "size": "30px", "lineHeight": "36px", "fontWeight": 700, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Heading/H1",
-      "type": "text",
-      "decomposed": { "size": "24px", "lineHeight": "32px", "fontWeight": 700, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Heading/H2",
-      "type": "text",
-      "decomposed": { "size": "20px", "lineHeight": "28px", "fontWeight": 600, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Heading/H3",
-      "type": "text",
-      "decomposed": { "size": "18px", "lineHeight": "28px", "fontWeight": 600, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Body/LG",
-      "type": "text",
-      "decomposed": { "size": "16px", "lineHeight": "24px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Body/MD",
-      "type": "text",
-      "decomposed": { "size": "14px", "lineHeight": "20px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Caption",
-      "type": "text",
-      "decomposed": { "size": "12px", "lineHeight": "18px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Label/MD",
-      "type": "text",
-      "decomposed": { "size": "14px", "lineHeight": "20px", "fontWeight": 500, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Label/LG",
-      "type": "text",
-      "decomposed": { "size": "16px", "lineHeight": "24px", "fontWeight": 500, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Label/XL",
-      "type": "text",
-      "decomposed": { "size": "24px", "lineHeight": "32px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Label/2XL",
-      "type": "text",
-      "decomposed": { "size": "32px", "lineHeight": "40px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Helper",
-      "type": "text",
-      "decomposed": { "size": "12px", "lineHeight": "16px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
-    {
-      "name": "Inter/Overlay",
-      "type": "text",
-      "decomposed": { "size": "16px", "lineHeight": "20px", "fontWeight": 400, "fontFamily": "Inter" }
-    },
+    { "name": "Inter/Display",     "type": "text", "decomposed": { "size": "30px", "lineHeight": "36px", "fontWeight": 700, "fontFamily": "Inter" } },
+    { "name": "Inter/Heading/H1",  "type": "text", "decomposed": { "size": "24px", "lineHeight": "32px", "fontWeight": 700, "fontFamily": "Inter" } },
+    { "name": "Inter/Heading/H2",  "type": "text", "decomposed": { "size": "20px", "lineHeight": "28px", "fontWeight": 600, "fontFamily": "Inter" } },
+    { "name": "Inter/Heading/H3",  "type": "text", "decomposed": { "size": "18px", "lineHeight": "28px", "fontWeight": 600, "fontFamily": "Inter" } },
+    { "name": "Inter/Body/LG",     "type": "text", "decomposed": { "size": "16px", "lineHeight": "24px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Body/MD",     "type": "text", "decomposed": { "size": "14px", "lineHeight": "20px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Caption",     "type": "text", "decomposed": { "size": "12px", "lineHeight": "18px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Label/MD",    "type": "text", "decomposed": { "size": "14px", "lineHeight": "20px", "fontWeight": 500, "fontFamily": "Inter" } },
+    { "name": "Inter/Label/LG",    "type": "text", "decomposed": { "size": "16px", "lineHeight": "24px", "fontWeight": 500, "fontFamily": "Inter" } },
+    { "name": "Inter/Label/XL",    "type": "text", "decomposed": { "size": "24px", "lineHeight": "32px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Label/2XL",   "type": "text", "decomposed": { "size": "32px", "lineHeight": "40px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Helper",      "type": "text", "decomposed": { "size": "12px", "lineHeight": "16px", "fontWeight": 400, "fontFamily": "Inter" } },
+    { "name": "Inter/Overlay",     "type": "text", "decomposed": { "size": "16px", "lineHeight": "20px", "fontWeight": 400, "fontFamily": "Inter" } },
     {
       "name": "shadow/card",
       "type": "shadow",
