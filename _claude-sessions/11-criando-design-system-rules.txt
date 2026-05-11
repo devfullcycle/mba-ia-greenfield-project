@@ -1,0 +1,368 @@
+ ▐▛███▜▌   Claude Code v2.1.139
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ /figma:figma-create-design-system-rules para o projeto next-frontend          
+
+  Read 6 files, listed 4 directories (ctrl+o to expand)
+
+● Now I have a good picture. Let me load the Figma create_design_system_rules
+  tool and call it.
+
+  Read 2 files, called plugin:figma:figma (ctrl+o to expand)
+
+● I have enough context. The project is Next.js 16 + React 19 + Tailwind CSS v4
+  + shadcn (radix-nova style) with a rich token system in globals.css. Writing
+  rules to next-frontend/CLAUDE.md.
+
+● Write(next-frontend/CLAUDE.md)
+  ⎿  Added 170 lines
+        3  
+        4  This version has breaking changes — APIs, conventions, and fil
+           e structure may all differ from your training data. Read the r
+           elevant guide in `node_modules/next/dist/docs/` before writing
+            any code. Heed deprecation notices.
+        5  <!-- END:nextjs-agent-rules -->
+        6 +                                                              
+        7 +# Figma MCP Integration Rules — next-frontend                 
+        8 +                                                              
+        9 +These rules tell AI coding agents how to translate Figma desig
+          +ns into code for this project. They MUST be followed for every
+          + Figma-driven change.                                         
+       10 +                                                              
+       11 +## Stack Summary                                              
+       12 +                                                              
+       13 +- **Framework:** Next.js 16.2.6 with App Router and React Serv
+          +er Components (RSC enabled).                                  
+       14 +- **Language:** TypeScript (strict).                          
+       15 +- **UI Layer:** React 19.                                     
+       16 +- **Styling:** Tailwind CSS v4 (CSS-first config via `@theme i
+          +nline` in `app/globals.css` — there is NO `tailwind.config.js`
+          +).                                                            
+       17 +- **Component System:** shadcn/ui (style `radix-nova`, baseCol
+          +or `neutral`, `cssVariables: true`) on top of `radix-ui` primi
+          +tives.                                                        
+       18 +- **Variants:** `class-variance-authority` (`cva`) with `tailw
+          +ind-merge` (extended).                                        
+       19 +- **Icons:** `lucide` (shadcn's `iconLibrary`).               
+       20 +- **Fonts:** `Inter` (sans, `--font-inter`) and `Geist_Mono` (
+          +mono, `--font-geist-mono`) loaded via `next/font/google` in `a
+          +pp/layout.tsx`.                                               
+       21 +                                                              
+       22 +## Project Structure & Path Aliases                           
+       23 +                                                              
+       24 +```                                                           
+       25 +next-frontend/                                                
+       26 +├── app/                      # Next.js App Router (routes, la
+          +youts, pages)                                                 
+       27 +│   ├── globals.css           # Tokens + @theme inline + base 
+          +layer                                                         
+       28 +│   ├── layout.tsx            # Root layout (fonts wired here)
+       29 +│   └── <route>/page.tsx                                      
+       30 +├── components/                                               
+       31 +│   └── ui/                   # shadcn primitives (Button, etc
+          +.) — ONLY add via shadcn                                      
+       32 +├── lib/                                                      
+       33 +│   └── utils.ts              # `cn(...)` helper (clsx + exten
+          +ded tailwind-merge)                                           
+       34 +└── components.json           # shadcn config (do not edit by 
+          +hand)                                                         
+       35 +```                                                           
+       36 +                                                              
+       37 +Path aliases (from `components.json` and `tsconfig.json`):    
+       38 +                                                              
+       39 +| Alias | Resolves to |                                       
+       40 +|-------|-------------|                                       
+       41 +| `@/components` | `components/` |                            
+       42 +| `@/components/ui` | `components/ui/` |                      
+       43 +| `@/lib` | `lib/` |                                          
+       44 +| `@/lib/utils` | `lib/utils.ts` |                            
+       45 +| `@/hooks` | `hooks/` (create when first hook is added) |    
+       46 +                                                              
+       47 +- IMPORTANT: Always import with `@/...` aliases. Do NOT use de
+          +ep relative paths (`../../...`).                              
+       48 +- IMPORTANT: Feature/page components live under `app/<route>/`
+          + next to the route. Cross-route reusable composites live under
+          + `components/` (create subfolders by feature; do NOT mix them 
+          +into `components/ui/`).                                       
+       49 +- `components/ui/` is reserved for shadcn primitives.         
+       50 +                                                              
+       51 +## Design Tokens — Source of Truth                            
+       52 +                                                              
+       53 +All design tokens live in **`app/globals.css`**. There are two
+          + regions:                                                     
+       54 +                                                              
+       55 +1. `:root { … }` — raw CSS variables (semantic + theme values)
+          +.                                                             
+       56 +2. `@theme inline { … }` — Tailwind v4 token mapping that expo
+          +ses them as utility classes.                                  
+       57 +3. `@media (prefers-color-scheme: dark) :root { … }` — dark mo
+          +de overrides.                                                 
+       58 +                                                              
+       59 +- IMPORTANT: NEVER hardcode colors, radii, spacing, font sizes
+          +, shadows, or font weights. Always use the tokens defined in `
+          +app/globals.css`.                                             
+       60 +- IMPORTANT: NEVER add a new design token to a component file.
+          + If a token is missing, add it to `app/globals.css` (both raw 
+          +`:root` and the `@theme inline` block, and dark mode if needed
+          +) and only then consume it.                                   
+       61 +- When extending Tailwind utilities that aren't in the default
+          + scale (e.g. custom `text-*` sizes), they MUST also be registe
+          +red in the `extendTailwindMerge` config in `lib/utils.ts` (see
+          + the `font-size` group) so `cn()` dedupes them correctly.     
+       62 +                                                              
+       63 +### Semantic colors (preferred — use these first)             
+       64 +                                                              
+       65 +Use semantic classes whenever the Figma layer maps to a role: 
+       66 +                                                              
+       67 +`bg-background` `text-foreground` `bg-card` `text-card-foregro
+          +und` `bg-popover` `text-popover-foreground` `bg-primary` `text
+          +-primary-foreground` `bg-secondary` `text-secondary-foreground
+          +` `bg-muted` `text-muted-foreground` `bg-accent` `text-accent-
+          +foreground` `bg-destructive` `text-destructive-foreground` `bg
+          +-success` `text-success-foreground` `bg-warning` `text-warning
+          +-foreground` `border-border` `border-input` `ring-ring` `text-
+          +link` `bg-overlay` `bg-input-background` `text-warning-text` `
+          +text-success-text` `text-destructive-text`                    
+       68 +                                                              
+       69 +Sidebar role tokens are also defined: `bg-sidebar`, `text-side
+          +bar-foreground`, `bg-sidebar-primary`, `bg-sidebar-accent`, `b
+          +order-sidebar-border`, `ring-sidebar-ring`.                   
+       70 +                                                              
+       71 +### Palette scales (when a semantic token doesn't fit)        
+       72 +                                                              
+       73 +- `*-red-100`…`*-red-1000` plus `*-red-alpha-10`, `*-red-alpha
+          +-50`                                                          
+       74 +- `*-blue-100`…`*-blue-1000` plus `*-blue-alpha-10`, `*-blue-a
+          +lpha-50`                                                      
+       75 +- `*-almost-black-100`…`*-almost-black-1000` plus `*-almost-bl
+          +ack-alpha-10`, `*-almost-black-alpha-50`                      
+       76 +- `*-neutral-100`…`*-neutral-1000` plus `*-neutral-alpha-5`, `
+          +*-neutral-alpha-10`, `*-neutral-alpha-50`                     
+       77 +- Status: `*-error-100`, `*-error-200`, `*-error-alpha-10`, `*
+          +-warning-100`, `*-warning-alpha-10`, `*-warning-dark`, `*-succ
+          +ess-100`, `*-success-200`, `*-success-alpha-10`, `*-success-da
+          +rk`                                                           
+       78 +- Chart: `*-chart-1`…`*-chart-5`                              
+       79 +                                                              
+       80 +- Prefer the semantic name (`bg-primary`) over the raw scale (
+          +`bg-almost-black-1000`). Only drop to the scale when Figma ref
+          +erences a specific palette value.                             
+       81 +                                                              
+       82 +### Typography utilities                                      
+       83 +                                                              
+       84 +Custom text styles (registered in `@theme inline` AND in `lib/
+          +utils.ts` tailwind-merge groups):                             
+       85 +                                                              
+       86 +`text-display` `text-h1` `text-h2` `text-h3` `text-body-lg` `t
+          +ext-body-md` `text-caption` `text-label-md` `text-label-lg` `t
+          +ext-label-xl` `text-label-2xl` `text-helper` `text-overlay`   
+       87 +                                                              
+       88 +Each one carries its own `font-size`, `line-height`, and `font
+          +-weight` — do NOT combine with `leading-*` or `font-medium`/`f
+          +ont-semibold` unless Figma explicitly overrides. Weights avail
+          +able as standalone tokens: `font-weight-400/500/600/700`.     
+       89 +                                                              
+       90 +- IMPORTANT: For body copy / headings / labels use these utili
+          +ties instead of raw `text-sm`, `text-base`, etc.              
+       91 +                                                              
+       92 +### Radius                                                    
+       93 +                                                              
+       94 +`rounded-[var(--radius-0-5)]` (2px), `rounded-[var(--radius-1)
+          +]` (4px), `rounded-[var(--radius-1-5)]` (6px), `rounded-[var(-
+          +-radius-2)]` (8px), `rounded-[var(--radius-3)]` (12px), `round
+          +ed-[var(--radius-4)]` (16px), `rounded-[var(--radius-5)]` (5px
+          +), `rounded-[var(--radius-6)]` (6px), `rounded-[var(--radius-f
+          +ull)]` (pill).                                                
+       95 +                                                              
+       96 +### Spacing                                                   
+       97 +                                                              
+       98 +Tailwind v4 `--spacing-*` tokens are registered for `0-5, 1, 1
+          +-5, 2, 2-5, 3, 3-5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 16, 20`. Use
+          + the standard Tailwind utilities (`p-4`, `gap-6`, `mt-12`, etc
+          +.) — they resolve through these tokens. Do NOT use arbitrary v
+          +alues like `p-[17px]`.                                        
+       99 +                                                              
+      100 +### Shadows                                                   
+      101 +                                                              
+      102 +Use the named shadow tokens defined in `@theme inline`: `shado
+          +w-card`, `shadow-drawer-left`, `shadow-button-focus`, `shadow-
+          +showcase-card`, `shadow-focus-ring`. Do NOT compose shadow str
+          +ings inline.                                                  
+      103 +                                                              
+      104 +### Dark mode                                                 
+      105 +                                                              
+      106 +Dark mode is driven by `prefers-color-scheme: dark` overriding
+          + `:root` semantic vars. Components should use semantic tokens 
+          +so they react automatically — do NOT write `dark:` variants ag
+          +ainst raw hex values. Use `dark:` only for asset swaps (e.g. i
+          +nverting an SVG logo) or for palette-scale tokens that don't h
+          +ave a semantic equivalent.                                    
+      107 +                                                              
+      108 +## Component Patterns                                         
+      109 +                                                              
+      110 +The reference primitive is `components/ui/button.tsx`. Every s
+          +hadcn-style primitive in this codebase MUST follow it:        
+      111 +                                                              
+      112 +1. Define styles with `cva([...base], { variants, defaultVaria
+          +nts })`. Group base classes as an array joined with `.join(" "
+          +)` for readability.                                           
+      113 +2. The component is a plain function (no `React.forwardRef`, n
+          +o `displayName`) typed as `React.ComponentProps<"…">` & `Varia
+          +ntProps<typeof xVariants>`.                                   
+      114 +3. Use `radix-ui`'s `Slot.Root` (imported as `import { Slot } 
+          +from "radix-ui"`) and accept an `asChild` prop when polymorphi
+          +sm is needed.                                                 
+      115 +4. Always set the following `data-*` attributes on the root el
+          +ement for styling / testing hooks:                            
+      116 +   - `data-slot="<component-name>"`                           
+      117 +   - `data-variant={variant}` (when variants exist)           
+      118 +   - `data-size={size}` (when sizes exist)                    
+      119 +5. Compose classes with `cn(xVariants({ variant, size, classNa
+          +me }))`.                                                      
+      120 +6. Export both the component and its variants object: `export 
+          +{ Button, buttonVariants }`.                                  
+      121 +7. State styling uses ARIA / data attributes, not boolean prop
+          +s in className:                                               
+      122 +   - `disabled:…`, `aria-invalid:…`, `data-[loading=true]:…`, 
+          +`[&_svg]:…` for descendant SVGs.                              
+      123 +                                                              
+      124 +- IMPORTANT: Do NOT install or scaffold shadcn primitives manu
+          +ally. Run `npx shadcn@latest add <component>` so the install r
+          +espects `components.json` (`radix-nova` style, `neutral` base,
+          + `cssVariables`, lucide icons). Then adjust the generated file
+          + to match the patterns above if needed.                       
+      125 +- IMPORTANT: Do NOT add primitives that already exist in `@/co
+          +mponents/ui`. Reuse and compose.                              
+      126 +- All interactive components MUST handle: `:hover`, `:focus-vi
+          +sible` (with `ring-ring` / `border-ring`), `:disabled`, and `a
+          +ria-invalid` where applicable — see `button.tsx` lines 13–16 f
+          +or the reference.                                             
+      127 +                                                              
+      128 +## Icons                                                      
+      129 +                                                              
+      130 +- Library: `lucide` (via `lucide-react` once installed by shad
+          +cn). Do NOT add `react-icons`, `heroicons`, or any other icon 
+          +package.                                                      
+      131 +- Inside a `cva` primitive, size icons via the descendant sele
+          +ctor pattern (see Button: `[&_svg:not([class*='size-'])]:size-
+          +5`), not by hand on each usage.                               
+      132 +- If Figma returns an inline SVG or a `localhost` asset URL fo
+          +r an icon, prefer that asset — see Asset Handling below.      
+      133 +                                                              
+      134 +## Asset Handling                                             
+      135 +                                                              
+      136 +- The Figma MCP server serves images and SVGs from a localhost
+          + endpoint embedded in the design payload.                     
+      137 +- IMPORTANT: If the Figma MCP server returns a `localhost` sou
+          +rce for an image or SVG, use that source directly.            
+      138 +- IMPORTANT: DO NOT install new icon packages — all icon asset
+          +s either come from `lucide` or from the Figma payload.        
+      139 +- IMPORTANT: DO NOT invent or insert placeholder images when a
+          + `localhost` source is provided.                              
+      140 +- Static assets that ship with the app go in `public/` and are
+          + referenced as `/file.svg` (or `<Image src="/file.svg" … />` f
+          +rom `next/image` when raster).                                
+      141 +- Use `next/image` (`import Image from "next/image"`) for all 
+          +raster images so Next can optimize them — never plain `<img>`.
+      142 +                                                              
+      143 +## Required Figma-to-Code Flow                                
+      144 +                                                              
+      145 +Follow this order for EVERY Figma-driven change. Do not skip s
+          +teps.                                                         
+      146 +                                                              
+      147 +1. **`get_design_context`** for the exact node(s). This is the
+          + primary input — it returns React + Tailwind code, screenshots
+          +, and context hints.                                          
+      148 +2. If the response is too large or truncated, call **`get_meta
+          +data`** for a high-level node map, then re-fetch only the requ
+          +ired node(s) with `get_design_context`.                       
+      149 +3. **`get_screenshot`** for the node variant you are implement
+          +ing. You MUST have both `get_design_context` and `get_screensh
+          +ot` before writing code.                                      
+      150 +4. Download / inline any assets referenced in the payload (use
+          + the localhost sources).                                      
+      151 +5. **Translate**, do not transcribe. The MCP output is React +
+          + Tailwind as a REFERENCE — convert it to this project's conven
+          +tions:                                                        
+      152 +   - Replace raw hex colors with semantic tokens (`bg-primary`
+          +, `text-foreground`, …) or palette tokens.                    
+      153 +   - Replace arbitrary spacing (`p-[17px]`) with the project's
+          + spacing scale.                                               
+      154 +   - Replace ad-hoc text classes (`text-base font-medium`) wit
+          +h the project's typography utilities (`text-label-md`, etc.). 
+      155 +   - Replace inline radii with `rounded-[var(--radius-*)]` tok
+          +ens.                                                          
+      156 +   - Swap absolute-positioned layouts for flex/grid where the 
+          +design intent is clearly a flow layout.                       
+      157 +   - Reuse `@/components/ui/*` primitives (Button, etc.) inste
+          +ad of re-implementing them.                                   
+      158 +   - Server Components by default; add `"use client"` ONLY whe
+          +n the component uses state, effects, refs, or browser APIs.   
+      159 +6. **Validate** the rendered output against the Figma screensh
+          +ot — pixel-level visual parity AND interactive states (hover, 
+          +focus-visible, disabled, dark mode).                          
+      160 +                                                              
+      161 +## Code Quality Conventions                                   
+      162 +                                                              
+      163 +- TypeScript strict; no `any`. Use `React.ComponentProps<"tag"
+          +>` to extend native element props.                            
+      164 +- Imports: built-in / third-party / `@/…` aliases / relative —
+          + separated by blank lines.                                    
+      165 +- File naming: kebab-case for files (`button.tsx`, `video-card
+          +.tsx`), PascalCase for the exported component (`Button`, `Vide
+          +oCard`).                                                      
+      166 +- Server Components by default. Add `"use client"` deliberatel
+          +y.                                                            
+      167 +- Use `cn(...)` from `@/lib/utils` for every conditional / mer
+          +ged className. Never string-concatenate Tailwind classes manua
+          +lly.                                                          
+      168 +- Use Next.js primitives (`next/image`, `next/link`, `next/fon
+          +t`) — do NOT replace them with native elements for navigation/
+          +images.                                                       
+      169 +- Lint must pass: `npm run lint`. TypeScript must compile: `np
+          +x tsc --noEmit`.                                              
+      170 +                                                              
+      171 +## When in Doubt                                              
+      172 +                                                              
+      173 +- Compare against `components/ui/button.tsx` (the canonical pr
+          +imitive) and `app/globals.css` (the canonical token registry).
+      174 +- If a Figma value has no matching token, ADD the token to `ap
+          +p/globals.css` first, then consume it — do not inline a hex/px
+          + value.                                                       
+      175 +- If the design implies a missing shadcn primitive, install it
+          + via `npx shadcn@latest add <name>` rather than hand-rolling i
+          +t.                                                            
+
+● Wrote Figma MCP integration rules to next-frontend/CLAUDE.md, preserving the
+  existing nextjs-agent-rules block at the top.
+
+  The rules encode what I found in the codebase:
+  - Stack: Next.js 16.2.6 / React 19 / TS / Tailwind v4 / shadcn radix-nova /
+  radix-ui / lucide / Inter + Geist Mono.
+  - Tokens: single source of truth is app/globals.css (:root + @theme inline +
+  dark mode); never hardcode — extend tokens in place, and mirror new font-size
+  groups in lib/utils.ts.
+  - Semantic-first colors (bg-primary, text-foreground, …) with named palette
+  fallbacks (red/blue/almost-black/neutral *-100..1000, alphas, status, chart).
+  - Typography utilities (text-display, text-h1..3, text-body-lg/md,
+  text-label-md/lg/xl/2xl, text-caption, text-helper, text-overlay) —
+  pre-bundled size/leading/weight.
+  - Radius / spacing / shadow tokens with explicit "no arbitrary values" rule.
+  - Component pattern distilled from components/ui/button.tsx: cva + Slot.Root +
+   asChild + data-slot/variant/size + cn(variants({…})) + state via ARIA / data
+  attrs.
+  - Path aliases (@/components, @/components/ui, @/lib, @/lib/utils, @/hooks)
+  and the rule that components/ui is reserved for shadcn primitives installed
+  via npx shadcn@latest add.
+  - Asset rules: use Figma localhost sources directly, next/image for rasters,
+  no extra icon packs.
+  - Required MCP flow: get_design_context → (get_metadata if truncated) →
+  get_screenshot → translate (not transcribe) → validate against screenshot.
+  - DoD reminder: lint + tsc --noEmit must pass.
+
+  Want me to also drop a Cursor variant (.cursor/rules/figma-design-system.mdc)
+  or an AGENTS.md for Codex CLI? Otherwise these rules will load automatically
+  next time Claude Code works on next-frontend/.
+
+✻ Baked for 2m 23s
