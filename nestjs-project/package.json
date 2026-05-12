@@ -24,7 +24,8 @@
     "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create",
-    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts"
+    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts",
+    "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.3.4",
@@ -33,6 +34,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.4.2",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.1",
     "argon2": "^0.41.1",
@@ -86,6 +88,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
-    "setupFiles": ["dotenv/config"]
+    "setupFiles": [
+      "dotenv/config"
+    ]
   }
 }

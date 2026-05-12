@@ -91,7 +91,10 @@ describe('ChannelsService', () => {
       });
       const service = new ChannelsService(makeDataSource(manager));
 
-      const result = await service.createChannel('user-id', 'alice@example.com');
+      const result = await service.createChannel(
+        'user-id',
+        'alice@example.com',
+      );
 
       expect(manager.save).toHaveBeenCalledTimes(2);
       expect(result.nickname).toMatch(/^alice/);

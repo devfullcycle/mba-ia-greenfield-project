@@ -93,7 +93,6 @@ describe('UsersService (integration)', () => {
       });
       expect(count).toBe(0);
     });
-
   });
 
   describe('findByEmail', () => {

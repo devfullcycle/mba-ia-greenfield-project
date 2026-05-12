@@ -28,7 +28,9 @@ export class ChannelsService {
       let nickname = baseNickname;
 
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const existing = await manager.findOne(Channel, { where: { nickname } });
+        const existing = await manager.findOne(Channel, {
+          where: { nickname },
+        });
         if (existing) {
           nickname = appendRandomSuffix(baseNickname);
           continue;
