@@ -1,12 +1,25 @@
+---
+scope_type: phase
+related_phases: [1]
+status: decided
+date: 2026-04-06
+scope_description: "Configuration system foundation for the Nest.js backend: ConfigModule, env validation, namespaced configs, and sharing config between the runtime app and the TypeORM CLI."
+---
+
 # Technical Decisions — Phase 01: Configuration System
 
-> **Phase:** 01 — Configuração Base do Projeto (Configuration Extension)
-> **Status:** Decided
-> **Date:** 2026-04-06
+_Subprojects in scope:_
+
+- `nestjs-project/` — backend foundation; receives the ConfigModule, namespaced config files, Joi env-validation schema, and TypeORM CLI data-source wiring.
+- `next-frontend/` — Frontend deferred: `next-frontend/` is not initialized in this phase (planned for a later phase). No open decision in this document.
 
 ---
 
 ## TD-01: Configuration Module Approach
+
+**Scope:** Backend
+
+**Capability:** Projeto Next.js (frontend) (será criado depois, não agora) e Nest.js (backend) inicializados
 
 **Context:** The application reads environment variables via `process.env` with inline fallback defaults in three files (`app.module.ts`, `data-source.ts`, `main.ts`). There is no centralized configuration layer. As the project grows (auth, email, S3, queues), a structured configuration system is needed. The choice must account for the TypeORM CLI constraint: `data-source.ts` runs outside the NestJS DI context.
 
@@ -41,6 +54,10 @@ Alternative config packages from the community.
 
 ## TD-02: Environment Variable Validation Strategy
 
+**Scope:** Backend
+
+**Capability:** Ambiente de desenvolvimento local com todos os serviços via Docker Compose
+
 **Context:** Environment variables are untyped strings. Missing or malformed values cause runtime errors that surface late. Validation at startup guarantees fail-fast behavior with clear error messages.
 
 **Options:**
@@ -73,6 +90,10 @@ TypeScript-first schema validation. Defines schemas and infers TypeScript types:
 ---
 
 ## TD-03: Configuration Organization
+
+**Scope:** Backend
+
+**Capability:** Transversal — covers: "Projeto Next.js (frontend) (será criado depois, não agora) e Nest.js (backend) inicializados", "Ambiente de desenvolvimento local com todos os serviços via Docker Compose"
 
 **Context:** Currently 6 environment variables (5 DB + 1 PORT). Phase 02 adds JWT secrets and email SMTP. Future phases add S3, queue config, etc. The structure must scale.
 
@@ -110,6 +131,10 @@ Initial files for Phase 01:
 ---
 
 ## TD-04: Sharing Config Between NestJS App and TypeORM CLI
+
+**Scope:** Backend
+
+**Capability:** Estrutura inicial do banco de dados PostgreSQL (schema, migrations e seeds) (sem tabelas ainda)
 
 **Context:** Database config is duplicated between `app.module.ts` (NestJS runtime) and `data-source.ts` (TypeORM CLI for migrations). TypeORM CLI runs outside NestJS DI — it cannot use `ConfigService`. Both must use identical connection parameters.
 

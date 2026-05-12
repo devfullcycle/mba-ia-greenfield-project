@@ -1,4 +1,4 @@
-# Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
+# phase-02-auth — Progress
 
 **Status:** completed
 **SIs:** 18/18 completed

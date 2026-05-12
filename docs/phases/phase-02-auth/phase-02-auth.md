@@ -1,3 +1,12 @@
+---
+kind: phase
+name: phase-02-auth
+sources_mtime:
+  docs/project-plan.md: "2026-04-08T14:58:57-03:00"
+  docs/decisions/technical-decisions-phase-02-auth.md: "2026-05-12T12:23:19-03:00"
+  docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md: "2026-04-08T14:58:57-03:00"
+---
+
 # Phase 02 — Cadastro, Login e Gerenciamento de Conta
 
 ## Objective

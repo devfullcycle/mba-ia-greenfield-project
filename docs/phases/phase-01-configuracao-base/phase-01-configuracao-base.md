@@ -1,3 +1,11 @@
+---
+kind: phase
+name: phase-01-configuracao-base
+sources_mtime:
+  docs/project-plan.md: "2026-04-08T14:58:57-03:00"
+  docs/decisions/technical-decisions-phase-01-configuracao-base.md: "2026-05-12T12:21:12-03:00"
+---
+
 # Phase 01 — Configuracao Base do Projeto
 
 ## Objective

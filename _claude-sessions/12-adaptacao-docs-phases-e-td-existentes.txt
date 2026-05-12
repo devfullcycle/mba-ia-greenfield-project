@@ -1,0 +1,1507 @@
+ ▐▛███▜▌   Claude Code v2.1.139
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ dado o que existe no @.claude/skills/research/SKILL.md quero adaptar os TD    
+  existentes para o formato que a SKILL gerada depois das mudanças que fizemos  
+  nela.                                                                         
+  analise como a SKILL gera as TD, rastreie as mudanças nos TDS existentes e    
+  gere as alterações                                                            
+  ⎿  Read .claude/skills/research/SKILL.md (434 lines)
+  ⎿  ⧉ Selected 1 lines from .claude/skills/research/SKILL.md in Visual Studio Code - Insiders
+
+● Explore(Explore existing decisions docs)
+  ⎿  Done (7 tool uses · 57.9k tokens · 44s)
+  (ctrl+o to expand)
+
+● Tenho um inventário completo agora. Os 14 TDs existentes (4 em Phase 01, 10 em
+   Phase 02) seguem o formato antigo e precisam ser adaptados ao novo formato da
+   SKILL. Vou esclarecer dois pontos antes de finalizar o plano.
+
+● User answered Claude's questions:
+  ⎿  · Renomear os arquivos para a nova convenção (sem número da fase no 
+     filename)? → Manter filenames atuais
+     · Como tratar as duas divergências entre Recommendation e Decision no Phase
+      02? → Manter Decision (já implementado)
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/dado-o-que-existe-pure-diffie.md · /plan to 
+     edit
+     Plano — Adaptação de TDs Existentes ao Novo Formato do SKILL research
+
+     Context
+
+     O .claude/skills/research/SKILL.md evoluiu e agora exige campos novos por
+     TD (capability gate, scope explícito, frontmatter padronizado, seção de
+     subprojects) que não existiam quando os dois documentos de decisões atuais
+     foram escritos. Os dois arquivos em docs/decisions/ foram produzidos no
+     formato antigo e estão fora da especificação atual — o usuário quer
+     alinhá-los retroativamente para que o pipeline downstream (plan-context,
+     plan-validate, plan-resolve, decisions-reader, decisions-correlator) leia
+     metadados consistentes em todo o repositório.
+
+     Decisões já alinhadas com o usuário:
+     - Filenames: manter os atuais (technical-decisions-phase-01-config.md,
+     technical-decisions-phase-02-auth.md) — não renomear para evitar quebrar
+     referências externas em docs/phases/, docs/tasks/ etc.
+     - Divergências Recommendation↔Decision em Phase 02 (TD-02 e TD-09): manter
+     o **Decision:** como está (já implementado e em produção); adicionar uma
+     nota curta explicando a divergência consciente.
+
+     Arquivos afetados
+
+     1. docs/decisions/technical-decisions-phase-01-config.md — 4 TDs
+     2. docs/decisions/technical-decisions-phase-02-auth.md — 10 TDs
+
+     Total: 14 TDs a migrar.
+
+     Gaps de formato identificados (universal aos dois arquivos)
+
+     Comparando o estado atual com ## Output structure (linhas 226-297) e ## 
+     Rules (linhas 383-405) do SKILL:
+
+     Item: Frontmatter — Phase:
+     Estado atual: string livre "01 — Configuração Base..."
+     Novo formato exigido: Substituir por scope_type: phase + related_phases: 
+     [01]
+     ────────────────────────────────────────
+     Item: Frontmatter — Status:
+     Estado atual: Decided / Finalized
+     Novo formato exigido: Normalizar para status: decided
+     ────────────────────────────────────────
+     Item: Frontmatter — Date:
+     Estado atual: presente
+     Novo formato exigido: Renomear para date: (lowercase)
+     ────────────────────────────────────────
+     Item: Frontmatter — scope_description:
+     Estado atual: ausente
+     Novo formato exigido: Adicionar one-liner descritivo
+     ────────────────────────────────────────
+     Item: Seção _Subprojects in scope:_
+     Estado atual: ausente
+     Novo formato exigido: Adicionar logo abaixo do título, listando
+     nestjs-project/
+       (e justificando ausência de nextjs-project/ no Phase 01 e Phase 02
+     conforme
+       ## Coverage check)
+     ────────────────────────────────────────
+     Item: **Scope:** por TD
+     Estado atual: ausente
+     Novo formato exigido: Obrigatório (Backend / Frontend / Cross-layer /
+       Repo-wide) — Rule explícita "**Scope:** field is required"
+     ────────────────────────────────────────
+     Item: **Capability:** por TD
+     Estado atual: ausente
+     Novo formato exigido: Obrigatório quando related_phases é não-vazio — cita
+       literalmente o bullet de docs/project-plan.md. Usar Transversal — covers:
+      
+       <bullets> para TDs cross-cutting
+     ────────────────────────────────────────
+     Item: **Decision:**
+     Estado atual: já decidido (ex.: A (@nestjs/config))
+     Novo formato exigido: Manter como está — não é mais _[pending]_
+
+     Campos opcionais que NÃO vamos adicionar agora:
+     - **Renders in:** — só relevante para TDs FE-runtime
+     architectural-transversal; nenhum TD existente se qualifica (todos são
+     Backend ou Cross-layer puro).
+     - **Libraries:** — produzido por /plan-resolve, não por /research. Como as
+     fases 01 e 02 já foram implementadas via pipeline mais antigo, não há razão
+      para retro-preencher.
+     - **Revisions:** — só se acumula sobre mudanças pós-decisão. Não há
+     revisões a registrar (decidimos manter as discrepâncias com nota inline,
+     não como Revision formal).
+     - Supersede markers — nenhum TD foi substituído.
+     - covers_capabilities / depends_on_slices — modelo de slicing não se aplica
+      retroativamente; estes docs cobrem a fase inteira (monolítico, semântica
+     preservada por omissão dos campos).
+
+     Mapeamento de capabilities (TD → bullet do project-plan.md)
+
+     Phase 01 — bullets disponíveis
+
+     1. Repositório com estrutura de monorepo
+     2. Projeto Next.js e Nest.js inicializados
+     3. Ambiente de desenvolvimento local com todos os serviços via Docker
+     Compose
+     4. Estrutura inicial do banco de dados PostgreSQL (schema, migrations e
+     seeds)
+     5. Fundação de IA para coding
+
+     ┌─────────────────────┬─────────────────────────────────────────┬─────────┐
+     │         TD          │               Capability                │  Scope  │
+     ├─────────────────────┼─────────────────────────────────────────┼─────────┤
+     │ TD-01 Configuration │ Projeto Next.js ... e Nest.js (backend) │ Backend │
+     │  Module Approach    │  inicializados                          │         │
+     ├─────────────────────┼─────────────────────────────────────────┼─────────┤
+     │                     │ Ambiente de desenvolvimento local com   │         │
+     │ TD-02 Env Variable  │ todos os serviços via Docker Compose    │ Backend │
+     │ Validation          │ (validação garante contrato de env no   │         │
+     │                     │ compose)                                │         │
+     ├─────────────────────┼─────────────────────────────────────────┼─────────┤
+     │ TD-03 Configuration │ Transversal — covers: bullets 2 e 3     │         │
+     │  Organization       │ (estrutura de config atravessa init do  │ Backend │
+     │                     │ Nest e o ambiente Docker)               │         │
+     ├─────────────────────┼─────────────────────────────────────────┼─────────┤
+     │ TD-04 Sharing       │ Estrutura inicial do banco de dados     │         │
+     │ Config              │ PostgreSQL (schema, migrations e seeds) │ Backend │
+     │ NestJS↔TypeORM CLI  │                                         │         │
+     └─────────────────────┴─────────────────────────────────────────┴─────────┘
+
+     Phase 02 — bullets disponíveis
+
+     1. Serviço de envio de e-mails transacionais
+     2. Cadastro de usuário com e-mail e senha
+     3. Criação automática do canal do usuário a partir do prefixo do e-mail
+     4. Confirmação de conta via e-mail com link de ativação
+     5. Login e controle de sessão do usuário
+     6. Logout
+     7. Recuperação de senha (e-mail → token → redefinição)
+     8. Telas de cadastro, login, confirmação e recuperação
+
+     ┌────────────────────────┬────────────────────────────┬───────────────────┐
+     │           TD           │         Capability         │       Scope       │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-01 Password Hashing │ Cadastro de usuário com    │ Backend           │
+     │                        │ e-mail e senha             │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-02 Auth Library     │ Login e controle de sessão │ Backend           │
+     │ Approach               │  do usuário                │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-03 Refresh Token    │ Login e controle de sessão │ Backend           │
+     │ Strategy               │  do usuário                │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-04 Email            │ Transversal — covers:      │                   │
+     │ Confirmation &         │ bullets 4 e 7              │ Backend           │
+     │ Password Reset Tokens  │                            │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-05 Email Sending    │ Serviço de envio de        │ Backend           │
+     │ Infrastructure         │ e-mails transacionais      │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-06 Request          │ Transversal — covers:      │                   │
+     │ Validation Library     │ bullets 2, 5, 7 (todas as  │ Backend           │
+     │                        │ entradas autenticadas)     │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-07 Error Response   │ Transversal — covers:      │ Cross-layer       │
+     │ Standardization        │ bullets 2, 5, 7            │ (frontend consome │
+     │                        │                            │  o shape)         │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-08 Rate Limiting    │ Login e controle de sessão │ Backend           │
+     │ Strategy               │  do usuário                │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-09 Refresh Token    │ Login e controle de sessão │ Backend           │
+     │ Format                 │  do usuário                │                   │
+     ├────────────────────────┼────────────────────────────┼───────────────────┤
+     │ TD-10 Nickname         │ Criação automática do      │                   │
+     │ Generation             │ canal do usuário a partir  │ Backend           │
+     │                        │ do prefixo do e-mail       │                   │
+     └────────────────────────┴────────────────────────────┴───────────────────┘
+
+     Justificativa de subprojects ausentes
+
+     Ambos os arquivos cobrem apenas nestjs-project/. A seção _Subprojects in 
+     scope:_ precisa justificar explicitamente a ausência de nextjs-project/
+     conforme ## Coverage check:
+
+     - Phase 01: "Frontend deferred — nextjs-project/ ainda não inicializado
+     nesta fase (planejado para fase posterior)."
+     - Phase 02: "Frontend deferred — telas de cadastro/login/etc serão cobertas
+      em fase futura ao iniciar o nextjs-project/. Esta fase entrega apenas o
+     backend de auth."
+
+     Plano de execução
+
+     Para cada arquivo:
+
+     1. Substituir o frontmatter pelo novo formato:
+     ---
+     scope_type: phase
+     related_phases: [NN]
+     status: decided
+     date: YYYY-MM-DD
+     scope_description: "..."
+     ---
+     2. Inserir a seção _Subprojects in scope:_ imediatamente após o título # 
+     Technical Decisions — ..., com nestjs-project/ e a justificativa de
+     ausência de nextjs-project/.
+     3. Para cada TD, inserir duas linhas no bloco de metadata (entre o heading
+     ## TD-NN: e o **Context:**):
+       - **Scope:** <Backend|Cross-layer>
+       - **Capability:** <bullet literal> ou **Capability:** Transversal — 
+     covers: <bullets>
+     4. Em Phase 02 TD-02 e TD-09, adicionar uma linha curta logo abaixo do
+     **Decision:** (antes do --- separador) registrando a divergência consciente
+      com Recommendation:
+       - TD-02: **Note:** Decision divergiu da Recommendation conscientemente 
+     durante implementação — guards customizados foram preferidos sobre 
+     @nestjs/passport por redução de dependências.
+       - TD-09: **Note:** Decision divergiu da Recommendation conscientemente — 
+     JWT foi mantido para reutilizar a infra de assinatura/verificação do access
+      token apesar do trade-off de tamanho.
+     5. Não tocar em: títulos de TDs, blocos ## Options, **Recommendation:**,
+     valor de **Decision:**, ## Decisions Summary, ou seções extras (New 
+     Dependencies, Files to Create/Modify em Phase 01).
+
+     Verificação
+
+     Após editar:
+
+     1. Diff visual dos dois arquivos — confirmar que nenhum conteúdo de
+     Options/Recommendation/Decision foi alterado, apenas adição de metadata.
+     2. Lint estrutural manual:
+       - Cada TD tem exatamente uma linha **Scope:**.
+       - Cada TD tem exatamente uma linha **Capability:** (com related_phases
+     não-vazio em ambos arquivos).
+       - Frontmatter tem todos os 5 campos exigidos.
+       - _Subprojects in scope:_ lista cada subprojeto com bullet —
+     nestjs-project/ com nota de papel + nextjs-project/ com justificativa "no
+     open decision".
+     3. Smoke-test do pipeline (read-only): rodar mentalmente o decisions-reader
+      sobre cada arquivo — todos os TDs devem se enquadrar como "decidido" com
+     Scope e Capability legíveis.
+
+     Arquivos a modificar
+
+     - docs/decisions/technical-decisions-phase-01-config.md
+     - docs/decisions/technical-decisions-phase-02-auth.md
+
+     Sem novos arquivos. Sem renomeações.
+
+● Executando o plano. Vou ler os arquivos para ter o texto literal das
+  capabilities e os pontos exatos de inserção.
+
+  Read 3 files (ctrl+o to expand)
+
+● Vou começar pelos arquivos. Phase 01 primeiro.
+
+● Update(docs/decisions/technical-decisions-phase-01-config.md)
+  ⎿  Added 16 lines, removed 3 lines
+       1 +---                                                            
+       2 +scope_type: phase                                              
+       3 +related_phases: [1]                                            
+       4 +status: decided                                                
+       5 +date: 2026-04-06                                               
+       6 +scope_description: "Configuration system foundation for the Nes
+         +t.js backend: ConfigModule, env validation, namespaced configs,
+         + and sharing config between the runtime app and the TypeORM CLI
+         +."                                                             
+       7 +---                                                            
+       8 +                                                               
+       9  # Technical Decisions — Phase 01: Configuration System
+      10  
+       3 -> **Phase:** 01 — Configuração Base do Projeto (Configuration E
+         -xtension)                                                      
+       4 -> **Status:** Decided                                          
+       5 -> **Date:** 2026-04-06                                         
+      11 +_Subprojects in scope:_                                        
+      12  
+      13 +- `nestjs-project/` — backend foundation; receives the ConfigMo
+         +dule, namespaced config files, Joi env-validation schema, and T
+         +ypeORM CLI data-source wiring.                                 
+      14 +- `nextjs-project/` — Frontend deferred: `nextjs-project/` is n
+         +ot initialized in this phase (planned for a later phase). No op
+         +en decision in this document.                                  
+      15 +                                                               
+      16  ---
+      17  
+      18  ## TD-01: Configuration Module Approach
+      19  
+      20 +**Scope:** Backend                                             
+      21 +                                                               
+      22 +**Capability:** Projeto Next.js (frontend) (será criado depois,
+         + não agora) e Nest.js (backend) inicializados                  
+      23 +                                                               
+      24  **Context:** The application reads environment variables via `p
+          rocess.env` with inline fallback defaults in three files (`app.
+          module.ts`, `data-source.ts`, `main.ts`). There is no centraliz
+          ed configuration layer. As the project grows (auth, email, S3, 
+          queues), a structured configuration system is needed. The choic
+          e must account for the TypeORM CLI constraint: `data-source.ts`
+           runs outside the NestJS DI context.
+      25  
+      26  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-01-config.md)
+  ⎿  Added 4 lines
+      54  
+      55  ## TD-02: Environment Variable Validation Strategy
+      56  
+      57 +**Scope:** Backend                                             
+      58 +                                                               
+      59 +**Capability:** Ambiente de desenvolvimento local com todos os 
+         +serviços via Docker Compose                                    
+      60 +                                                               
+      61  **Context:** Environment variables are untyped strings. Missing
+           or malformed values cause runtime errors that surface late. Va
+          lidation at startup guarantees fail-fast behavior with clear er
+          ror messages.
+      62  
+      63  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-01-config.md)
+  ⎿  Added 4 lines
+       91  
+       92  ## TD-03: Configuration Organization
+       93  
+       94 +**Scope:** Backend                                            
+       95 +                                                              
+       96 +**Capability:** Transversal — covers: "Projeto Next.js (fronte
+          +nd) (será criado depois, não agora) e Nest.js (backend) inicia
+          +lizados", "Ambiente de desenvolvimento local com todos os serv
+          +iços via Docker Compose"                                      
+       97 +                                                              
+       98  **Context:** Currently 6 environment variables (5 DB + 1 PORT)
+           . Phase 02 adds JWT secrets and email SMTP. Future phases add 
+           S3, queue config, etc. The structure must scale.
+       99  
+      100  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-01-config.md)
+  ⎿  Added 4 lines
+      132  
+      133  ## TD-04: Sharing Config Between NestJS App and TypeORM CLI
+      134  
+      135 +**Scope:** Backend                                            
+      136 +                                                              
+      137 +**Capability:** Estrutura inicial do banco de dados PostgreSQL
+          + (schema, migrations e seeds) (sem tabelas ainda)             
+      138 +                                                              
+      139  **Context:** Database config is duplicated between `app.module
+           .ts` (NestJS runtime) and `data-source.ts` (TypeORM CLI for mi
+           grations). TypeORM CLI runs outside NestJS DI — it cannot use 
+           `ConfigService`. Both must use identical connection parameters
+           .
+      140  
+      141  **Options:**
+
+● Phase 01 pronto. Agora Phase 02 — frontmatter + subprojects e os 10 TDs.
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 16 lines, removed 3 lines
+       1 +---                                                            
+       2 +scope_type: phase                                              
+       3 +related_phases: [2]                                            
+       4 +status: decided                                                
+       5 +date: 2026-04-07                                               
+       6 +scope_description: "Backend foundation for account lifecycle: p
+         +assword hashing, JWT auth, refresh-token rotation, email-confir
+         +mation/reset tokens, transactional email, request validation, e
+         +rror contract, rate limiting, and nickname generation."        
+       7 +---                                                            
+       8 +                                                               
+       9  # Technical Decisions — Phase 02: Cadastro, Login e Gerenciamen
+          to de Conta
+      10  
+       3 -> **Phase:** 02 — Cadastro, Login e Gerenciamento de Conta     
+       4 -> **Status:** Finalized                                        
+       5 -> **Date:** 2026-04-07                                         
+      11 +_Subprojects in scope:_                                        
+      12  
+      13 +- `nestjs-project/` — backend that delivers all account-lifecyc
+         +le endpoints (register, confirm, login, refresh, logout, passwo
+         +rd reset) plus transactional email, request validation, error f
+         +ilter, throttling, and channel-handle generation.              
+      14 +- `nextjs-project/` — Frontend deferred: registration, login, c
+         +onfirmation and password-recovery screens (`Telas de cadastro, 
+         +login, confirmação de conta e recuperação de senha`) will be ad
+         +dressed in a future phase when `nextjs-project/` is initialized
+         +. No open decision in this document.                           
+      15 +                                                               
+      16  ---
+      17  
+      18  ## TD-01: Password Hashing Algorithm
+      19  
+      20 +**Scope:** Backend                                             
+      21 +                                                               
+      22 +**Capability:** Cadastro de usuário com e-mail e senha         
+      23 +                                                               
+      24  **Context:** User registration requires securely storing passwo
+          rds. The choice of hashing algorithm impacts security against b
+          rute-force/GPU attacks and runtime performance.
+      25  
+      26  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      43  
+      44  ## TD-02: Auth Library Approach
+      45  
+      46 +**Scope:** Backend                                             
+      47 +                                                               
+      48 +**Capability:** Login e controle de sessão do usuário          
+      49 +                                                               
+      50  **Context:** NestJS offers two main paths for implementing JWT 
+          authentication: using the Passport.js integration (`@nestjs/pas
+          sport`) or building custom guards directly with `@nestjs/jwt`. 
+          This affects code complexity, extensibility, and how auth strat
+          egies are organized.
+      51  
+      52  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 6 lines
+      65  
+      66  **Decision:** B (Custom guards with @nestjs/jwt only)
+      67  
+      68 +**Note:** Decision deliberately diverged from the Recommendatio
+         +n during implementation — custom guards were preferred over `@n
+         +estjs/passport` to keep the dependency surface smaller; social 
+         +login is not on the near-term roadmap, so the plugin-architectu
+         +re benefit did not justify the extra abstraction layer.        
+      69 +                                                               
+      70  ---
+      71  
+      72  ## TD-03: Refresh Token Strategy
+      73  
+      74 +**Scope:** Backend                                             
+      75 +                                                               
+      76 +**Capability:** Login e controle de sessão do usuário          
+      77 +                                                               
+      78  **Context:** JWT access tokens should be short-lived (15min). A
+           refresh token strategy is needed to maintain sessions without 
+          forcing re-login. The choice affects security, database load, a
+          nd complexity. Depends on TD-02 (auth approach).
+      79  
+      80  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      102  
+      103  ## TD-04: Email Confirmation & Password Reset Tokens
+      104  
+      105 +**Scope:** Backend                                            
+      106 +                                                              
+      107 +**Capability:** Transversal — covers: "Confirmação de conta vi
+          +a e-mail com link de ativação", "Recuperação de senha: solicit
+          +ação via e-mail → link com token → redefinição"               
+      108 +                                                              
+      109  **Context:** Two flows require tokens sent via email: account 
+           confirmation and password reset. The choice is between statele
+           ss JWT-based tokens (self-contained, verified by signature) an
+           d stateful random tokens stored in the database.
+      110  
+      111  **Options:**
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      128  
+      129  ## TD-05: Email Sending Infrastructure
+      130  
+      131 +**Scope:** Backend                                            
+      132 +                                                              
+      133 +**Capability:** Serviço de envio de e-mails transacionais     
+      134 +                                                              
+      135  **Context:** Phase 02 requires sending transactional emails: a
+           ccount confirmation and password recovery. The project needs a
+           n email sending solution compatible with NestJS. The architect
+           ure diagram mentions "Email Service (SMTP)" as a container.
+      136  
+      137  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      159  
+      160  ## TD-06: Request Validation Library
+      161  
+      162 +**Scope:** Backend                                            
+      163 +                                                              
+      164 +**Capability:** Transversal — covers: "Cadastro de usuário com
+          + e-mail e senha", "Login e controle de sessão do usuário", "Re
+          +cuperação de senha: solicitação via e-mail → link com token → 
+          +redefinição"                                                  
+      165 +                                                              
+      166  **Context:** Phase 02 introduces the first HTTP endpoints with
+            user input (registration, login, password reset). A runtime v
+           alidation library is needed to validate DTOs — rejecting inval
+           id payloads before they reach the service layer. NestJS suppor
+           ts multiple approaches through its `ValidationPipe` and custom
+            pipes.
+      167  
+      168  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      185  
+      186  ## TD-07: Error Response Standardization
+      187  
+      188 +**Scope:** Cross-layer                                        
+      189 +                                                              
+      190 +**Capability:** Transversal — covers: "Cadastro de usuário com
+          + e-mail e senha", "Login e controle de sessão do usuário", "Re
+          +cuperação de senha: solicitação via e-mail → link com token → 
+          +redefinição"                                                  
+      191 +                                                              
+      192  **Context:** Phase 02 is the first phase introducing public HT
+           TP endpoints. The error response format defined here becomes t
+           he contract for all subsequent phases. Consistent error respon
+           ses are essential for frontend consumption and API usability. 
+           The choice affects how domain exceptions, validation errors, a
+           nd framework errors are presented to clients.
+      193  
+      194  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      216  
+      217  ## TD-08: Rate Limiting Strategy
+      218  
+      219 +**Scope:** Backend                                            
+      220 +                                                              
+      221 +**Capability:** Login e controle de sessão do usuário         
+      222 +                                                              
+      223  **Context:** Auth endpoints (login, register, password reset) 
+           are prime targets for brute-force attacks. A rate limiting mec
+           hanism is needed to restrict the number of requests per IP wit
+           hin a time window. The project uses NestJS 11 with Express as 
+           the HTTP adapter.
+      224  
+      225  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      242  
+      243  ## TD-09: Refresh Token Format
+      244  
+      245 +**Scope:** Backend                                            
+      246 +                                                              
+      247 +**Capability:** Login e controle de sessão do usuário         
+      248 +                                                              
+      249  **Context:** TD-03 defined the refresh token strategy (rotatio
+           n with family-based theft detection), but not the token format
+           . Since every refresh operation requires a DB lookup (for rota
+           tion and reuse detection), the format choice is about what inf
+           ormation the token carries, not whether DB access can be skipp
+           ed. Depends on TD-02 (auth approach) and TD-03 (refresh strate
+           gy).
+      250  
+      251  **Options:**
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 2 lines
+      264  
+      265  **Decision:** A (JWT) — Consistency with the access token form
+           at is preferred. The team wants a single token infrastructure 
+           using `@nestjs/jwt` for both access and refresh tokens. Payloa
+           d data (`userId`, `tokenFamily`) simplifies logging and debugg
+           ing. Data leakage risk is acceptable given HTTPS enforcement.
+      266  
+      267 +**Note:** Decision deliberately diverged from the Recommendati
+          +on — JWT was kept to reuse the access-token signing/verificati
+          +on infrastructure (`@nestjs/jwt`), trading token size and base
+          +64-readability for a single token format across the codebase. 
+      268 +                                                              
+      269  ---
+      270  
+      271  ## TD-10: Nickname Generation from Email Prefix
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 4 lines
+      270  
+      271  ## TD-10: Nickname Generation from Email Prefix
+      272  
+      273 +**Scope:** Backend                                            
+      274 +                                                              
+      275 +**Capability:** Criação automática do canal do usuário a parti
+          +r do prefixo do e-mail                                        
+      276 +                                                              
+      277  **Context:** On registration, a default nickname (channel hand
+           le) must be generated automatically from the user's email pref
+           ix (the part before `@`). This handle is used as the user's pu
+           blic identifier and must be URL-safe, unique, and reproducible
+            even when the email prefix contains only non-ASCII or special
+            characters.
+      278  
+      279  > **Note:** This decision was made during implementation of SI
+           -02 and documented retroactively. The chosen approach was impl
+           emented directly without a pre-implementation decision round.
+
+● Edits aplicados. Vou validar o resultado lendo ambos os arquivos para
+  confirmar a estrutura final.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Estrutura conferida — todos os 14 TDs (4 em Phase 01 + 10 em Phase 02) agora
+  têm **Scope:** e **Capability:**, ambos os arquivos têm frontmatter no novo
+  formato (scope_type, related_phases, status: decided, date,
+  scope_description), seção _Subprojects in scope:_ listando nestjs-project/ +
+  justificativa de ausência de nextjs-project/, e as notas de divergência
+  ficaram no TD-02 (linha 68) e TD-09 (linha 267).
+
+  Resumo
+
+  Phase 01 (technical-decisions-phase-01-config.md):
+  - Frontmatter: scope_type: phase, related_phases: [1], status: decided, date: 
+  2026-04-06, scope_description.
+  - Subprojects: nestjs-project/ + nextjs-project/ justificado como deferred.
+  - TD-01..TD-04: Scope=Backend; capabilities mapeadas (TD-03 marcado como
+  Transversal — covers: 2 bullets).
+
+  Phase 02 (technical-decisions-phase-02-auth.md):
+  - Frontmatter: scope_type: phase, related_phases: [2], status: decided, date: 
+  2026-04-07, scope_description.
+  - Subprojects: nestjs-project/ + nextjs-project/ justificado como deferred
+  (telas adiadas).
+  - TD-01..TD-10: Scopes Backend exceto TD-07 (Cross-layer); 3 TDs marcados como
+   Transversal — covers: (TD-04, TD-06, TD-07).
+  - Notas de divergência consciente Recommendation↔Decision adicionadas em TD-02
+   e TD-09.
+
+  Nada foi alterado em Options, Recommendation, Decision (valor escolhido),
+  Decisions Summary ou seções extras de dependências/arquivos.
+
+✻ Sautéed for 5m 7s
+
+※ recap: Adapted the 14 existing TDs in docs/decisions/ to the new research SKILL format — added frontmatter, subprojects section, per-TD Scope and Capability fields, plus divergence notes on Phase 02 TD-02 and TD-09. Next: await user review. (disable recaps in /config)
+
+❯ dado o que existe as skills plan-* (não considere plan-phase e                
+  implement-phase) e /implement,  quero adaptar 2 fases já desenvolvidas para o 
+   novo formato de como as skills trabalham para gerar as fases e seus          
+  arquivos.                                                                     
+  analise as skills, rastreie as mudanças e gere as alterações                  
+
+● Vou explorar em paralelo: (1) o que as skills plan-* e /implement produzem
+  atualmente, (2) o estado atual das fases já desenvolvidas em docs/, e (3)
+  qualquer outro contexto de pipeline.
+
+● 2 Explore agents finished (ctrl+o to expand)
+   ├ Map plan-* skills outputs · 13 tool uses · 116.8k tokens
+   │ ⎿  Done
+   └ Inventory existing phase artifacts · 19 tool uses · 46.7k tokens
+     ⎿  Done
+
+● Vou ler os arquivos atuais das fases e o plan-pipeline/SKILL.md para entender
+  a convenção exata antes de redigir o plano.
+
+  Read 4 files (ctrl+o to expand)
+
+● Tenho o quadro completo. Preciso esclarecer 3 pontos antes de finalizar o
+  plano:
+
+● User answered Claude's questions:
+  ⎿  · O slug da Phase 01 difere entre o decisions doc (`phase-01-config`) e o 
+     phase plan atual (`phase-01-configuracao-base`). Como reconciliar? → 
+     Renomear decisions para casar com phase
+     · Quais artefatos retrospectivos do pipeline criar além de reorganizar o 
+     que já existe? → Médio: + context.md e validation.md
+     · Phase 01 não tem `progress.md` (só Phase 02 tem). O que fazer? → 
+     Sintetizar a partir do plano e git
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/dado-o-que-existe-pure-diffie.md · /plan to 
+     edit
+     Plano — Adaptação das Fases 01 e 02 ao Novo Formato do Pipeline plan-* / 
+     /implement
+
+     Context
+
+     As skills plan-* (sem incluir plan-phase) e /implement evoluíram para um
+     pipeline de até cinco estágios (plan-context → plan-validate → plan-resolve
+      → plan-build → plan-test-specs) que produz uma estrutura de um diretório 
+     por fase/slice dentro de docs/phases/, com artefatos de propriedade clara
+     (cada estágio é dono de um arquivo). As duas fases já desenvolvidas (Phase
+     01 — configuração base, Phase 02 — auth) foram escritas antes dessa
+     convenção e estão no formato antigo:
+
+     - Arquivos das fases direto em docs/phases/ (não dentro de subdir por
+     fase).
+     - Sem frontmatter (kind, name, sources_mtime).
+     - Progress da Phase 02 num arquivo irmão chamado phase-02-auth.progress.md
+     (deveria ser progress.md dentro do subdir).
+     - Phase 01 não tem progress.md algum.
+     - Inexistência de context.md e validation.md retrospectivos (intermediários
+      do pipeline).
+     - Slug do decisions doc da Phase 01 (phase-01-config) diverge do slug do
+     phase plan (phase-01-configuracao-base).
+
+     O usuário quer alinhar tudo retrospectivamente para que o pipeline
+     downstream — em especial /plan-build --rebuild, /plan-test-specs e
+     /implement (que consomem kind, name, sources_mtime e o layout
+     phase-NN-{slug}/) — possa operar sobre essas fases sem fingir que o
+     pipeline não rodou.
+
+     Decisões já alinhadas com o usuário:
+     - Slug Phase 01: renomear o decisions doc para casar com o slug do phase
+     plan (phase-01-configuracao-base). Decisions doc é menos referenciado
+     externamente que o phase plan.
+     - Artefatos retrospectivos: nível médio — criar context.md + validation.md
+     (status clean, issue_count: 0), mas NÃO criar library-refs.md (libs já
+     consolidadas no plano e implementadas; cache redundante).
+     - Progress Phase 01: sintetizar a partir do phase plan (4 SIs, todos
+     completed) e do git, porque a fase foi concluída mesmo sem tracking
+     detalhado no momento.
+
+     Estrutura-alvo
+
+     docs/
+     ├── decisions/
+     │   ├── technical-decisions-phase-01-configuracao-base.md   # RENOMEADO
+     (antes: -phase-01-config.md)
+     │   └── technical-decisions-phase-02-auth.md                # inalterado
+     └── phases/
+         ├── phase-01-configuracao-base/
+         │   ├── phase-01-configuracao-base.md                    # MOVIDO +
+     frontmatter adicionado
+         │   ├── context.md                                       # NOVO
+     retrospectivo
+         │   ├── validation.md                                    # NOVO
+     retrospectivo (status: clean)
+         │   └── progress.md                                      # NOVO
+     sintetizado (4/4 SIs completed)
+         └── phase-02-auth/
+             ├── phase-02-auth.md                                 # MOVIDO +
+     frontmatter adicionado
+             ├── context.md                                       # NOVO
+     retrospectivo
+             ├── validation.md                                    # NOVO
+     retrospectivo (status: clean)
+             └── progress.md                                      # MOVIDO de
+     phase-02-auth.progress.md
+
+     Não há library-refs.md por escolha. Não há inventory.md ou specs em
+     <subproject>/specs/ (Phase 02 não tem UI; Phase 01 não tem UI nem
+     server-connected components).
+
+     Plano de execução
+
+     Fase A — Renomear decisions doc da Phase 01
+
+     1. git mv docs/decisions/technical-decisions-phase-01-config.md 
+     docs/decisions/technical-decisions-phase-01-configuracao-base.md
+     2. Atualizar scope_description do frontmatter se mencionar o slug antigo
+     (provavelmente não menciona — verificar Read).
+     3. Verificar que nenhum arquivo do repo referencia o path antigo: grep -r 
+     "technical-decisions-phase-01-config" . (excluindo .git). Atualizar
+     referências encontradas, se houver.
+
+     Fase B — Phase 01 (config) — reorganização e artefatos
+
+     1. mkdir docs/phases/phase-01-configuracao-base/
+     2. git mv docs/phases/phase-01-configuracao-base.md 
+     docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md
+     3. Adicionar frontmatter no topo do phase-01-configuracao-base.md (Edit):
+     ---
+     kind: phase
+     name: phase-01-configuracao-base
+     sources_mtime:
+       docs/decisions/technical-decisions-phase-01-configuracao-base.md:
+     <ISO-8601 do git log -1>
+       docs/project-plan.md: <ISO-8601 do git log -1>
+     ---
+     3. Sem test_specs_aware: true (plano legado, sem campo **Test Specs:** por
+     SI).
+     4. Criar context.md retrospectivo com frontmatter (kind: phase, name: 
+     phase-01-configuracao-base, sources_mtime) e seções (todas derivadas do
+     decisions doc e do project-plan.md, sem inventar conteúdo):
+       - ## Scope — copiar capabilities da Phase 01 do project-plan.md.
+       - ## Decisions Index — tabela das 4 TDs (TD-01..TD-04) com scope, choice,
+      libraries.
+       - ## Capability Coverage — tabela bullet × TD que cobre.
+       - ## Decisions Detail — para cada TD: **Recommendation:** prose +
+     libraries (extraído do decisions doc).
+       - ## Inherited Decisions Detail — vazio (Phase 01 é a primeira).
+       - ## Inherited Conventions — vazio.
+       - ## Inherited Deferred Capabilities — vazio.
+       - ## Non-UI / Deferred Capabilities — registrar "Telas de frontend
+     deferred" (não há).
+       - ## Testing Requirements — pointer para testing-guide-nestjs-project
+     skill.
+     5. Criar validation.md retrospectivo:
+     ---
+     kind: phase
+     name: phase-01-configuracao-base
+     status: clean
+     issue_count: 0
+     issues: []
+     advisories: []
+     sources_mtime: <copiar do context.md>
+     ---
+     5. Corpo: H1 + ## Findings vazio + ## Resolved Issues vazio.
+     6. Sintetizar progress.md:
+       - # Phase 01 — Configuração Base do Projeto — Progress
+       - **Status:** completed
+       - **SIs:** 4/4 completed
+       - Quatro subseções (### SI-01.1..### SI-01.4) com **Status:** completed,
+     **Tests:** extraído do plano (SI-01.1 e SI-01.4 usam E2E implícito; SI-01.2
+      e SI-01.3 sem tests novos), **Observations:** none.
+
+     Fase C — Phase 02 (auth) — reorganização e artefatos
+
+     1. mkdir docs/phases/phase-02-auth/
+     2. git mv docs/phases/phase-02-auth.md 
+     docs/phases/phase-02-auth/phase-02-auth.md
+     3. git mv docs/phases/phase-02-auth.progress.md 
+     docs/phases/phase-02-auth/progress.md
+     4. Adicionar frontmatter no topo do phase-02-auth.md:
+     ---
+     kind: phase
+     name: phase-02-auth
+     sources_mtime:
+       docs/decisions/technical-decisions-phase-02-auth.md: <ISO-8601>
+       docs/project-plan.md: <ISO-8601>
+       docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md:
+     <ISO-8601>
+     ---
+     5. Criar context.md retrospectivo, mesmas seções da Phase 01, com:
+       - ## Decisions Index — 10 TDs (TD-01..TD-10).
+       - ## Capability Coverage — 8 bullets de Phase 02 × TDs cobrindo.
+       - ## Decisions Detail — Recommendation prose + libraries das 10 TDs.
+       - ## Inherited Decisions Detail — TDs da Phase 01 (config, joi,
+     registerAs, shared data-source).
+       - ## Inherited Conventions — convenções inferíveis do plano da Phase 01
+     (registerAs, namespaced configs, ConfigType injection, dotenv/config em
+     data-source).
+       - ## Inherited Deferred Capabilities — nenhum bullet deferred da Phase 01
+      (todos foram cobertos).
+       - ## Non-UI / Deferred Capabilities — registrar "Telas de
+     cadastro/login/confirmação/recuperação" como deferred (subprojeto frontend
+     ainda não inicializado).
+       - ## Testing Requirements — pointer para testing-guide-nestjs-project.
+     6. Criar validation.md retrospectivo (mesmo template da Phase 01, status: 
+     clean).
+     7. Verificar progress.md movido: já tem todo o conteúdo de 18 SIs
+     (incluindo observações). Não modificar.
+
+     Fase D — Verificação
+
+     1. Listagem: tree docs/phases/ docs/decisions/ — confirmar a estrutura-alvo
+      acima.
+     2. Lint do pipeline (read-only): para cada fase, rodar mentalmente o slug
+     discovery do plan-pipeline (linhas 99-115 do SKILL.md). Resultado esperado:
+       - NN=1 → match único technical-decisions-phase-01-configuracao-base.md →
+     dir docs/phases/phase-01-configuracao-base/.
+       - NN=2 → match único technical-decisions-phase-02-auth.md → dir
+     docs/phases/phase-02-auth/.
+       - Slug arg phase-01-configuracao-base ou phase-02-auth → resolve para os
+     mesmos dirs.
+     3. Frontmatter check: cada phase-*/phase-*.md, context.md, validation.md
+     precisa ter kind, name, sources_mtime. validation.md adicionalmente tem
+     status, issue_count, issues, advisories.
+     4. Conteúdo intacto: diff do phase-01-configuracao-base.md e
+     phase-02-auth.md pré/pós mostra APENAS adição de frontmatter (corpo
+     idêntico).
+     5. Smoke-test de /plan-build --rebuild (não executar — apenas confirmar que
+      o gate validation.md status: clean passa). Cada validation.md
+     retrospectivo deve casar com o gate.
+
+     Arquivos críticos a modificar
+
+     - docs/decisions/technical-decisions-phase-01-config.md → renomeado.
+     - docs/phases/phase-01-configuracao-base.md → movido para subdir +
+     frontmatter.
+     - docs/phases/phase-02-auth.md → movido para subdir + frontmatter.
+     - docs/phases/phase-02-auth.progress.md → movido para
+     phase-02-auth/progress.md.
+
+     Arquivos novos a criar
+
+     - docs/phases/phase-01-configuracao-base/context.md
+     - docs/phases/phase-01-configuracao-base/validation.md
+     - docs/phases/phase-01-configuracao-base/progress.md
+     - docs/phases/phase-02-auth/context.md
+     - docs/phases/phase-02-auth/validation.md
+
+     Fontes de verdade reutilizadas (não recriar conteúdo)
+
+     - Decisions detail prose: extrair de
+     docs/decisions/technical-decisions-phase-{01|02}-*.md — campos
+     **Recommendation:**, libraries citadas na Decision/Recommendation.
+     - Capabilities: copiar bullets verbatim de docs/project-plan.md §§ "Fase
+     01" / "Fase 02".
+     - SIs da Phase 01 progress: derivar de
+     docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md Step
+     Implementations (4 SIs).
+     - SIs da Phase 02 progress: já existe no arquivo movido, intacto.
+     - ISO-8601 mtimes: usar git log -1 --format=%aI <path> para cada source
+     path; quando o arquivo é novo (sem commit), usar date -u 
+     +%Y-%m-%dT%H:%M:%SZ.
+
+     Restrições
+
+     - Sem alterar conteúdo dos phase plans (apenas adicionar frontmatter).
+     - Sem alterar conteúdo do progress.md da Phase 02 (apenas mover).
+     - Sem criar library-refs.md (decisão do usuário).
+     - Sem criar inventory.md (não há UI nas duas fases).
+     - Não usar test_specs_aware: true (planos legados, sem campo **Test 
+     Specs:** por SI).
+
+● Executando. Primeiro, vou coletar os timestamps git e verificar referências
+  externas em paralelo, e ler com mais detalhe o formato esperado de context.md
+  e validation.md.
+
+● Bash(git log -1 --format=%aI
+      docs/decisions/technical-decisions-phase-01-config.md && git log -1
+      --format=%aI docs/decisions/technical-decisions-phase-02-auth.md &&…)  ⎿  2026-04-08T14:58:32-03:00
+     2026-05-05T11:06:30-03:00
+     2026-04-08T14:58:32-03:00
+     … +2 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Explore(Sample context.md and validation.md format)
+  ⎿  Done (2 tool uses · 60.1k tokens · 20s)
+  (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Tenho tudo. Executando agora.
+
+  Fase A — Renomear decisions doc da Phase 01:
+
+● Bash(git mv docs/decisions/technical-decisions-phase-01-config.md
+      docs/decisions/technical-decisions-phase-01-configuracao-base.md)
+  ⎿  (No output)
+
+● Fase B — Phase 01: criar dir, mover plano, adicionar frontmatter, criar 
+  context/validation/progress.
+
+● Bash(mkdir -p docs/phases/phase-01-configuracao-base && git mv
+      docs/phases/phase-01-configuracao-base.md
+      docs/phases/phase-01-configuracao-base/phase-01-configuracao…)
+  ⎿  (No output)
+
+● Update(docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md)
+  ⎿  Added 8 lines
+       1 +---                                                            
+       2 +kind: phase                                                    
+       3 +name: phase-01-configuracao-base                               
+       4 +sources_mtime:                                                 
+       5 +  docs/project-plan.md: "2026-04-08T14:58:57-03:00"            
+       6 +  docs/decisions/technical-decisions-phase-01-configuracao-base
+         +.md: "2026-05-12T12:21:12-03:00"                               
+       7 +---                                                            
+       8 +                                                               
+       9  # Phase 01 — Configuracao Base do Projeto
+      10  
+      11  ## Objective
+
+● Write(docs/phases/phase-01-configuracao-base/context.md)
+  ⎿  Wrote 104 lines to docs/phases/phase-01-configuracao-base/context.md
+      1 ---
+      2 kind: phase
+      3 name: phase-01-configuracao-base
+      4 sources_mtime:
+      5   docs/project-plan.md: "2026-04-08T14:58:57-03:00"
+      6   docs/decisions/technical-decisions-phase-01-configuracao-base.m
+        d: "2026-05-12T12:21:12-03:00"
+      7 ---
+      8 
+      9 # phase-01-configuracao-base — Context
+     … +148 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Found 20 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● cSpell warnings sobre "configuracao" são esperados — é o slug literal usado em
+   todo o projeto (phase-01-configuracao-base). Não bloqueia. Continuo.
+
+● Write(docs/phases/phase-01-configuracao-base/validation.md)
+  ⎿  Wrote 47 lines to docs/phases/phase-01-configuracao-base/validation.md
+       2 kind: phase
+       3 name: phase-01-configuracao-base
+       4 status: clean
+       5 issue_count: 0
+       6 sources_mtime:
+         T13:35:02-03:00"ase-01-configuracao-base/context.md: "2026-05-12
+       8   docs/decisions/technical-decisions-phase-01-configuracao-base.
+         md: "2026-05-12T12:21:12-03:00"
+       9 issues: []
+      10 advisories: []
+     … +39 lines (ctrl+o to expand)
+
+● Write(docs/phases/phase-01-configuracao-base/progress.md)
+  ⎿  Wrote 24 lines to docs/phases/phase-01-configuracao-base/progress.md
+      2 # Phase 01 — Configuração Base do Projeto — Progress
+      3 **Status:** completed
+      4 **SIs:** 4/4 completed
+      5 
+      6 ### SI-01.1 — TypeORM Installation and Migration Infrastructure
+      7 - **Status:** completed
+      8 - **Tests:** existing E2E (`test/app.e2e-spec.ts`) — validates Ap
+        pModule compiles and connects to PostgreSQL after TypeORM is adde
+        d
+      9 - **Observations:** none
+     … +19 lines (ctrl+o to expand)
+  ⎿  Found 4 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Phase 01 completa. Agora Fase C — Phase 02.
+
+● Bash(mkdir -p docs/phases/phase-02-auth && git mv docs/phases/phase-02-auth.md
+       docs/phases/phase-02-auth/phase-02-auth.md && git mv
+      docs/phases/phase-02-auth.progres…)
+  ⎿  (No output)
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/phases/phase-02-auth/phase-02-auth.md)
+  ⎿  Added 9 lines
+       1 +---                                                            
+       2 +kind: phase                                                    
+       3 +name: phase-02-auth                                            
+       4 +sources_mtime:                                                 
+       5 +  docs/project-plan.md: "2026-04-08T14:58:57-03:00"            
+       6 +  docs/decisions/technical-decisions-phase-02-auth.md: "2026-05
+         +-12T12:23:19-03:00"                                            
+       7 +  docs/phases/phase-01-configuracao-base/phase-01-configuracao-
+         +base.md: "2026-04-08T14:58:57-03:00"                           
+       8 +---                                                            
+       9 +                                                               
+      10  # Phase 02 — Cadastro, Login e Gerenciamento de Conta
+      11  
+      12  ## Objective
+
+● Agora criar context.md retrospectivo da Phase 02 (mais denso — 10 TDs +
+  heranças da Phase 01).
+
+● Write(docs/phases/phase-02-auth/context.md)
+  ⎿  Wrote 185 lines to docs/phases/phase-02-auth/context.md
+      2 kind: phase
+      3 name: phase-02-auth
+      4 sources_mtime:
+      5   docs/project-plan.md: "2026-04-08T14:58:57-03:00"
+      6   docs/decisions/technical-decisions-phase-02-auth.md: "2026-05-1
+      7   docs/decisions/technical-decisions-phase-01-configuracao-base.m
+        d: "2026-05-12T12:21:12-03:00"
+      8   docs/phases/phase-01-configuracao-base/phase-01-configuracao-ba
+        se.md: "2026-04-08T14:58:57-03:00"
+      9 ---
+     … +302 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(docs/phases/phase-02-auth/validation.md)  ⎿  Wrote 47 lines to docs/phases/phase-02-auth/validation.md
+       2 kind: phase
+       3 name: phase-02-auth
+       4 status: clean
+       5 issue_count: 0
+       6 sources_mtime:
+         00"ocs/phases/phase-02-auth/context.md: "2026-05-12T13:36:17-03:
+       8   docs/decisions/technical-decisions-phase-02-auth.md: "2026-05-
+         12T12:23:19-03:00"
+       9 issues: []
+      10 advisories: []
+     … +38 lines (ctrl+o to expand)
+
+● Agora Fase D — Verificação:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Bash(git status --short)
+  ⎿   M .claude/skills/research/SKILL.md
+     RM docs/decisions/technical-decisions-phase-01-config.md -> docs/decis
+     ions/technical-decisions-phase-01-configuracao-base.md
+     … +19 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Slug discovery validado: NN=1 → phase-01-configuracao-base, NN=2 →
+  phase-02-auth. Estrutura completa.
+
+  Resumo
+
+  Renomeações (git mv):
+  - docs/decisions/technical-decisions-phase-01-config.md →
+  …-phase-01-configuracao-base.md (alinhar slug com phase plan)
+  - docs/phases/phase-01-configuracao-base.md →
+  docs/phases/phase-01-configuracao-base/phase-01-configuracao-base.md
+  - docs/phases/phase-02-auth.md → docs/phases/phase-02-auth/phase-02-auth.md
+  - docs/phases/phase-02-auth.progress.md →
+  docs/phases/phase-02-auth/progress.md
+
+  Frontmatter adicionado (kind: phase, name, sources_mtime) em:
+  - phase-01-configuracao-base/phase-01-configuracao-base.md
+  - phase-02-auth/phase-02-auth.md
+
+  Arquivos novos retrospectivos:
+  - phase-01-configuracao-base/context.md — Scope, Decisions Index (4 TDs),
+  Capability Coverage, Decisions Detail, heranças vazias, Non-UI/Deferred (telas
+   frontend), Testing Requirements
+  - phase-01-configuracao-base/validation.md — status: clean, issue_count: 0,
+  todas categorias _None._
+  - phase-01-configuracao-base/progress.md — 4/4 SIs completed, sintetizado do
+  plano
+  - phase-02-auth/context.md — 10 TDs current + 4 TDs herdadas + 6 conventions
+  herdadas + 1 capability deferred (telas)
+  - phase-02-auth/validation.md — status: clean
+
+  Não criado (por decisão prévia): library-refs.md, inventory.md, specs em
+  <subproject>/specs/. Sem test_specs_aware: true nos planos (legados).
+
+  O pipeline plan-* e /implement agora consegue resolver slug por NN ou por slug
+   literal e encontra todos os artefatos no layout esperado.
+
+✻ Cogitated for 6m 55s
+
+※ recap: Adapted Phases 01 and 02 to the new plan-* / implement pipeline format: renamed Phase 01's decisions doc to match the slug, moved both phase plans into per-phase subdirs with frontmatter, and added retrospective context.md, validation.md, and progress.md files. Next action: review the changes and commit if satisfied. (disable recaps in /config)
+
+❯ Revalide as mudanças que foram feitas, temos o nextjs-project que está em     
+  docs, mas o projeto é next-frontend.                                          
+  Revalide se o formato dos novos docs está adequado ao que as skills geram     
+  ⎿  ⧉ Selected 1 lines from docs/phases/phase-01-configuracao-base/validation.md in Visual Studio Code - Insiders
+  ⎿  Found 24 new diagnostic issues in 2 files (ctrl+o to expand)
+
+● Vou explorar em paralelo: (1) confirmar nome real dos subprojetos no repo, (2)
+   ler o plano anterior, e (3) revalidar o formato exato dos artefatos contra as
+   skills.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Explore(Revalidate retrospective doc format)
+  ⎿  Done (14 tool uses · 94.1k tokens · 30s)
+  (ctrl+o to expand)
+
+● Confirmado: o frontend é next-frontend/, não nextjs-project/. Vou validar o
+  formato exato de progress.md contra a skill /implement e verificar referências
+   ao testing-guide-* antes de redigir o plano corretivo.
+
+● Explore(Validate progress.md format and testing-guide ref)
+  ⎿  Done (8 tool uses · 36.1k tokens · 24s)
+  (ctrl+o to expand)
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+● Achei 9 referências a nextjs-project/ (5 nos meus retrospectivos, 2 nos
+  decisions docs, 1 no CLAUDE.md, 0 em project-plan.md). docs/figma-audit.json
+  já usa next-frontend/ corretamente — esse é o nome real. Preciso esclarecer
+  escopo da correção:
+
+● User answered Claude's questions:
+  ⎿  · Qual o escopo da correção `nextjs-project/` → `next-frontend/`? → Tudo, 
+     incluindo CLAUDE.md
+     · Padronizar H1 do `progress.md` ao formato canônico do `/implement`? → 
+     Padronizar ambos ao slug
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/dado-o-que-existe-pure-diffie.md · /plan to 
+     edit
+     Plano — Revalidação e Correção dos Retrospectivos do Pipeline
+
+     Context
+
+     A sessão anterior reorganizou Phase 01 e Phase 02 no formato esperado pelas
+      skills plan-* e /implement, criando context.md, validation.md e
+     progress.md retrospectivos. Esta passada de revalidação detectou dois
+     desvios:
+
+     1. Nome incorreto do subprojeto frontend. A documentação refere-se ao
+     subprojeto frontend como nextjs-project/ em múltiplos arquivos, mas o
+     diretório real no repositório raiz é next-frontend/ (confirmado por ls e
+     por docs/figma-audit.json, que já usa o nome correto). Total: 9 ocorrências
+      distribuídas em 5 arquivos.
+     2. H1 do progress.md fora do formato canônico do /implement. A skill
+     /implement/SKILL.md especifica # {name} — Progress onde {name} é o slug da
+     fase. Os dois progress.md (o pré-existente da Phase 02 e o sintetizado da
+     Phase 01) usam títulos longos em português em vez do slug. A Phase 02
+     herdou esse formato do arquivo pré-existente; a Phase 01 foi escrita
+     seguindo o padrão da Phase 02 por consistência local — ambos off-spec.
+
+     O resto da validação passou: section ordering, frontmatter fields,
+     placeholders (_None._, _No issues resolved yet._, _No inherited TD 
+     details._, _No inherited deferred capabilities._), e estrutura tabular de
+     ## Decisions Index / ## Capability Coverage / ## Non-UI / Deferred 
+     Capabilities estão todos alinhados com plan-context/SKILL.md e
+     plan-validate/SKILL.md.
+
+     Decisões já alinhadas com o usuário:
+     - Escopo do rename: aplicar nextjs-project/ → next-frontend/ em todos os 9
+     lugares, incluindo CLAUDE.md.
+     - H1 progress.md: padronizar ambos ao formato canônico do /implement (# 
+     phase-NN-{slug} — Progress), inclusive alterando o H1 do progress da Phase
+     02 (apenas a linha do título — o resto do conteúdo permanece intacto).
+
+     Mudanças a executar
+
+     Fase A — Rename nextjs-project/ → next-frontend/
+
+     Substituição literal de nextjs-project por next-frontend (preservando o
+     resto do texto ao redor) nas 9 ocorrências:
+
+     1. docs/phases/phase-01-configuracao-base/context.md (2 ocorrências)
+       - Linha 29: **Deferred subprojects:** \nextjs-project/` — not initialized
+      in this phase.`
+       - Linha 100: | Telas de frontend | deferred | \nextjs-project/` is not
+     initialized in this phase; UI surfaces start in a later phase. | — |`
+     2. docs/phases/phase-02-auth/context.md (3 ocorrências)
+       - Linha 34: **Deferred subprojects:** \nextjs-project/` — telas de
+     cadastro/login/...`
+       - Linha 70: | Telas de cadastro, login, confirmação de conta e 
+     recuperação de senha | _Deferred — \nextjs-project/` not initialized in
+     this phase._ |`
+       - Linha 181: | Telas de cadastro, login, confirmação de conta e 
+     recuperação de senha | deferred | \nextjs-project/` is not initialized in
+     this phase; UI surfaces start in a later phase. | — |`
+     3. docs/decisions/technical-decisions-phase-01-configuracao-base.md (1
+     ocorrência)
+       - Linha 14 (Subprojects section): - \nextjs-project/` — Frontend
+     deferred: `nextjs-project/` is not initialized in this phase (planned for a
+      later phase). No open decision in this document.`
+       - Substituir AMBAS as instâncias na mesma linha.
+     4. docs/decisions/technical-decisions-phase-02-auth.md (1 ocorrência)
+       - Linha 14: - \nextjs-project/` — Frontend deferred: registration, login,
+      confirmation and password-recovery screens (...) will be addressed in a
+     future phase when `nextjs-project/` is initialized. No open decision in
+     this document.`
+       - Substituir AMBAS as instâncias na mesma linha.
+     5. CLAUDE.md (1 ocorrência)
+       - Linha 15: - \nextjs-project/` (Next.js) — not yet initialized`
+       - Após: - \next-frontend/` (Next.js) — not yet initialized`
+
+     Total de strings a substituir: 9 (algumas linhas têm 2 instâncias
+     adjacentes).
+
+     Fase B — Padronizar H1 de progress.md
+
+     Per /implement/SKILL.md: H1 canônico é # {name} — Progress com {name} =
+     slug da fase.
+
+     1. docs/phases/phase-01-configuracao-base/progress.md
+       - Antes: # Phase 01 — Configuração Base do Projeto — Progress
+       - Após: # phase-01-configuracao-base — Progress
+     2. docs/phases/phase-02-auth/progress.md
+       - Antes: # Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
+       - Após: # phase-02-auth — Progress
+
+     Restante do conteúdo (status, contadores, subseções de SI) permanece
+     intacto.
+
+     Fase C — Verificação
+
+     1. Grep final: grep -rn "nextjs-project" docs/ CLAUDE.md deve retornar zero
+      matches.
+     2. Sanity check H1: head -1 docs/phases/phase-*/progress.md deve retornar #
+      phase-NN-{slug} — Progress para ambos.
+     3. Diff visual dos arquivos tocados: confirmar que apenas as substituições
+     planejadas foram aplicadas; demais conteúdos intactos.
+     4. Spell-check noise: cSpell continuará reclamando de configuracao (slug
+     literal do diretório — não é typo, é o nome real). Ignorar.
+
+     Arquivos a modificar
+
+     - docs/phases/phase-01-configuracao-base/context.md
+     - docs/phases/phase-02-auth/context.md
+     - docs/decisions/technical-decisions-phase-01-configuracao-base.md
+     - docs/decisions/technical-decisions-phase-02-auth.md
+     - CLAUDE.md
+     - docs/phases/phase-01-configuracao-base/progress.md
+     - docs/phases/phase-02-auth/progress.md
+
+     Sem novos arquivos. Sem renomeações de filename. Sem alteração estrutural
+     (frontmatter, section ordering, placeholders permanecem como estão — já
+     validados contra spec).
+
+     Não fazer
+
+     - Não tocar em docs/figma-audit.json — já usa next-frontend/ corretamente.
+     - Não tocar em project-plan.md — não referencia nome de diretório, só
+     "Next.js (frontend)" genericamente.
+     - Não alterar outras seções dos progress.md (Status, SIs, subseções de SI)
+     — só o H1.
+     - Não regerar context.md ou validation.md — formato já validado contra
+     spec; só substituição pontual de string.
+
+● Executando. Vou começar pela substituição literal nextjs-project →
+  next-frontend em cada arquivo, usando Edit com replace_all quando seguro, e em
+   seguida o H1 do progress.md.
+
+● Update(docs/phases/phase-01-configuracao-base/context.md)
+  ⎿  Added 2 lines, removed 2 lines
+      26  
+      27  **Affected subprojects:** `nestjs-project/`
+      28  
+      29 -**Deferred subprojects:** `nextjs-project/` — not initialized i
+         -n this phase.                                                  
+      29 +**Deferred subprojects:** `next-frontend/` — not initialized in
+         + this phase.                                                   
+      30  
+      31  **Sequencing notes:** This is the first phase; no prior phase t
+          o depend on.
+      32  
+     ...
+       97  
+       98  | Capability | Status | Rationale | TD refs |
+       99  |------------|--------|-----------|---------|
+      100 -| Telas de frontend | deferred | `nextjs-project/` is not init
+          -ialized in this phase; UI surfaces start in a later phase. | —
+          - |                                                            
+      100 +| Telas de frontend | deferred | `next-frontend/` is not initi
+          +alized in this phase; UI surfaces start in a later phase. | — 
+          +|                                                             
+      101  
+      102  ## Testing Requirements
+      103  
+
+● Update(docs/phases/phase-02-auth/context.md)
+  ⎿  Added 3 lines, removed 3 lines
+      31  
+      32  **Affected subprojects:** `nestjs-project/`
+      33  
+      34 -**Deferred subprojects:** `nextjs-project/` — telas de cadastro
+         -/login/confirmação/recuperação ficam diferidas para uma fase fu
+         -tura ao iniciar o subprojeto frontend.                         
+      34 +**Deferred subprojects:** `next-frontend/` — telas de cadastro/
+         +login/confirmação/recuperação ficam diferidas para uma fase fut
+         +ura ao iniciar o subprojeto frontend.                          
+      35  
+      36  **Sequencing notes:** Depends on Fase 01 — Configuração Base do
+           Projeto.
+      37  
+     ...
+      67  | Login e controle de sessão do usuário | phase-02-auth/TD-02, 
+          phase-02-auth/TD-03, phase-02-auth/TD-06, phase-02-auth/TD-07, 
+          phase-02-auth/TD-08, phase-02-auth/TD-09 |
+      68  | Logout | _Inherited from TD-02 (auth library) and TD-03 (refr
+          esh-token rotation) — revocation reuses the same session infras
+          tructure; no separate TD._ |
+      69  | Recuperação de senha: solicitação via e-mail → link com token
+           → redefinição | phase-02-auth/TD-04, phase-02-auth/TD-06, phas
+          e-02-auth/TD-07 |
+      70 -| Telas de cadastro, login, confirmação de conta e recuperação 
+         -de senha | _Deferred — `nextjs-project/` not initialized in thi
+         -s phase._ |                                                    
+      70 +| Telas de cadastro, login, confirmação de conta e recuperação 
+         +de senha | _Deferred — `next-frontend/` not initialized in this
+         + phase._ |                                                     
+      71  
+      72  ## Decisions Detail
+      73  
+     ...
+      178  
+      179  | Capability | Status | Rationale | TD refs |
+      180  |------------|--------|-----------|---------|
+      181 -| Telas de cadastro, login, confirmação de conta e recuperação
+          - de senha | deferred | `nextjs-project/` is not initialized in
+          - this phase; UI surfaces start in a later phase. | — |        
+      181 +| Telas de cadastro, login, confirmação de conta e recuperação
+          + de senha | deferred | `next-frontend/` is not initialized in 
+          +this phase; UI surfaces start in a later phase. | — |         
+      182  
+      183  ## Testing Requirements
+      184  
+
+● Update(docs/decisions/technical-decisions-phase-01-configuracao-base.md)  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/decisions/technical-decisions-phase-01-configuracao-base.md)
+  ⎿  Added 1 line, removed 1 line
+      11  _Subprojects in scope:_
+      12  
+      13  - `nestjs-project/` — backend foundation; receives the ConfigMo
+          dule, namespaced config files, Joi env-validation schema, and T
+          ypeORM CLI data-source wiring.
+      14 -- `nextjs-project/` — Frontend deferred: `nextjs-project/` is n
+         -ot initialized in this phase (planned for a later phase). No op
+         -en decision in this document.                                  
+      14 +- `next-frontend/` — Frontend deferred: `next-frontend/` is not
+         + initialized in this phase (planned for a later phase). No open
+         + decision in this document.                                    
+      15  
+      16  ---
+      17  
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/decisions/technical-decisions-phase-02-auth.md)
+  ⎿  Added 1 line, removed 1 line
+      11  _Subprojects in scope:_
+      12  
+      13  - `nestjs-project/` — backend that delivers all account-lifecyc
+          le endpoints (register, confirm, login, refresh, logout, passwo
+          rd reset) plus transactional email, request validation, error f
+          ilter, throttling, and channel-handle generation.
+      14 -- `nextjs-project/` — Frontend deferred: registration, login, c
+         -onfirmation and password-recovery screens (`Telas de cadastro, 
+         -login, confirmação de conta e recuperação de senha`) will be ad
+         -dressed in a future phase when `nextjs-project/` is initialized
+         -. No open decision in this document.                           
+      14 +- `next-frontend/` — Frontend deferred: registration, login, co
+         +nfirmation and password-recovery screens (`Telas de cadastro, l
+         +ogin, confirmação de conta e recuperação de senha`) will be add
+         +ressed in a future phase when `next-frontend/` is initialized. 
+         +No open decision in this document.                             
+      15  
+      16  ---
+      17  
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(CLAUDE.md)
+  ⎿  Added 1 line, removed 1 line
+      12  
+      13  - `nestjs-project/` — Backend API (NestJS 11, TypeScript, Expre
+          ss). Contains modules for users, channels, videos, comments, et
+          c.
+      14  - `docs/` — Project documentation, architecture diagrams, and p
+          lanning.
+      15 -- `nextjs-project/` (Next.js) — not yet initialized            
+      15 +- `next-frontend/` (Next.js) — not yet initialized             
+      16  
+      17  ## Architecture (C4 Container Diagram)
+      18  
+
+● Agora Fase B — H1 dos dois progress.md:
+
+● Update(docs/phases/phase-01-configuracao-base/progress.md)
+  ⎿  Added 1 line, removed 1 line
+      1 -# Phase 01 — Configuração Base do Projeto — Progress            
+      1 +# phase-01-configuracao-base — Progress                         
+      2  
+      3  **Status:** completed
+      4  **SIs:** 4/4 completed
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(docs/phases/phase-02-auth/progress.md)
+  ⎿  Added 1 line, removed 1 line
+      1 -# Phase 02 — Cadastro, Login e Gerenciamento de Conta — Progress
+      1 +# phase-02-auth — Progress                                      
+      2  
+      3  **Status:** completed
+      4  **SIs:** 18/18 completed
+
+● Fase C — Verificação:
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Verificação completa:
+
+  - nextjs-project: 0 ocorrências residuais em docs/ e CLAUDE.md (era 9 antes).
+  - next-frontend: 9 ocorrências (substituições aplicadas + a já existente em
+  docs/figma-audit.json).
+  - H1 dos progress.md: ambos no formato canônico # {slug} — Progress conforme
+  /implement/SKILL.md.
+
+  Resumo
+
+  Correção de subprojeto (nextjs-project/ → next-frontend/) em 5 arquivos:
+  - docs/phases/phase-01-configuracao-base/context.md (2 instâncias)
+  - docs/phases/phase-02-auth/context.md (3 instâncias)
+  - docs/decisions/technical-decisions-phase-01-configuracao-base.md (2
+  instâncias)
+  - docs/decisions/technical-decisions-phase-02-auth.md (2 instâncias)
+  - CLAUDE.md (1 instância)
+
+  H1 canônico em progress.md:
+  - phase-01-configuracao-base/progress.md: # phase-01-configuracao-base — 
+  Progress
+  - phase-02-auth/progress.md: # phase-02-auth — Progress
+
+  Restante do formato (section ordering, frontmatter fields, placeholders
+  _None._/_No issues resolved yet._/_No inherited TD details._, estrutura
+  tabular de ## Decisions Index/## Capability Coverage/## Non-UI / Deferred 
+  Capabilities) já estava alinhado com plan-context/SKILL.md,
+  plan-validate/SKILL.md e /implement/SKILL.md — sem alterações estruturais.
+
+✻ Brewed for 4m 35s
