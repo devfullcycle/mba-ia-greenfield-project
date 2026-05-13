@@ -69,6 +69,10 @@ npm run build                            # Production build (.next/)
 npm run start                            # Serve the production build
 npm run lint                             # ESLint (eslint-config-next)
 
+npm test                                 # Vitest — unit + integration (run mode)
+npm run test:watch                       # Vitest watch mode (run in background)
+npm run test:e2e                         # Playwright — end-to-end
+
 npx tsc --noEmit                         # Type-check (required before declaring a task done)
 npx shadcn@latest add <component>        # Add a shadcn primitive — respects components.json
 ```
@@ -85,7 +89,7 @@ curl -I http://localhost:3001
 
 Commands that never exit (dev server, watch modes) must be run **in background** in the Bash tool — otherwise the agent blocks indefinitely waiting for the process to return.
 
-This applies to: `npm run dev`, `npm run start`, and any other persistent process. After starting in background, validate with `curl -I http://localhost:3001`.
+This applies to: `npm run dev`, `npm run start`, `npm run test:watch`, `npm run test:e2e -- --ui`, and any other persistent process. After starting the dev server in background, validate with `curl -I http://localhost:3001`.
 
 ## Architecture
 
@@ -108,9 +112,73 @@ Refer to the C4 container diagram at `docs/diagrams/software-arch.mermaid` for t
 
 ## Testing
 
-**TBD.** No test scripts are wired in `package.json` yet, and the tooling (Vitest/Jest, Testing Library, Playwright, …) has not been selected.
+Stack decisions for this project:
 
-The global [`CLAUDE.md`](../CLAUDE.md) → "Definition of Done (Technical)" requires tests to pass before a task is complete. Until the test setup is chosen and added here, this section is a placeholder — replace it with concrete instructions (how to run unit/integration/e2e, conventions, file suffixes) as soon as the tooling decision is made.
+- **Vitest** for unit and integration tests of pages, components, hooks, utils, and BFF route handlers.
+- **Playwright** for end-to-end tests (full browser flow).
+- **MSW (`msw` + `msw/node`)** as the fake API for BFF tests: route handlers are tested **as functions** — they are imported and called directly, while `msw/node` intercepts the `fetch` calls they make to the NestJS API and returns fixtures. BFF tests **never** point to the real NestJS API.
+
+### Test Type Selection
+
+Choose the suffix by what the test really does. The suffix is a contract that drives the runner (Vitest vs. Playwright), where the file lives, and what is allowed inside it.
+
+| Suffix                    | Purpose                                                                                                        | Runner     | External I/O                       | Location                                  |
+|---------------------------|----------------------------------------------------------------------------------------------------------------|------------|------------------------------------|-------------------------------------------|
+| `*.test.ts`               | **Unit** — pure logic, collaborators mocked (utils, hooks, a single component in isolation)                    | Vitest     | Forbidden                          | `__tests__/` next to the artifact         |
+| `*.integration.test.ts`   | **Integration** — multiple artifacts wired together; route handlers called as functions with `msw/node` intercepting `fetch` to the NestJS API | Vitest     | MSW only (no real network)         | `__tests__/` next to the artifact         |
+| `*.e2e-spec.ts`           | **End-to-end** — full browser flow via Playwright against a running dev server                                 | Playwright | Real browser + running app          | `tests/` at the root of `next-frontend/`  |
+
+Routing rule (apply mechanically):
+
+- Renders a component or invokes a hook/util in isolation, with mocks for collaborators → **`*.test.ts`**.
+- Imports a route handler (`import { GET } from "@/app/api/.../route"`), builds a `Request`/`NextRequest`, calls the handler, and asserts on its `Response` — with MSW intercepting fetches to the NestJS API → **`*.integration.test.ts`**.
+- Drives the full app in a real browser (navigation, forms, assertions on rendered DOM) → **`*.e2e-spec.ts`** under `tests/`.
+
+A file that hits the real NestJS API over the network **must not** exist in this project. If you find yourself wanting one, write an `*.e2e-spec.ts` (Playwright drives the running app, which talks to whatever API is wired) or an `*.integration.test.ts` with MSW handlers — never a Vitest test that opens a real connection to `nestjs-api`.
+
+### Route Handler + MSW pattern
+
+For every test under `app/api/**/__tests__/*.integration.test.ts`:
+
+1. Import the handler directly from the route module — `import { GET, POST } from "@/app/api/.../route"`.
+2. Construct a `Request` (or `NextRequest`) with the URL, method, headers, and body the handler expects, then `await` the handler.
+3. `msw/node` — configured **once** in Vitest's `setupFiles` (see `mocks/server.ts`) — intercepts the `fetch` calls the handler makes to the NestJS API and returns fixtures defined in `mocks/handlers.ts` (override per-test with `server.use(...)`).
+4. Assert on the `Response` returned by the handler: status, headers, JSON body.
+
+Why this pattern: it isolates the BFF from the NestJS suite (no cross-project test coupling), is fully deterministic, and runs at unit-test speed. Any change to the NestJS contract is reflected in the fixtures, not by hitting a live service.
+
+### Where MSW lives
+
+By convention, MSW handlers and the `msw/node` server live at the root of `next-frontend/`:
+
+- `mocks/handlers.ts` — the default set of request handlers (one per NestJS endpoint touched by the BFF).
+- `mocks/server.ts` — `setupServer(...handlers)`, imported by Vitest `setupFiles`.
+
+Tests override fixtures per-case via `server.use(http.get(...))` inside `beforeEach` / individual `it` blocks.
+
+### Running tests during development
+
+Run only what is relevant to the change in progress:
+
+```bash
+# Vitest (single file or pattern) — inside the container
+docker compose exec next-frontend npm test -- path/to/file.test.ts
+
+# Playwright (single spec) — inside the container
+docker compose exec next-frontend npm run test:e2e -- tests/foo.e2e-spec.ts
+```
+
+Before declaring a task done, run the full Vitest suite **and** the full Playwright suite, plus `npx tsc --noEmit` and `npm run lint` — see the global [`CLAUDE.md`](../CLAUDE.md) → "Definition of Done (Technical)".
+
+### Status — bootstrap pending
+
+The decisions above are the contract for new tests, but the tooling is not yet wired:
+
+- `vitest` (and `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`) is **not installed** yet.
+- `vitest.config.ts`, `playwright.config.ts`, `mocks/handlers.ts`, `mocks/server.ts` **do not exist** yet.
+- The scripts `test`, `test:watch`, `test:e2e` are **not** in `package.json` — running them today fails.
+
+A separate bootstrap task will install Vitest, add the config files, wire MSW into `setupFiles`, and add the npm scripts. Until that lands, do not invent these commands — flag the gap instead.
 
 ## Stack Summary
 
@@ -120,16 +188,21 @@ Next.js App Router with React Server Components, TypeScript strict, React 19, Ta
 
 ```
 next-frontend/
-├── app/                      # Next.js App Router (routes, layouts, pages)
-│   ├── globals.css           # Tokens + @theme inline + base layer
-│   ├── layout.tsx            # Root layout (fonts wired here)
-│   └── <route>/page.tsx
+├── app/                              # Next.js App Router (routes, layouts, pages)
+│   ├── globals.css                   # Tokens + @theme inline + base layer
+│   ├── layout.tsx                    # Root layout (fonts wired here)
+│   ├── <route>/page.tsx
+│   └── api/<route>/__tests__/        # Route handler integration tests (*.integration.test.ts)
 ├── components/
-│   ├── ui/                   # shadcn primitives — ONLY add via shadcn CLI
-│   └── icons/                # Custom SVG icon components
+│   ├── ui/                           # shadcn primitives — ONLY add via shadcn CLI
+│   ├── icons/                        # Custom SVG icon components
+│   └── <feature>/__tests__/          # Component unit/integration tests (*.test.ts | *.integration.test.ts)
 ├── lib/
-│   └── utils.ts              # `cn(...)` helper (clsx + extended tailwind-merge)
-└── components.json           # shadcn config (do not edit by hand)
+│   ├── utils.ts                      # `cn(...)` helper (clsx + extended tailwind-merge)
+│   └── __tests__/                    # Utils tests (*.test.ts)
+├── mocks/                            # MSW handlers + server (msw/node) — loaded by Vitest setupFiles
+├── tests/                            # Playwright e2e tests (*.e2e-spec.ts)
+└── components.json                   # shadcn config (do not edit by hand)
 ```
 
 Path aliases live in `tsconfig.json` and `components.json` — `@/components`, `@/components/ui`, `@/components/icons`, `@/lib`, `@/lib/utils`, `@/hooks` (create when first hook is added).
