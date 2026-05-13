@@ -100,11 +100,18 @@ Next.js 16 App Router with React 19 Server Components by default. Routes, layout
 
 ### Talking to the NestJS API
 
-Today the `next-frontend/` and `nestjs-project/` Docker Compose stacks are **separate** — they do not share a network. Implications:
+This project follows a **strict BFF model**: the browser never talks to the NestJS API directly. All client traffic flows through same-origin Route Handlers under `app/api/**`, which then proxy to the upstream NestJS API server-side. This eliminates CORS, keeps the backend URL out of the client bundle, and gives a single integration surface for MSW-based BFF tests.
 
-- **From the browser (client components):** call the API at **`http://localhost:3000`** (the host-exposed port of `nestjs-api`).
-- **From the server (RSC, route handlers, server actions) inside the container:** the container cannot reach `localhost:3000` of the host. A shared Compose network or `host.docker.internal` will be required — **to be defined** when the first server-side integration lands.
-- **Env var convention (planned):** `NEXT_PUBLIC_API_URL` for client-side reads, `API_URL` for server-side reads. Treat these as the conventional names; concrete values are not prescribed yet.
+- **From the browser (Client Components):** fetch from same-origin Route Handlers only (e.g., `fetch("/api/videos")`). Direct calls to the NestJS API from the browser are forbidden.
+- **From the server (Route Handlers, RSC, Server Actions):** read the upstream URL from `env.API_URL` (see `lib/env.ts`) and fetch from there. The Route Handler is the only layer that knows the backend address.
+
+**Env var convention — single key, server-only:**
+
+- `API_URL` — the upstream NestJS base URL. **Server-only**: validated and exposed via `lib/env.ts` (`@t3-oss/env-nextjs` + Zod 4). Accessing `env.API_URL` from a Client Component throws at runtime. There is **no** client-exposed (`NEXT_PUBLIC_*`) variant for the backend URL, and there must not be one — introducing a public backend URL would defeat the BFF model.
+- `lib/env.ts` is the **source of truth** for environment variable reads in `next-frontend/`. Feature code MUST import `env` from `@/lib/env` rather than reading `process.env.X` directly (the only exceptions are `lib/env.ts` itself and non-Next contexts that explicitly bootstrap env via `loadEnvConfig(process.cwd())` from `@next/env`).
+- See `.env.example` for the canonical key set and `lib/env.ts` for the `createEnv({ server, client, shared, ... })` schema.
+
+The concrete value of `API_URL` depends on Docker Compose topology (e.g., `http://nestjs-api:3000` on a shared Compose network vs `http://host.docker.internal:3000` from a separate stack). The stacks are currently separate — networking integration is deferred to its own infra task; in the meantime, `.env.local` carries whichever value the local environment can reach.
 
 Media streaming will eventually come from Object Storage (S3/MinIO) — TBD.
 
