@@ -163,20 +163,11 @@ docker compose exec next-frontend npm test -- path/to/file.test.ts
 docker compose exec next-frontend npm run test:e2e -- tests/foo.e2e-spec.ts
 ```
 
-### Status — bootstrap pending
+### MSW + Vitest — wired
 
-The decisions above are the contract for new tests, but the tooling is not yet wired:
+Vitest roda em `environment: "node"` e carrega `mocks/setup.ts` via `setupFiles`; MSW sobe com `onUnhandledRequest: "error"` — qualquer `fetch` não interceptado falha o teste com `"request unhandled"`. Layout de `mocks/` (handlers por domínio + barrel, factories, server).
 
-- `vitest` (and `@testing-library/react`, `@testing-library/jest-dom`, `jsdom`) is **not installed** yet.
-- `vitest.config.ts`, `playwright.config.ts`, `mocks/handlers.ts`, `mocks/server.ts` **do not exist** yet.
-- The scripts `test`, `test:watch`, `test:e2e` are **not** in `package.json` — running them today fails.
-
-A separate bootstrap task (`next-frontend-msw-foundation`) will install Vitest, add the config files, wire MSW into `setupFiles`, and add the npm scripts. Until that lands, do not invent these commands — flag the gap instead.
-
-**Already decided** (the bootstrap task inherits these — no re-research needed):
-
-- The **MSW handler typing convention** above (`paths`-anchored fixtures; hand-written only; no auto-generation) is locked by `next-frontend-openapi-typing/TD-05`. `next-frontend-msw-foundation` adopts it byte-verbatim when it bootstraps `mocks/handlers.ts` + `mocks/server.ts`.
-- `lib/api/types.gen.ts` (the source of `paths`) is already committed and kept fresh by the CI workflow at `.github/workflows/openapi-freshness.yml` (per `next-frontend-openapi-typing/TD-03`).
+Playwright ainda não está wired — `test:e2e` é intencionalmente ausente e será uma tarefa separada.
 
 ## Stack Summary
 
