@@ -33,6 +33,72 @@ Controllers are the HTTP layer — they must follow the REST. When editing a con
 - Use plural nouns in `@Controller('resources')` — e.g., `@Controller('users')`, not `@Controller('user')`
 - Nest sub-resources: `@Controller('channels/:channelId/videos')`
 
+## OpenAPI Documentation
+
+Every controller must be documented with `@nestjs/swagger` decorators. A PR that adds or modifies an endpoint without OpenAPI annotations is incomplete — the exported `openapi.json` is the contract consumed by the Next.js frontend, and an undocumented endpoint silently degrades it.
+
+### At the class level
+
+Annotate the controller with `@ApiTags('resource')`, using the same plural noun as `@Controller(...)`:
+
+```typescript
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController { ... }
+```
+
+### At the method level
+
+Each handler must declare:
+
+- `@ApiOperation({ summary, description })` — short `summary`, `description` explaining the effect of the call.
+- One `@ApiResponse` for the success status (with `schema` when there is a body).
+- One `@ApiResponse` for **each** predictable error status the endpoint can produce (400, 401, 403, 404, 409, …).
+
+```typescript
+@Post('register')
+@ApiOperation({
+  summary: 'Register a new user',
+  description: 'Creates a new user account and sends an email confirmation link.',
+})
+@ApiResponse({
+  status: 201,
+  description: 'User registered successfully',
+  schema: {
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      email: { type: 'string', format: 'email' },
+    },
+  },
+})
+@ApiResponse({
+  status: 409,
+  description: 'Email already registered',
+  schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+})
+```
+
+### Error responses use the shared envelope
+
+Error responses must reference the shared `ApiErrorEnvelope` DTO (`nestjs-project/src/common/openapi/api-error-envelope.dto.ts`) via `getSchemaPath(ApiErrorEnvelope)`. Do not invent ad-hoc error shapes and do not inline error schemas — every endpoint in the API returns the same error envelope, and the documentation must reflect that.
+
+`204 No Content` responses carry no body, so they must not declare a `schema`.
+
+### Authenticated endpoints
+
+Protected handlers (those without `@Public()`) must include `@ApiBearerAuth('access-token')` so Swagger UI offers the Authorize button and includes the `Authorization: Bearer …` header in try-it-out calls. Methods marked `@Public()` must **not** carry `@ApiBearerAuth` — that would falsely advertise the endpoint as requiring auth.
+
+```typescript
+@Get('me')
+@ApiBearerAuth('access-token')
+@ApiOperation({ summary: 'Get current user', ... })
+me(@CurrentUser() user: JwtPayload): JwtPayload { ... }
+```
+
+### Canonical example
+
+`nestjs-project/src/auth/auth.controller.ts` is the reference implementation of the convention above — when in doubt about how to combine these decorators, mirror it.
+
 ## Error Handling
 
 ## Never Swallow Errors
