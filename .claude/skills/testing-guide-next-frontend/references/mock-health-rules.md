@@ -2,61 +2,34 @@
 
 # Mock Health Rules
 
-The boundary principle from the universal fundamentals, translated to this project's stack.
+## The boundary principle (project-specific)
 
-## Mock across architecturally significant boundaries, not within
+Mock **across architecturally significant boundaries, not within**. In `next-frontend` there are exactly three things you mock — everything else stays real:
 
-For `next-frontend`, the boundaries are:
+1. **The upstream NestJS fetch** — via `msw/node` (Vitest) or server-side MSW (E2E). Never `vi.mock`/`vi.fn` on global `fetch` or on `@/lib/api/upstream`. MSW catches URL/method/header/body mistakes that a stub would silently pass.
+2. **`next/navigation` hooks** (`useRouter`, `usePathname`, `useSearchParams`) — they have **no Node implementation** and throw outside the Next runtime, so they must be mocked when a *unit-rendered client component/hook* uses them. This is the one "no real implementation exists" mock.
+3. **Irreversible side effects** with no test double (analytics, external SDK `track()`) — mock to assert the observable call. `router.push` falls under #2's mock.
 
-| Boundary | How to fake it | Why |
-|---|---|---|
-| `fetch` to the NestJS API | **MSW** (`msw/node`) | The single sanctioned NestJS fake. Captures URL, method, headers, body. |
-| `fetch` to any external HTTP API | **MSW** | Same reasoning. |
-| `next/navigation` hooks (`useRouter`, `usePathname`, `useSearchParams`) | **`vi.mock("next/navigation", …)`** per test file | These hooks have no Node implementation and throw outside the Next runtime. There is no alternative. |
-| `next/navigation`'s `redirect()` / `notFound()` functions | `vi.mock` with partial override (`{ ...orig, redirect: vi.fn() }`) | They throw special signals that break test assertions. Mock only the function being invoked. |
-| `next/headers` (`cookies()`, `headers()`) in server actions / route handlers | Test-time helper that injects via `Request` headers; or `vi.mock` when called directly | Some code reads these helpers instead of the `Request`. Mock to control the value under test. |
-| Analytics / tracking SDK calls (e.g., a future `track(...)`) | `vi.fn` for the module | Side-effect external systems — same rule as email in the universal table. |
-| Browser APIs not in jsdom/happy-dom (e.g., `IntersectionObserver`, `ResizeObserver`) | Polyfill via `vitest.setup.ts` or `vi.stubGlobal` | Test environment limitation, not a real boundary. |
+Everything else is **real**: owned components (`<BrandLogo>`, `<AuthFooter>`), `cn()`, `cva` variants, `next/image`, `next/link`, `next/font`, the Zod `env` schema, the `openapi-fetch` `upstream` client, design tokens. These are *configured dependency contracts* — mocking them hides whether you wired them correctly.
 
-## What to use real
+## Litmus test
 
-| Thing | Why real |
-|---|---|
-| `next/image`, `next/link` | Their rendered output is the contract — assertions should see the real `<img>`/`<a>`. |
-| `next/font` | Generated `className` is part of the rendered tree. |
-| `cn(...)` from `@/lib/utils` | Configured-library function. Mocking it hides class merging bugs. |
-| `cva` / `class-variance-authority` | Same — configured library. |
-| shadcn primitives (`<Button>`, `<Card>`, `<Input>`, `<Label>`) | Owned UI; rendering them inside a feature/page test proves the composition works. |
-| Icons from `@/components/icons/*` | Pure SVG components; render them as-is. |
-| `@/lib/utils`'s `extendTailwindMerge` config | Configured-library data; not behavior to mock. |
+Can you state the **observable behavior** this test validates without referencing a mock interaction? If the only assertion is "`fn` was called with X" and nothing the user perceives changed, it's a wiring test — delete it or rewrite it around a consequence (a rendered error, a redirected URL, a returned status).
 
-## The litmus test
+## Too-many-mocks smell
 
-Can you describe what observable behavior this test validates without referencing mock interactions?
+If a test needs to mock owned components or stub `upstream` to set up, the design is wrong:
+- Wanting to mock `<BrandLogo>` to test `<LoginPage>` → render them together; the mock boundary is the fetch, not the child.
+- Wanting to stub `upstream` in a route-handler test → use MSW; that's exactly the boundary the integration test exists to exercise.
+- A client-component test drowning in mocks → the component is doing too much; split the logic into a hook/util and unit-test that.
 
-- ✅ "Submitting a valid login navigates the user to `/`" — observable.
-- ❌ "Submitting calls `pushMock` with `'/'`" — mock-interaction-only. Reword as observable behavior; the assertion stays the same but the test's *purpose* is the user-visible navigation, not the mock call.
+## Framework-specific mocking patterns (Vitest 4)
 
-When the answer is mock-interactions-only, you're either testing wiring (delete the test) or you're missing an integration test (escalate to MSW or Playwright).
+- `vi.mock("next/navigation", () => ({ useRouter: () => ({ push }), usePathname: () => "/x", useSearchParams: () => new URLSearchParams() }))` — hoisted; declare the `push = vi.fn()` with `vi.hoisted(...)` if you reference it in the factory, or assign inside and import after.
+- Prefer **MSW over `vi.mock`** for anything network. `vi.spyOn` only for asserting an owned side-effect call that has no observable rendering.
+- `vi.resetModules()` + dynamic `import()` for modules that memoize at import (e.g., `@/lib/env`, or a route handler that reads env at module load — see the gotchas note on MSW + dynamic import).
+- Do **not** stub global `fetch` — MSW owns the network boundary.
 
-## When you need too many mocks
+## Mirror-test prohibition
 
-If a single Vitest test sets up 4+ mocks (next/navigation, fetch handlers, cookies, analytics, …), one of two things is true:
-
-1. The unit under test crosses too many boundaries — split it.
-2. The test should be an integration or E2E test instead. Move it.
-
-Don't keep stacking mocks. Each extra mock is one more place the test diverges from real behavior.
-
-## Forbidden moves
-
-- ❌ `vi.mock("@/components/ui/button")` — never mock owned UI primitives.
-- ❌ `vi.mock("@/lib/utils")` — never mock `cn`.
-- ❌ `vi.mock("next/link")` / `vi.mock("next/image")` — never mock framework primitives.
-- ❌ `globalThis.fetch = vi.fn()` in a BFF test — MSW exists exactly to replace this. Raw `fetch` mocks hide URL/method mistakes.
-- ❌ `vi.mock` on the route handler module itself when testing a component that calls it via `fetch` — let MSW intercept the request instead.
-
-## Allowed but scoped
-
-- `vi.stubGlobal("IntersectionObserver", ...)` — only for browser APIs missing from happy-dom, registered in `vitest.setup.ts`.
-- `vi.useFakeTimers()` — only when the unit under test owns timer logic; restore in `afterEach`.
+`expect(el).toHaveClass("bg-primary")`, `expect(svg).toContainHTML("<path d=...")`, asserting a `cva` variant→class map, or copying a route handler's return literal into the expectation — all mirror tests. Assert role, accessible name, `aria-*`, `data-slot`/`data-variant`, returned status/body shape instead.

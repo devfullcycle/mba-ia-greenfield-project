@@ -1,103 +1,28 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# External System Strategy
+# External Systems — Real vs Fake
 
-`next-frontend` depends on these external systems. Each row is fixed by the project's CLAUDE.md and must not be overridden per-test without a written reason.
+`next-frontend` has exactly one live external dependency it owns the contract with: the **NestJS upstream API**. Object Storage is deferred. The browser never talks to either directly (strict BFF model).
 
-| External system | Vitest strategy | Playwright strategy | Why |
+| External system | Strategy | Mechanism | Why |
 |---|---|---|---|
-| **NestJS API** (`nestjs-api` / `API_URL`) | **MSW (`msw/node`) intercepting `fetch`.** No real network calls. | Drives the running app; the app talks to whatever NestJS instance is wired (typically a real container in the same Compose stack). | The Vitest suite must be deterministic, isolated from the NestJS test suite, and runnable without the backend up. The HTTP contract is captured in `mocks/handlers.ts` and overridden per-test with `server.use(...)`. Playwright proves the real wire still works. |
-| **Object Storage (S3/MinIO)** | Fake — when a route handler or hook calls a storage SDK directly, MSW intercepts the HTTP request to the storage endpoint or `vi.mock` the SDK module. | Use a real MinIO container in the Compose stack when E2E covers an upload/playback flow; otherwise fake via a fixture URL. | Real S3 has cost and network flakiness. MinIO in Docker is fine. |
-| **Future external HTTP APIs** | Fake via MSW. | Fake via Playwright's `page.route(...)` mocking when the API is not safe to hit. | Rate limits, cost, flakiness. |
-| **Email (SMTP)** | This concern lives in the NestJS API, not `next-frontend`. No setup here. | — | — |
-| **Browser cookies / `localStorage`** | jsdom/happy-dom provides them; no extra setup. | Use Playwright's `storageState` for authenticated runs (`auth.setup.ts`). | Built-in tooling is enough. |
+| **NestJS upstream API** (reached via `lib/api/upstream.ts`) | **Fake** | Vitest: `msw/node` (`mocks/server.ts` + `mocks/setup.ts`). E2E: server-side MSW booted by `instrumentation.ts` when `MSW_ENABLED=true`. | The upstream has its own test suite; hitting it from `next-frontend` tests would be slow, flaky, cross-project-coupled, and non-deterministic. |
+| **Object Storage (S3/MinIO)** | **Fake (deferred)** | Not wired (no media features yet). When added: in-memory/local emulator, never a real bucket. | Network + cost + flakiness; nothing to test until a media feature exists. |
+| **Same-origin `/api/**` Route Handlers** | **Real** in E2E; **as functions** in Vitest integration | E2E: real handlers run server-side in the containerized app. Vitest: imported and called directly. | The BFF logic IS the unit under test — never fake it; only fake what it calls (upstream). |
 
-## MSW: where it lives, how it loads
+## The MSW boundary — non-negotiable
 
-Per `next-frontend/CLAUDE.md`:
+- **No Vitest test may open a real network connection to the upstream host.** `mocks/setup.ts` runs `server.listen({ onUnhandledRequest: "error" })` — any unintercepted fetch fails with `"request unhandled"`. That error is the contract-coverage signal; do not weaken it to `"warn"`/`"bypass"` in Vitest.
+- **`onUnhandledRequest` differs by runtime:** `"error"` in `mocks/setup.ts` (Vitest), **`"bypass"`** in `instrumentation.ts` (E2E, so Next's own internal requests pass through). Never copy `"error"` into `instrumentation.ts`, never copy `"bypass"` into `mocks/setup.ts`.
+- **One handler per `(method, path)` from OpenAPI `paths`.** Per-domain modules: `mocks/handlers/<domain>.ts` (e.g., `auth.ts`), one barrel line in `mocks/handlers/index.ts`, factories in `mocks/factories/<domain>.ts`. Every endpoint a BFF handler hits MUST have a hand-written handler before its integration test can run.
+- **Fixture bodies are typed via `paths`.** Modules under `mocks/` are the documented exception to the "only `contracts.ts` imports `paths`" rule (`.claude/rules/next-frontend-msw-mocks.md`). A stale fixture fails `tsc --noEmit` after `types.gen.ts` regenerates.
+- **Compose URLs as `${env.API_URL}/...`.** Never hardcode the upstream host — the handler must match whatever the BFF actually calls in the test runtime.
+- **Per-test deviations via `server.use(...)`** inside `beforeEach`/`it`; `afterEach(() => server.resetHandlers())` (already in `mocks/setup.ts`) prevents leakage.
 
-```
-mocks/
-├── handlers.ts   # Default request handlers — one per NestJS endpoint touched by the BFF
-└── server.ts     # setupServer(...handlers) — imported by Vitest setupFiles
-```
+## E2E reserved-trigger fixtures (no per-test overrides)
 
-`mocks/server.ts` (template — write when bootstrap lands):
+E2E shares the **same** `mocks/` handler set as Vitest — no E2E-only fork, no `server.use()` at runtime, no `tests/handlers/`. Per-scenario outcomes come from a small **reserved trigger table** baked into the shared handlers (e.g., `email: "conflict@example.com"` → 409, `"badrequest@example.com"` → 400, else success). Trigger values **must not collide** with Vitest fixture values. Keep the table small. E2E specs **MUST NOT** `page.route()` or browser-intercept `/api/**` (it short-circuits the real Route Handlers) and **MUST NOT** reach a real NestJS API.
 
-```ts
-import { setupServer } from "msw/node"
-import { handlers } from "./handlers"
+## Factories
 
-export const server = setupServer(...handlers)
-```
-
-`mocks/handlers.ts` (template):
-
-```ts
-import { http, HttpResponse } from "msw"
-
-const API_URL = process.env.API_URL ?? "http://api.test"
-
-export const handlers = [
-  http.post(`${API_URL}/auth/login`, () =>
-    HttpResponse.json({ accessToken: "test-token" })
-  ),
-  // Add one entry per NestJS endpoint touched by the BFF
-]
-```
-
-`vitest.config.ts` (template — relevant parts only):
-
-```ts
-import { defineConfig } from "vitest/config"
-import react from "@vitejs/plugin-react"
-import path from "node:path"
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "happy-dom",
-    setupFiles: ["./vitest.setup.ts"],
-    globals: false,
-    css: false,
-  },
-  resolve: {
-    alias: { "@": path.resolve(__dirname, ".") },
-  },
-})
-```
-
-`vitest.setup.ts` (template):
-
-```ts
-import "@testing-library/jest-dom/vitest"
-import { afterAll, afterEach, beforeAll } from "vitest"
-import { server } from "./mocks/server"
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
-afterEach(() => server.resetHandlers())
-afterAll(() => server.close())
-```
-
-> `onUnhandledRequest: "error"` is the safety rail: any `fetch` the BFF makes to an URL not declared in `handlers.ts` (or overridden via `server.use(...)`) throws, surfacing missing fixtures immediately. Without it, MSW would silently let the request through to the network — exactly the failure mode CLAUDE.md forbids.
-
-## API_URL — single source of truth
-
-Tests must read the NestJS base URL from the same env var the BFF uses (`API_URL` for server-side reads, per `next-frontend/CLAUDE.md`). Hardcoding `http://localhost:3000` inside fixtures or tests creates drift:
-
-```ts
-// ✅
-const API_URL = process.env.API_URL ?? "http://api.test"
-http.post(`${API_URL}/auth/login`, …)
-
-// ❌ hardcoded — diverges from production wiring
-http.post("http://localhost:3000/auth/login", …)
-```
-
-Set `API_URL` in `vitest.config.ts`'s `test.env` or in a `.env.test` file once.
-
-## Playwright: where the real NestJS sits
-
-Playwright runs against `npm run build && npm run start`. The Next.js app's server-side `fetch` calls reach whatever `API_URL` resolves to at runtime — typically the `nestjs-api` container. When the NestJS stack is unavailable, Playwright tests for flows that depend on it must be skipped (`test.skip`), not faked at the Playwright layer. Faking belongs in Vitest+MSW.
-
-If you need to assert UI behavior independent of NestJS state (e.g., error toast on 500), use Playwright's `page.route` to mock the BFF response for that single test — but prefer to cover that branch in Vitest+MSW first, since it's faster and more isolated.
+Hand-written deterministic factories in `mocks/factories/<domain>.ts`: each shape exports `buildX(overrides?: Partial<X>): X` composing a hand-coded `baseX: X` literal (typed off `@/lib/api/contracts` or `paths`) with overrides. `@faker-js/faker` is opt-in, scoped to bulk-collection builders only, with a local `faker.seed(N)` immediately before generation — it is not installed at foundation (the first `buildXList` triggers the install).

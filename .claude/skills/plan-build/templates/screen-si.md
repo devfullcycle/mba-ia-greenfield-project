@@ -154,7 +154,7 @@ The Xb header MUST include `**Test Specs:** _pending /plan-test-specs_` between 
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `components/{feature}/{form-or-client-component}.tsx` | Unit per testing-guide-{subproject} § "Client Components" — submit happy path, Error Catalog UX mapping per row, client-side validation pre-submit | `tests/unit/components/{feature}/{name}.spec.tsx` |
+| `components/{feature}/{form-or-client-component}.tsx` | Unit per testing-guide-{subproject} § "Client Components" — submit happy path, Error Catalog UX mapping per row, client-side validation pre-submit | `{test-file}` |
 
 E2E for the page (auth guard redirects, page-level routing, full user flows) is authored externally by `/plan-test-specs` in the spec file referenced by `**Test Specs:**` above and consumed JIT by `/implement` Step 3. /plan-build does NOT emit E2E rows here. Page-level Unit testing is excluded by `testing-guide-{subproject}` artifact rule "Pages → E2E only" (technical constraint: pages render in Node, not jsdom).
 

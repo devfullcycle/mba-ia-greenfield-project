@@ -211,13 +211,13 @@ Emit SIs in this order (alphabetical by `path` within each group):
 
 **Technical actions:**
 
-1. Author `<frontend-subproject>/tests/unit/components/ui/<name>.spec.tsx` per primitive (≤5 files per SI; auto-split into SI-NN.0.3 etc. when >5).
+1. Author `{test-file}` per primitive (≤5 files per SI; auto-split into SI-NN.0.3 etc. when >5).
 
 **Tests:**
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `<name>.tsx` | Unit per testing-guide-{subproject} § "UI Primitives" — variants, a11y, data-slot, event handlers | `<frontend-subproject>/tests/unit/components/ui/<name>.spec.tsx` |
+| `<name>.tsx` | Unit per testing-guide-{subproject} § "UI Primitives" — variants, a11y, data-slot, event handlers | `{test-file}` |
 | ... | ... | ... |
 
 **Dependencies:** SI-NN.0.1
@@ -245,7 +245,7 @@ Emit SIs in this order (alphabetical by `path` within each group):
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `<name>.tsx` | Unit per testing-guide-{subproject} § "UI Primitives" + custom-logic — variants, a11y, data-slot, event handlers, logic branches | `<frontend-subproject>/tests/unit/components/ui/<name>.spec.tsx` |
+| `<name>.tsx` | Unit per testing-guide-{subproject} § "UI Primitives" + custom-logic — variants, a11y, data-slot, event handlers, logic branches | `{test-file}` |
 
 **Dependencies:** none
 
@@ -276,7 +276,7 @@ D-simple — group by 5-cap (Actions + Tests):
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `<name1>.tsx` | Unit per testing-guide-{subproject} § "Client Components" | `<frontend-subproject>/tests/unit/components/<feature>/<name1>.spec.tsx` |
+| `<name1>.tsx` | Unit per testing-guide-{subproject} § "Client Components" | `{test-file}` |
 | ... | ... | ... |
 
 **Dependencies:** none
@@ -304,7 +304,7 @@ D-complex — 1 SI cada (signal-keyword Notes):
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `<name>.tsx` | Unit per testing-guide-{subproject} § "Client Components" baseline | `<frontend-subproject>/tests/unit/components/<feature>/<name>.spec.tsx` |
+| `<name>.tsx` | Unit per testing-guide-{subproject} § "Client Components" baseline | `{test-file}` |
 | `<name>.tsx` | Unit: {scoring | state | toggle} assertions per Notes signal | (same file) |
 
 **Dependencies:** none
@@ -520,8 +520,8 @@ Follow the shape below literally — Portuguese prose, English identifiers, per-
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `{EntityName}` | Integration: constraints, defaults | `{entity}.entity.spec.ts` |
-| `{ServiceName}` | Unit: branch logic (mock repo) | `{service}.spec.ts` |
+| `{EntityName}` | Integration: constraints, defaults | `{test-file}` |
+| `{ServiceName}` | Unit: branch logic (mock repo) | `{test-file}` |
 
 **Dependencies:** none _(ou: SI-NN.1 — razão)_
 
@@ -568,7 +568,7 @@ Three categories receive the placeholder; everything else does NOT.
 **UI Contract:** see `## Technical Specifications` → ...
 ```
 
-**2. SI plain de controller wiring backend** (with `**Route:** <METHOD> /...`) — placed between `**Route:**` and the next field below it (typically `**Authorization:**`):
+**2. SI plain de controller wiring backend** (with `**Route:** <METHOD> /...`) — placed between `**Route:**` and the next field below it (typically `**Authorization:**`). **Scoped to *backend* controller wiring only — this category EXCLUDES frontend BFF Route Handler SIs.** A BFF Route Handler SI is identified by its `**Route:**` being an **FE-facing path that appears as a `#### {METHOD} {path}` heading under the `### API Contracts` BFF tier** (the block carries `**forwards-to:**`), and/or its Technical actions citing `` `### API Contracts` → BFF tier `` (corroborating artifact: `app/api/**/route.ts`). Such SIs own an **inline MSW integration test**, not an external E2E spec, so they fall under the exclusion list below — never emit the placeholder on them (this supersedes the prior manual pre-`/implement` strip):
 
 ```markdown
 ### SI-NN.X — Endpoint POST /auth/register
@@ -588,7 +588,7 @@ Three categories receive the placeholder; everything else does NOT.
 **Test Specs:** _pending /plan-test-specs_
 ```
 
-**SI-Xa (visual shell), SIs Xa-only (Decisão #33), drift audit-SIs (`SI-NN.X.0`), backend service SIs, schemas, providers, frontend runtime SIs (via `templates/frontend-runtime-si.md`) DO NOT receive the placeholder** — they have no server-connected behavior to E2E.
+**SI-Xa (visual shell), SIs Xa-only (Decisão #33), drift audit-SIs (`SI-NN.X.0`), backend service SIs, schemas, providers, frontend runtime SIs (via `templates/frontend-runtime-si.md`), and frontend BFF Route Handler SIs (FE-facing `**Route:**` keyed to a `### API Contracts` BFF-tier `#### {METHOD} {path}` block carrying `**forwards-to:**`, and/or Technical actions citing `### API Contracts → BFF tier`; corroborating artifact `app/api/**/route.ts`) DO NOT receive the placeholder** — none of them have an externally-authored E2E spec. A BFF Route Handler SI nonetheless **owns behavior tests**: per § "Tests entries — drop E2E rows for SIs with `**Test Specs:**`" it keeps its **inline Integration / MSW Tests-table row** (`route.integration.test.ts` per `testing-guide-{frontend-subproject}`) and emits **no** E2E row — there is no E2E row to drop and no external spec to author. Consequently `/plan-test-specs` ignores it (no `_pending_` marker to find) and `/implement` preflight does not gate on it (no `**Test Specs:**` field present), end-to-end, with no manual intervention.
 
 **Defensive note for `/plan-test-specs`:** if a future bug introduces `**Test Specs:**` on an audit-SI, `/plan-test-specs`'s discriminator fall-through case (currently described as "plain `SI-NN.X` sem letra") should also enumerate the `SI-NN.X.0` shape and abort with the same actionable message — preventing silent misclassification. The audit-SI category is excluded from emit by construction here; the defensive check exists only as a guard against accidental re-introduction.
 
@@ -620,7 +620,7 @@ Prior to this migration, `/plan-build` emitted Tests entries like:
 | E2E `/signup` | E2E (Playwright + MSW): preencher form... | tests/e2e/signup.spec.ts |
 ```
 
-For Xb / controller wiring / cross-layer SIs (the same three categories that receive the `**Test Specs:**` placeholder), **do NOT emit E2E Tests entries**. The E2E scenarios are authored externally by `/plan-test-specs` in the spec file referenced by `**Test Specs:**`. Unit / Integration / MSW handler test entries continue to be emitted inline as table rows in **SIs that own behavior tests** — Xb, controller wiring, cross-layer, FR Migration, FR Verification, backend SIs, and bootstrap Groups B/C/D. **SIs that don't own behavior tests** — SI-Xa (single-owner invariant: Xb owns the Unit table for the screen's Client Components), Infra SIs, FR Setup SIs, bootstrap Group A — emit the empty form `_(empty — <reason>)_` per the "Tests format invariant" above instead of inline rows.
+For Xb / controller wiring / cross-layer SIs (the same three categories that receive the `**Test Specs:**` placeholder), **do NOT emit E2E Tests entries**. The E2E scenarios are authored externally by `/plan-test-specs` in the spec file referenced by `**Test Specs:**`. Unit / Integration / MSW handler test entries continue to be emitted inline as table rows in **SIs that own behavior tests** — Xb, controller wiring, cross-layer, FR Migration, FR Verification, backend SIs, bootstrap Groups B/C/D, **and frontend BFF Route Handler SIs** (carved out of the placeholder per § "Which SIs receive the placeholder" — they own an inline Integration/MSW row and never carried an E2E row, so the E2E-drop above is a no-op for them). **SIs that don't own behavior tests** — SI-Xa (single-owner invariant: Xb owns the Unit table for the screen's Client Components), Infra SIs, FR Setup SIs, bootstrap Group A — emit the empty form `_(empty — <reason>)_` per the "Tests format invariant" above instead of inline rows.
 
 ### Backwards-compat (planos legacy)
 

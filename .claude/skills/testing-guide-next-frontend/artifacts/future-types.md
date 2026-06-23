@@ -1,79 +1,36 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# Future Artifact Types
+# Future Artifact Types (not yet present — proactive guidance)
 
-This file covers Next.js artifact types **not yet present** in the project. Apply the same layered model as the existing types — fold the new type into the right artifact guide once it appears repeatedly.
+App Router artifact types this project has not introduced yet. When the first instance of one is created, follow the recipe here and, if it warrants its own file, split it out.
 
-## Server Actions (`"use server"` functions)
+## Server Actions (`"use server"` functions / `app/**/actions.ts`)
 
-A server action is a function marked with `"use server"` that the client invokes (typically via a `<form action={...}>` or a programmatic call). It runs on the server, can read cookies/headers, and usually calls the NestJS API.
+- **What to test:** the action's branching + its upstream call. A server action is a server function reachable from the client — its `fetch`/`upstream` call is the system boundary.
+- **Layer:**
+  - **Integration** `*.integration.test.ts` — import the action, call it as a function, MSW intercepts the upstream fetch, assert the returned value / thrown error / `redirect()`.
+  - **E2E** for the form-submit flow it powers (Playwright, per `pages.md`).
+  - **Unit** only for a *pure* helper the action extracts (branching mapper/validator).
+- **Skip:** an action that is a one-line passthrough with no branching beyond the upstream call — the integration test covers it; no separate unit test.
+- **Do NOT:** `vi.mock` the upstream client; use MSW (same boundary discipline as route handlers).
 
-- **What to test**: validation branches, transformation of the NestJS response, error branches (NestJS 4xx/5xx → action throws / returns error state), redirects via `redirect()` from `next/navigation`.
-- **Layer**: `*.integration.test.ts` with MSW for the NestJS contract; full Playwright E2E for the submit flow.
-- **Setup**: import the action like a normal async function and call it with the expected payload. MSW intercepts the `fetch` it makes. Mock `next/navigation`'s `redirect` if the action calls it — `redirect` throws a special error in production that breaks the test assertion otherwise.
+## Middleware (`middleware.ts` at project root)
 
-```ts
-import { vi } from "vitest"
-const redirectMock = vi.fn()
-vi.mock("next/navigation", async (orig) => ({
-  ...(await orig<typeof import("next/navigation")>()),
-  redirect: redirectMock,
-}))
-import { signUp } from "@/app/actions/sign-up"
-```
+- **What to test:** request gating — redirect/rewrite/`NextResponse.next()` decisions based on cookies/path/headers (auth gate, locale).
+- **Layer:** **E2E** (Playwright) — drive a gated vs anonymous request and assert the redirect/rewrite. Edge middleware is not Vitest-renderable; its observable contract is the HTTP outcome.
+  - *Exception:* a pure decision helper extracted from middleware (e.g., `shouldRedirect(req): boolean`) → **Unit** `*.test.ts`.
+- **Skip:** middleware that only sets a benign header with no branching.
 
-## Middleware (`middleware.ts`)
+## `error.tsx` / `loading.tsx` / `not-found.tsx`
 
-Middleware runs in the Edge runtime, sees every matching request, and can rewrite/redirect/inject headers.
-
-- **What to test**: each branch (authenticated → pass through, unauthenticated → redirect, locale negotiation, header injection).
-- **Layer**: a Vitest `*.test.ts` that imports `middleware` and calls it with a `NextRequest` is sufficient for the branch logic. Playwright then validates the *user-visible* redirect on the running app.
-- **Caveat**: middleware uses the Edge runtime — pure-JS branch logic runs fine in Vitest, but Edge-only globals (e.g., `EdgeRuntime`) must be mocked or guarded.
-
-```ts
-import { NextRequest } from "next/server"
-import { middleware } from "@/middleware"
-
-const req = new NextRequest("http://localhost/dashboard")
-const res = await middleware(req)
-expect(res.status).toBe(307)
-expect(res.headers.get("location")).toBe("http://localhost/login")
-```
-
-## `error.tsx`, `loading.tsx`, `not-found.tsx`
-
-Special segment files Next.js renders for error boundaries, loading states, and 404 pages.
-
-- **What to test**: only when they contain real branching (e.g., `error.tsx` showing different messages by error type). Otherwise skip — they are presentational.
-- **Layer**: when worth testing, unit-test as a client component (`error.tsx` is always a client component); otherwise verify visibility via Playwright by simulating the error condition.
-- **`loading.tsx`**: skip — it's a Suspense fallback. The fact that it renders is framework behavior. Test the *transition* (skeleton → content) via Playwright only if it's flow-critical.
+- **What to test:** `error.tsx` only if its reset/recovery has logic (it's a client component — `"use client"`); then unit-test per `client-components.md` (mock `reset`, assert the retry path). `loading.tsx` and `not-found.tsx` are presentational → **skip**; cover the not-found/error *route behavior* via E2E if it's on a critical flow.
+- **Layer:** Unit for `error.tsx` recovery logic; E2E for the route-level boundary behavior; skip pure presentational ones.
 
 ## `metadata` / `generateMetadata`
 
-Exports from a page or layout that set `<title>`, `<meta>`, Open Graph, etc.
+- **What to test:** `generateMetadata` **only** if it branches or fetches to build dynamic SEO/OG values → **Integration** `*.integration.test.ts` (call it as a function, MSW for any upstream fetch, assert the returned `Metadata`).
+- **Skip:** the static `export const metadata = {...}` object (as in `app/layout.tsx`) — framework behavior, no test.
 
-- **What to test**: only when SEO is contract-critical (e.g., a marketing page where the OG tags drive social previews).
-- **Layer**: Playwright — `await page.title()`, `await page.locator('meta[property="og:image"]').getAttribute("content")`.
-- **Skip**: when metadata is static or framework-trivial.
+## General rule for any new type
 
-## Streaming / `Suspense` boundaries
-
-Async data with `<Suspense>` fallbacks in Server Components.
-
-- **What to test**: the user-perceived sequence (fallback first, then content). Vitest cannot render this — Playwright only.
-- **Layer**: Playwright. Use `await expect(page.getByTestId("skeleton")).toBeVisible()` then `await expect(page.getByText(/loaded/)).toBeVisible()`.
-
-## Parallel routes (`@slot/page.tsx`) and intercepting routes (`(.)folder`)
-
-Layout-level routing features.
-
-- **What to test**: the navigation contract — that the right slot renders for the right URL.
-- **Layer**: Playwright only. The Vitest layer has no way to exercise the App Router segment tree faithfully.
-
-## Image / font configuration (`next.config.ts`, `next/image`, `next/font`)
-
-Configuration, not artifacts. Do **not** unit-test. Verify the rendered output via Playwright when a regression would hurt users (broken image, wrong font fallback).
-
-## Cross-reference
-
-When any of these types appears repeatedly in the codebase, promote it to its own `artifacts/<type>.md` file and add a row to `SKILL.md` §4.
+Classify it with §1 Testability Foundations: *Is it async-RSC (→ E2E only)? Does it branch (→ unit)? Does it cross the upstream boundary (→ integration with MSW)? Is it configured-library/presentational (→ skip, cover via consumer/E2E)?* Then add a dedicated `artifacts/<type>.md` and a §4 row in `../SKILL.md` if the project accumulates several instances.

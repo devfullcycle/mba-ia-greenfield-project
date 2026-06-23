@@ -51,7 +51,7 @@ Do NOT read this file when no TD in scope has `Renders in: frontend-runtime` (ex
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `{file}` | Unit / Integration per testing-guide-{subproject} — assert the new pattern is exercised (e.g., `useQuery` hook invoked when component renders, instead of `useEffect`); pre-existing user-visible behavior tests must still pass after refactor | `tests/unit/{path-mirror}/{name}.spec.{ext}` |
+| `{file}` | Unit / Integration per testing-guide-{subproject} — assert the new pattern is exercised (e.g., `useQuery` hook invoked when component renders, instead of `useEffect`); pre-existing user-visible behavior tests must still pass after refactor | `{test-file}` |
 
 **Acceptance criteria:**
 
@@ -82,8 +82,8 @@ Do NOT read this file when no TD in scope has `Renders in: frontend-runtime` (ex
 
 | Artifact | Layer | Test file |
 |----------|-------|-----------|
-| `{pattern-name}` (verification surface) | Integration / E2E per testing-guide-{subproject} — assertions enumerated in Verificação field of the spec; this SI IS the test surface (Technical actions add the test files listed here) | `tests/{integration\|e2e}/{path}/{name}.spec.{ext}` |
-| `{regression-guard-target}` (when Verificação calls one out) | Regression guard per testing-guide-{subproject} | `tests/{integration\|e2e}/{path}/{name}.regression.spec.{ext}` |
+| `{pattern-name}` (verification surface) | Integration / E2E per testing-guide-{subproject} — assertions enumerated in Verificação field of the spec; this SI IS the test surface (Technical actions add the test files listed here) | `{test-file}` |
+| `{regression-guard-target}` (when Verificação calls one out) | Regression guard per testing-guide-{subproject} | `{test-file}` |
 
 **Acceptance criteria:**
 

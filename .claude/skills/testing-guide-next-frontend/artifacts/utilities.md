@@ -1,63 +1,59 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# Utilities (`lib/*.ts`)
+# Utilities & Boundary Modules (`lib/**/*.ts`)
 
-Plain TypeScript helpers — pure functions, classifiers, formatters, validators. The decision rule is the universal Layer Assignment Table: branching → unit test; no branching → skip (configured-library passthrough).
+Plain TS modules under `lib/`. Test only those with **branching logic** or that **encode an assumption about an external system's shape** — pure single-path glue is framework/library behavior and is not worth a unit test.
 
 ## What to test
 
-- **Branching logic**: conditionals, switches, calculations with multiple outcomes, error classifiers.
-- **Boundary/edge cases**: null, empty, max, off-by-one — when the function takes user-supplied or external data.
-- **Security-critical transformations**: HTML escaping, URL/path sanitization, token parsing.
-- **Data integrity**: serialization round-trips, currency math, date arithmetic.
-
-## What NOT to test
-
-- **Single-path passthroughs** that forward to a library. The `cn()` helper in `lib/utils.ts` falls in this bucket — it composes `clsx` and `tailwind-merge`. Trust the libraries.
-- **Mirror tests**: `expect(format("hello")).toBe("HELLO")` where `format` is literally `s.toUpperCase()`. The assertion restates the implementation.
-
-The narrow exception for `cn()`: if the `extendTailwindMerge` config grows non-trivial groups whose correctness encodes a project rule (e.g., a new typography group that must dedupe correctly so `cn("text-h1", "text-h2")` yields `"text-h2"`), one targeted test covering that rule is justified. Add it only when the rule actually exists.
+- **Branching helpers** — functions with conditionals, fallbacks, error handling, or non-trivial transformation.
+- **Configured-dependency contracts** — `lib/env.ts` is a Zod 4 schema: a *contract* about which env vars must exist and their shape. Test that it **rejects** a missing/invalid `API_URL` and **accepts** a valid one. A wrong schema is a runtime boot failure TypeScript cannot catch.
+- **Reshape contracts** — `lib/api/contracts.ts` *reshape* aliases (`Pick`/composed). These are type-level; they are proven by `tsc --noEmit` and by the consumers' tests, not a runtime unit test. A pure pass-through alias needs no test at all.
+- **`tailwind-merge` conflict resolution** — `cn()` extends `tailwind-merge` with the project's custom `font-size` group (`text-display`, `text-h1`, `text-label-md`, …). The *configuration* is the test-worthy part: that two conflicting custom typography utilities dedupe to the last one.
 
 ## Layer assignment
 
-| Utility shape | Vitest `*.test.ts` |
+| Module shape | Layer |
 |---|---|
-| Pure passthrough to library (`cn`) | ❌ skip |
-| Pure function with branching | ✅ one test per branch + edge cases |
-| Function with side effects (logging, storage) | Wrong category — move to a hook or service |
+| Branching / transformation logic | **Unit** `*.test.ts` |
+| `lib/env.ts` Zod schema (accept/reject) | **Unit** `*.test.ts` — exercise the schema, not framework behavior |
+| `cn()` custom `tailwind-merge` group | **Unit** `*.test.ts` — assert conflict resolution for the *custom* groups only |
+| `lib/api/upstream.ts` (just `createClient` + `server-only`) | ❌ no unit test — covered transitively by route-handler integration tests (the client is exercised through MSW there) |
+| `lib/api/contracts.ts` pass-through alias | ❌ no test — `tsc` proves it |
+| Pure single-path glue (no branching) | ❌ no test |
+
+No integration/E2E layer for utilities — they have no system boundary of their own (the boundary is `upstream`, exercised via route-handler integration tests).
 
 ## Setup pattern
 
-`lib/__tests__/<name>.test.ts`:
+`*.test.ts` (no JSX → **no jsdom docblock**, runs under default `node`), colocated in `lib/__tests__/` or `lib/<area>/__tests__/`.
 
 ```ts
-import { describe, it, expect } from "vitest"
-import { formatVideoDuration } from "@/lib/format-video-duration" // hypothetical
+import { describe, expect, it } from "vitest";
+import { cn } from "@/lib/utils";
 
-describe("formatVideoDuration", () => {
-  it("formats seconds under a minute as 0:SS", () => {
-    expect(formatVideoDuration(42)).toBe("0:42")
-  })
+describe("cn() custom tailwind-merge groups", () => {
+  it("dedupes conflicting custom typography utilities to the last", () => {
+    expect(cn("text-label-md", "text-h1")).toBe("text-h1");
+  });
 
-  it("formats hours as H:MM:SS", () => {
-    expect(formatVideoDuration(3661)).toBe("1:01:01")
-  })
-
-  it("returns '0:00' for zero", () => {
-    expect(formatVideoDuration(0)).toBe("0:00")
-  })
-
-  it("clamps negatives to '0:00'", () => {
-    expect(formatVideoDuration(-5)).toBe("0:00")
-  })
-})
+  it("still merges standard tailwind conflicts", () => {
+    expect(cn("px-2", "px-4")).toBe("px-4");
+  });
+});
 ```
+
+For `lib/env.ts`, stub `process.env` within the test, dynamically `import("@/lib/env")` after setting/clearing `API_URL`, and assert the schema throws on invalid and yields the typed object on valid (use `vi.resetModules()` between cases — the module memoizes at import).
 
 ## When to skip
 
-- The utility is a one-liner that forwards arguments to a library.
-- The utility has a single code path and no edge cases.
+- A function with no conditionals and no external-shape assumption (e.g., a one-line formatter) — skip; that's a mirror/single-path test.
+- `upstream.ts` — it is `createClient<paths>({ baseUrl })` with a `server-only` guard; nothing to unit-test. The `server-only` guard's effect (build error in a Client Component) is a build-time concern, not a Vitest test.
+- Pass-through `contracts.ts` aliases — `tsc` is the test.
 
-## Examples from this project
+## Examples from project
 
-- `lib/utils.ts` `cn()` — single-line passthrough to `clsx` + `extendTailwindMerge`. **Skip** until the `extendTailwindMerge` config encodes a non-trivial dedup rule worth pinning.
+- `lib/utils.ts` (`cn`) — **worth testing**: the extended `tailwind-merge` `font-size` group is custom config; test conflict resolution for the custom utilities + a standard-conflict sanity case.
+- `lib/env.ts` — **worth testing**: Zod 4 schema; assert reject-on-missing-`API_URL` and accept-on-valid.
+- `lib/api/upstream.ts` — **skip**: trivial client construction; exercised via route-handler integration tests.
+- `lib/api/contracts.ts` — **skip** until it gains a reshape alias; pass-through aliases are `tsc`-proven.

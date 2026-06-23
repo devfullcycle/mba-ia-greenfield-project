@@ -71,7 +71,6 @@ npm run lint                             # ESLint (eslint-config-next)
 
 npm test                                 # Vitest — unit + integration (run mode)
 npm run test:watch                       # Vitest watch mode (run in background)
-npm run test:e2e                         # Playwright — end-to-end
 
 npx tsc --noEmit                         # Type-check (required before declaring a task done)
 npx shadcn@latest add <component>        # Add a shadcn primitive — respects components.json
@@ -85,11 +84,25 @@ docker compose logs next-frontend
 curl -I http://localhost:3001
 ```
 
+**E2E tests run on the host (not inside any container).** Run them with `npx playwright test`:
+
+```bash
+# Run all E2E tests
+npx playwright test
+
+# Run a specific test file
+npx playwright test tests/smoke.e2e-spec.ts
+
+# Open the HTML report after a run
+npx playwright show-report
+```
+
+
 ## Long-running Processes
 
 Commands that never exit (dev server, watch modes) must be run **in background** in the Bash tool — otherwise the agent blocks indefinitely waiting for the process to return.
 
-This applies to: `npm run dev`, `npm run start`, `npm run test:watch`, `npm run test:e2e -- --ui`, and any other persistent process. After starting the dev server in background, validate with `curl -I http://localhost:3001`.
+This applies to: `npm run dev`, `npm run start`, `npm run test:watch`, and any other persistent process. After starting the dev server in background, validate with `curl -I http://localhost:3001`.
 
 ## Architecture
 
@@ -134,6 +147,7 @@ Stack decisions for this project:
 - **Vitest** for unit and integration tests of pages, components, hooks, utils, and BFF route handlers.
 - **Playwright** for end-to-end tests (full browser flow).
 - **MSW (`msw` + `msw/node`)** as the fake API for BFF tests: route handlers are tested **as functions** — they are imported and called directly, while `msw/node` intercepts the `fetch` calls they make to the NestJS API and returns fixtures. BFF tests **never** point to the real NestJS API.
+- **MSW (`msw/node` via `instrumentation.ts`)** as the fake API for E2E tests: the dev server boots server-side MSW so the **real** `/api/**` Route Handlers run; only their upstream NestJS `fetch` is faked, reusing the `mocks/` handler set (no browser-level/BFF handler set). See "E2E architecture" below.
 
 ## Test type selection — apply mechanically
 
@@ -143,7 +157,7 @@ The suffix is a contract. It drives the runner (Vitest vs. Playwright), where th
 |---|---|---|---|---|
 | `*.test.ts` / `*.test.tsx` | **Unit** — pure logic, collaborators mocked (utils, hooks, a single component in isolation). | Vitest | Forbidden. | `__tests__/` next to the artifact. |
 | `*.integration.test.ts` / `*.integration.test.tsx` | **Integration** — multiple artifacts wired together; route handlers called as functions with `msw/node` intercepting `fetch` to the upstream API. | Vitest | MSW only (no real network). | `__tests__/` next to the artifact. |
-| `*.e2e-spec.ts` | **End-to-end** — full browser flow against a running dev server. | Playwright | Real browser + running app. | `tests/` at the root of `next-frontend/`. |
+| `*.e2e-spec.ts` | **End-to-end** — full browser flow; real `/api/**` run server-side, upstream faked (see "E2E architecture"). | Playwright | server-side MSW via instrumentation — no real network. | `tests/` at root. |
 
 Routing decision tree (apply in order; first match wins):
 
@@ -159,15 +173,57 @@ Run only what is relevant to the change in progress:
 # Vitest (single file or pattern) — inside the container
 docker compose exec next-frontend npm test -- path/to/file.test.ts
 
-# Playwright (single spec) — inside the container
-docker compose exec next-frontend npm run test:e2e -- tests/foo.e2e-spec.ts
+# Playwright (single spec) — on the HOST
+npx playwright test tests/foo.e2e-spec.ts
 ```
+
+### E2E test prerequisites — start the environment before running Playwright
+
+Playwright runs on the **host** and targets the **containerized** dev server. Before running any `*.e2e-spec.ts`, the dev server must be running inside the container with `MSW_ENABLED=true`. Follow these steps in order:
+
+```bash
+# 1. Ensure the container is up (idempotent)
+docker compose up -d
+
+# 2. Start the dev server with MSW enabled — runs in background (never exits)
+docker compose exec -d next-frontend sh -c "MSW_ENABLED=true npm run dev"
+
+# 3. Wait until the server is ready (retries up to ~30 s)
+curl --retry 15 --retry-delay 2 --retry-connrefused -I http://localhost:3001
+
+# 4. Run the E2E suite on the host
+npx playwright test
+
+# Or a single spec
+npx playwright test tests/xxxx.e2e-spec.ts
+```
+
+**Important rules:**
+- Step 2 must use `MSW_ENABLED=true` — without it `instrumentation.ts` skips MSW and upstream calls will fail or hit the real NestJS API.
+- Never add `webServer` to `playwright.config.ts` — Playwright must not manage the dev server process (it runs inside Docker, not on the host).
+- If the dev server is already running from a previous session, skip steps 2–3 and go straight to step 4.
 
 ### MSW + Vitest — wired
 
-Vitest roda em `environment: "node"` e carrega `mocks/setup.ts` via `setupFiles`; MSW sobe com `onUnhandledRequest: "error"` — qualquer `fetch` não interceptado falha o teste com `"request unhandled"`. Layout de `mocks/` (handlers por domínio + barrel, factories, server).
+Vitest roda em `environment: "node"` (default) e carrega `mocks/setup.ts` via `setupFiles`; MSW sobe com `onUnhandledRequest: "error"` — qualquer `fetch` não interceptado falha o teste com `"request unhandled"`. Layout de `mocks/` (handlers por domínio + barrel, factories, server).
 
-Playwright ainda não está wired — `test:e2e` é intencionalmente ausente e será uma tarefa separada.
+### E2E architecture
+
+Real browser → real Next.js (RSC, layouts, real `/api/**` Route Handlers server-side) → upstream NestJS **faked at the server**. Only the NestJS API is fake; real `iron-session` cookies are set, so auth/session flows are genuinely testable.
+
+**Mechanism.**
+
+1. `instrumentation.ts` `register()` — when `NEXT_RUNTIME === "nodejs"` **and** `MSW_ENABLED=true`, dynamically imports `mocks/server.ts` and calls `server.listen({ onUnhandledRequest: "bypass" })`.
+2. Reuses the `mocks/` upstream handlers (same set as Vitest); no browser-level handler set, no `tests/handlers/`.
+3. Per-scenario outcomes via **reserved trigger fixtures** in the shared handlers (e.g. `email: "conflict@example.com"` → 409, `"badrequest@example.com"` → 400; else success). No per-test `server.use()`. Keep the trigger table small.
+4. Playwright runs on the **host** (`npx playwright test`, `http://localhost:3001`); the containerized `next dev` must run with `MSW_ENABLED=true`. No `webServer` in `playwright.config.ts` (dev server is containerized).
+
+**Hard rules.**
+
+- E2E specs **MUST NOT** browser-intercept `/api/**` (`page.route()` or any browser-level mock) — it short-circuits the Route Handlers.
+- E2E specs **MUST NOT** reach a real NestJS API — upstream is always the server-side `mocks/` MSW.
+- Upstream handlers are **shared** with Vitest — no E2E-only fork; per-scenario deviation is a reserved trigger fixture branch, not a runtime override. Trigger values must not collide with Vitest fixture values.
+- `onUnhandledRequest`: `"error"` in Vitest, **`"bypass"`** in instrumentation — never copy `"error"` into `instrumentation.ts`.
 
 ## Stack Summary
 
@@ -189,8 +245,8 @@ next-frontend/
 ├── lib/
 │   ├── utils.ts                      # `cn(...)` helper (clsx + extended tailwind-merge)
 │   └── __tests__/                    # Utils tests (*.test.ts)
-├── mocks/                            # MSW handlers + server (msw/node) — loaded by Vitest setupFiles
-├── tests/                            # Playwright e2e tests (*.e2e-spec.ts)
+├── mocks/                            # MSW handlers + server (msw/node) — loaded by Vitest setupFiles AND instrumentation.ts
+├── tests/                            # Playwright e2e (*.e2e-spec.ts) — real /api/** run; upstream NestJS faked server-side
 └── components.json                   # shadcn config (do not edit by hand)
 ```
 

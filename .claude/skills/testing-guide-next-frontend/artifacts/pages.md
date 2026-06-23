@@ -2,61 +2,62 @@
 
 # Pages (`app/**/page.tsx`)
 
-A page is either:
-
-- a **synchronous Server Component** that renders static markup or composes child components, or
-- a **synchronous Server Component** that composes **client components** (which carry the interactivity), or
-- an **asynchronous Server Component** that `await`s data (e.g., `await fetch(...)`).
+Pages are Server Components by default. How (and whether) you test one depends entirely on whether it is **async**, **sync composing client children**, or **static**.
 
 ## What to test
 
-- The page renders **in production** for every supported state (loaded, empty, error) — verified via Playwright by navigating to the route.
-- The page wires its **child client components** correctly: the right props are passed, the right initial data lands in the DOM (verified via Playwright with the running app or via the child component's own `*.test.ts`).
-- **Critical user flows that start on this page** (login submit, signup, upload) — Playwright.
-- For pages behind auth: redirect on unauthenticated → `/login`, 200 on authenticated → Playwright with a saved storage state.
+- **Async RSC** (`async function Page()` doing `await upstream...` / `await fetch`): the data-loaded rendering, loading/error states, and any redirect/auth-gate behavior — **via Playwright only**.
+- **Sync RSC composing client children**: the interactive behavior lives in the client children — test those directly (`artifacts/client-components.md`); cover the assembled page via E2E for the critical flow.
+- **Static sync RSC** (marketing/placeholder, no data, no interaction): nothing at component level. Cover via E2E only if it sits on a critical path.
 
 ## Layer assignment
 
-| Page shape | Vitest unit | Playwright E2E |
-|---|---|---|
-| Synchronous, static (no data, no children with logic) | ❌ skip — framework behavior | ❌ skip unless part of a critical flow |
-| Synchronous, composes interactive client children | ❌ — test the client child directly | ✅ flow-level coverage |
-| Asynchronous (`async function Page`, `await fetch`) | ❌ — Vitest cannot render async RSCs | ✅ navigation + content assertions |
-| Behind auth / with redirects | ❌ | ✅ redirect, 200, content |
+| Page shape | Unit | Integration | E2E |
+|---|---|---|---|
+| Async RSC (`await` in the component) | ❌ unsupported in Vitest/RTL (React 19/Next 16) | ❌ | ✅ Playwright — the only option |
+| Sync RSC composing client children | ❌ (test the client children) | ❌ | ✅ for the critical flow |
+| Static sync RSC, no logic | ❌ | ❌ | ✅ only if on a critical path |
 
-> Why no unit tests for sync pages: rendering `<Home />` in jsdom only proves React renders elements — which the framework already guarantees. Anything worth testing on a page is either a flow (Playwright) or lives inside a client child (`artifacts/client-components.md`).
+There is no integration layer for pages — the BFF seam is tested separately (`artifacts/route-handlers.md`).
 
-## Setup pattern — Playwright E2E
+## Setup pattern
 
-`tests/<feature>.e2e-spec.ts`:
+E2E spec under `tests/` (Playwright, host-run). Drives the containerized real app; upstream NestJS is faked server-side by the `mocks/` MSW (`instrumentation.ts`, `MSW_ENABLED=true`). Per-scenario outcomes come from **reserved trigger fixtures** in the shared handlers — never `page.route()`, never per-test `server.use()`.
 
 ```ts
-import { test, expect } from "@playwright/test"
+// tests/auth-login.e2e-spec.ts
+import { test, expect } from "@playwright/test";
 
-test("login page renders the form and submits", async ({ page }) => {
-  await page.goto("/login")
+test("user signs in and lands on the home feed", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill("alice@example.com");
+  await page.getByLabel("Password").fill("correct-horse");
+  await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Sign in" })
-  ).toBeVisible()
+  await expect(page).toHaveURL("/");
+});
 
-  await page.getByLabel("Email address").fill("user@example.com")
-  await page.getByLabel("Password").fill("hunter2")
-  await page.getByRole("button", { name: "Sign in" }).click()
+test("invalid credentials surface an inline error", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill("badrequest@example.com");
+  await page.getByLabel("Password").fill("whatever");
+  await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL("/")
-})
+  await expect(page.getByRole("alert")).toBeVisible();
+});
 ```
 
-`playwright.config.ts` must run against the production build — see `../references/file-conventions.md` for the `webServer` block.
+Hard rules: no `page.route("**/api/**")`; no reaching a real NestJS API; trigger values must not collide with Vitest fixture values (`references/external-systems.md`).
 
 ## When to skip
 
-- The page has no interactivity and is not part of a critical flow (e.g., a future "about" page).
-- The page only composes client children — test the children, skip the wrapper.
+- Static pages with no logic and not on a critical flow — no test at all.
+- Do not attempt a jsdom render of an async page "just to get a unit test" — it cannot work; the test would assert nothing meaningful.
+- Do not E2E-test a page solely to cover a client child's logic — unit-test the child instead (faster, more precise).
 
-## Examples from this project
+## Examples from project
 
-- `app/page.tsx` — sync Server Component, presentational only, links to external URLs. **Skip.** It's not a critical flow.
-- `app/login/page.tsx` — sync Server Component composing `<BrandLogo>`, `<Input>`, `<Button>`, `<AuthFooter>`. **Playwright** when the auth flow lands. The form's controlled state will eventually be a client child — when that exists, unit-test it (`artifacts/client-components.md`); the page itself stays Playwright-only.
-- Future `app/<route>/page.tsx` with `async function Page()` → **Playwright only**, never Vitest (see `../references/gotchas.md`).
+- `app/page.tsx` — static placeholder (Next starter content), no data/interaction → **no test** (not a critical flow).
+- `app/layout.tsx` — see `artifacts/layouts.md`.
+- `app/login/page.tsx` — sync RSC composing `<BrandLogo>`, `<AuthFooter>`, `<Input>`, `<Button>` with a `type="submit"`. As of 2026-05 the form has no client submit handler. Once the submit flow is wired (likely a client component), unit-test that client component (`artifacts/client-components.md`) **and** add `tests/auth-login.e2e-spec.ts` for the full sign-in flow (critical path).
+- `app/(auth)/signup/page.tsx` — directory scaffolded, empty. When built, same treatment as `/login`.

@@ -1,31 +1,27 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# Icon Components (`components/icons/*.tsx`)
+# Icons (`components/icons/*.tsx`)
 
-Icon components render an inline `<svg>` with hardcoded paths, `viewBox` from the source SVG, `currentColor` fills, `aria-hidden="true"`, and `...props` spread onto the root. They do not branch, do not hold state, do not handle events.
+Custom SVG components (no external icon library, per project rules). Each is a single function returning a static `<svg>` with a hardcoded `<path>` and a `cn()`-merged `className`. Pure static output — no logic, no branching.
 
 ## What to test
 
-Nothing. Asserting that `<StreamTubeIcon />` renders an `<svg>` element with a particular `<path d=...>` is the textbook mirror test — the assertion copies the implementation. It does not catch any bug a developer could realistically introduce; if the `d` attribute changes, the visual changes, which is a design review concern, not a test concern.
+- **Nothing.** Asserting the rendered `<path d="...">` or `viewBox` is a textbook mirror test — it copies the implementation and breaks on any harmless path edit while proving nothing.
 
 ## Layer assignment
 
-| Icon shape | Vitest | E2E |
-|---|---|---|
-| Plain SVG component (the only kind in this project) | ❌ skip | covered indirectly via consumers |
+| Artifact | Unit | Integration | E2E |
+|---|---|---|---|
+| `components/icons/*` | ❌ never | ❌ | only incidentally, via a page that renders it |
 
 ## Setup pattern
 
-None.
+None. The icon is exercised wherever a tested component or E2E flow renders it (e.g., `<BrandLogo>` → `<StreamTubeIcon>` on the `/login` page). If accessibility matters, assert it on the *consumer* (e.g., the logo's accessible name), not the icon's `aria-hidden` attribute.
 
 ## When to skip
 
-Always.
+- Always. There is no scenario where a Vitest test of an icon component catches a real bug.
 
-## Examples from this project
+## Examples from project
 
-- `components/icons/streamtube-icon.tsx` — renders a `<svg>` with a single `<path>`. **Skip.** Consumers like `<BrandLogo>` are exercised via Playwright on the rendered `/login` page.
-
-## If you want to verify icons visually
-
-Use a Playwright visual snapshot of the page that consumes the icon, not a Vitest test on the icon itself.
+- `components/icons/streamtube-icon.tsx` (`<StreamTubeIcon>`) — static `<svg>` with `aria-hidden`, `currentColor` fill, `cn(className)` passthrough. **Skip.** Rendered via `<BrandLogo>`; any visual regression is a Playwright/visual concern.

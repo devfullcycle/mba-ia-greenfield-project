@@ -125,23 +125,34 @@ Check these before starting implementation. Stop and surface any issue to the us
   - `PLAN_MODE=legacy` → planos antigos OR planos onde o frontmatter `test_specs_aware` está ausente. Pular o **Test Specs preflight** e a **Step 3 JIT extension** abaixo. Manter comportamento atual: ler Tests entries do SI, escrever test code a partir da prosa de uma frase (status quo). Note: `phase-a.md` emit rules nunca escrevem `test_specs_aware: false` por construção — o grep `grep -c "^test_specs_aware: true$"` retornaria 0 nesse caso e cairia em legacy de qualquer forma; mas o estado "false explícito" não é uma saída legítima do builder.
   - `PLAN_MODE=modern` → planos novos com `test_specs_aware: true`. Aplicar **Test Specs preflight** + **Step 3 JIT extension** abaixo — mesmo se o plano não tiver nenhum SI com `**Test Specs:**` (caso fase backend pura: passa pelo preflight novo mas todos os greps retornam vazio = OK).
 
-- **Test Specs preflight (only when `PLAN_MODE=modern`)**: single Bash command that detects MISSING + STALE specs e `_pending_` markers. Output vazio → continue; output com linhas → abort com a output literal + mensagem `"Run /plan-test-specs <slug> first."`.
+- **Test Specs preflight (only when `PLAN_MODE=modern`)**: detecta MISSING e `_pending_` markers (hard abort) e specs STALE (soft warn + confirm). Três condições distintas:
+  - `_pending_` no plano → **abort** (plan-test-specs nunca rodou)
+  - spec MISSING → **abort** (spec nunca foi criado)
+  - spec STALE ≤ 10 min → **ignora** (grace window: plano foi regenerado logo após os specs — falso positivo comum)
+  - spec STALE > 10 min → **warn + pergunta ao usuário** (spec pode estar desatualizado; usuário decide se quer prosseguir ou re-rodar /plan-test-specs)
 
   ```bash
   PLAN_MTIME=$(stat -c %Y "$PLAN")
+  GRACE_SECONDS=600  # 10-minute grace window — covers plans re-generated shortly after /plan-test-specs
 
-  # (a) Aborta se ainda há _pending placeholders (significa que /plan-test-specs nunca rodou)
+  # (a) Hard abort se ainda há _pending placeholders (significa que /plan-test-specs nunca rodou)
   PENDING=$(grep -c "^\*\*Test Specs:\*\* _pending" "$PLAN" 2>/dev/null)
   [ "${PENDING:-0}" -gt 0 ] && echo "PENDING TEST SPECS: $PENDING SI(s) ainda têm placeholder. Run /plan-test-specs <slug> first."
 
-  # (b) Aborta em MISSING ou STALE — extrai TODOS backticked paths da linha (cross-layer pode ter múltiplos)
+  # (b) MISSING = hard abort; STALE com grace window = ignora; STALE real = warn (não abort)
   grep -n "^\*\*Test Specs:\*\* see " "$PLAN" | while IFS= read -r line; do
     echo "$line" | grep -oE '`[^`]+`' | tr -d '`' | while IFS= read -r SPEC_PATH; do
       [ ! -f "$SPEC_PATH" ] && echo "MISSING: $SPEC_PATH"
-      [ -f "$SPEC_PATH" ] && [ "$(stat -c %Y "$SPEC_PATH")" -lt "$PLAN_MTIME" ] && echo "STALE: $SPEC_PATH"
+      if [ -f "$SPEC_PATH" ]; then
+        SPEC_MTIME=$(stat -c %Y "$SPEC_PATH")
+        AGE_DIFF=$(( PLAN_MTIME - SPEC_MTIME ))
+        [ "$AGE_DIFF" -gt "$GRACE_SECONDS" ] && echo "STALE: $SPEC_PATH (${AGE_DIFF}s older than plan)"
+      fi
     done
   done
   ```
+
+  Após rodar o script: se só há linhas `STALE` (sem `PENDING` ou `MISSING`), **não abortar automaticamente** — apresentar ao usuário com contexto ("spec existe mas é mais antigo que o plano por Xs; conteúdo pode estar desatualizado") e perguntar se quer prosseguir ou re-rodar `/plan-test-specs`. Apenas `PENDING` e `MISSING` justificam abort sem confirmação do usuário.
 
 ## Execution order
 
@@ -187,12 +198,14 @@ For each **pending** SI (completed SIs from a previous session are skipped), exe
 **Seek Tech Spec references only when this SI mentions them.**
 
 - **Entities or endpoints** — if the SI's Technical actions or Tests reference a specific entity or endpoint:
-  - `Grep -n "^#### <EntityName>"` or `Grep -n "^#### METHOD /path"` on the plan doc → get the offset. When seeking inside `### API Contracts`, skip any `#### Validation Rules` heading (it is not an endpoint).
+  - `Grep -n "^#### <EntityName>"` or `Grep -n "^#### METHOD /path"` on the plan doc → get the offset. When seeking inside `### API Contracts`, skip any `#### Validation Rules` heading (it is not an endpoint). **BFF tier:** the `#### METHOD /path` header keys on the **FE-facing path** (the `app/api/**/route.ts` route), NOT the `forwards-to` upstream path — seek by the FE-facing path; the `forwards-to` mapping is read from inside the matched block.
   - `Grep -n "^##+ "` on the plan doc → list of every heading at level 2 or deeper; pick the first line number greater than the offset from the previous step as the upper bound. If no such line exists (the subsection is the last heading in the document), read to end-of-file. (The Grep tool uses ripgrep/Rust regex — `{3,4}`-style BRE quantifiers do not work here; `##+ ` means "two or more `#` followed by space", which matches any section boundary.)
   - `Read(offset, limit)` → read only that entity/endpoint subsection.
 - **Events** — if the SI's Technical actions or Tests reference events, read the entire `### Events/Messages` section: `Grep -n "^### Events/Messages"` to get the offset, then apply the same upper-bound rule above to find the limit.
 
 Do not read all of Data Model or all of API Contracts — seek only what this SI consumes. Error Catalog and Authorization Matrix were already read during Preflight and live in working memory.
+
+**NOTE (BFF tier / provenance):** a Tech Spec line carrying any parenthetical provenance tag — `*(derived: …)*`, `*(per {slug}/TD-NN)*`, `*(reshape per {slug}/TD-NN …)*`, including decorating suffixes like `; reshape: none` — or marked `_undetermined — <reason>_` is NOT a gap to fill. Follow the source the line itself names (the cited TD, or the contract source named on the line). Never invent the value; the SI's MSW/integration test is the backstop.
 
 **Seek library references only when this SI mentions a specific library.** The plan folder may contain a `library-refs.md` file (sibling of the plan document) grouping library examples under `## {library-name}` headings. If the SI's Technical actions or Dependencies reference a library that has an entry there:
 - `Grep -n "^## {library}" library-refs.md` → get the offset.
@@ -205,7 +218,7 @@ Load relevant best-practices skills matching the artifacts this SI builds (e.g.,
 
 **Screen SI detection:** frontend SIs use the letter-suffix convention `SI-NN.Xa` (visual shell) + `SI-NN.Xb` (lógica & wiring) per Decisões #32+#33, plus a leading **drift audit-SI** `SI-NN.X.0` (k=0 trailing) emitted by `/plan-build`. Backend auto-split SIs use dotted sub-numbering `SI-NN.X.1` / `SI-NN.X.2` (k≥1) per Decisão #34. **Bootstrap SIs** (synthesized by `phase-b.md` § B2.6 from inventory `(new)` markers) use dotted sub-numbering under the `.0` channel — e.g., `SI-02.0.1` (Infra: shadcn install batch), `SI-02.0.2` (Tests batch), `SI-02.0.3+` (custom-ui / custom-business components). The `.0` channel is disjoint from the capability range `.1+`, so bootstrap and capability SIs coexist without renumbering. SI parsing regex: `SI-\d+\.\d+(?:[a-z]|\.\d+)?` — accepts `SI-NN.X`, `SI-NN.Xa/Xb`, `SI-NN.X.k` (BE auto-split, k≥1; OR drift audit, k=0), and `SI-NN.0.k` (bootstrap, leading) by construction. **`.0` semantics by position:** leading `.0.k` → bootstrap (k≥1); trailing `.0` → drift audit (k=0 RESERVED); trailing `.k` (k≥1) → BE auto-split. Progress tracking at action-level within SI-Xb.
 
-**Plain `SI-NN.X` covers two distinct kinds — both execute on main thread without figma plugin.** A plain SI ID (no letter suffix, no dotted sub-number) is emitted by `/plan-build` for either: (a) **backend SIs** — Technical actions reference `### Data Model`, `### API Contracts`, `### Authorization Matrix`, etc. (Decisão #34); (b) **Frontend Runtime SIs** — Technical actions reference `### Frontend Runtime → ####`. Both cases skip the figma-implement-design plugin load by construction — the plugin is only loaded for `Xa` letter-suffix SIs (the SI-Xa branch below). Discriminator at runtime: read the SI's Technical actions to identify which Tech Specs subsection is cited; load best-practices skills accordingly (e.g., `vercel-react-best-practices` for FE Runtime SIs that adopt TanStack Query / React Compiler patterns; `nestjs-best-practices` for backend SIs).
+**Plain `SI-NN.X` covers two distinct kinds — both execute on main thread without figma plugin.** A plain SI ID (no letter suffix, no dotted sub-number) is emitted by `/plan-build` for either: (a) **backend SIs** — Technical actions reference `### Data Model`, `### API Contracts`, `### Authorization Matrix`, etc. (Decisão #34); (b) **Frontend Runtime SIs** — Technical actions reference `### Frontend Runtime → ####`. Both cases skip the figma-implement-design plugin load by construction — the plugin is only loaded for `Xa` letter-suffix SIs (the SI-Xa branch below). Discriminator at runtime: read the SI's Technical actions to identify which Tech Specs subsection is cited; load best-practices skills accordingly (e.g., `vercel-react-best-practices` for FE Runtime SIs that adopt TanStack Query / React Compiler patterns; `nestjs-best-practices` for backend SIs). **Caveat:** a plain SI that references `### API Contracts` may also be a frontend BFF Route Handler (artifact `app/api/**/route.ts`, citing the API Contracts **BFF tier**), not a backend SI — the rule above (load best-practices matching the artifacts this SI builds) is authoritative over this subsection-based example: load `next-best-practices` / `vercel-react-best-practices` + `testing-guide-next-frontend`, not `nestjs-best-practices`.
 
 **SI-NN.X.0 — Drift audit (precedes every SI-Xa):** load `figma:figma-implement-design` plugin skill. The audit's purpose is to surface DS-component drift to the user via `frontend-drift-report.md` BEFORE SI-Xa applies any DS file edits. The audit RECORDS decisions; it does NOT apply edits. Schema reference: `.claude/skills/plan-build/references/frontend-drift-report-schema.md`.
 
@@ -423,9 +436,9 @@ When the current SI has a `**Test Specs:**` field pointing at a real spec path (
 
    - **Read** the spec (single Read, full file — specs are small).
    - **Determine runner** via the spec frontmatter `subproject:` field. This field carries a **semantic role** (`frontend` | `backend`) — not a subproject directory name. Map the role to the runner: `frontend` → Playwright (load `playwright-cli` Skill at step 3 below); `backend` → the backend subproject's test runner (framework conventions auto-loaded from the target subproject; the `testing-guide-{subproject}` Skill already loaded at Step 2 informs what-to-test and best practices per artifact — no additional load needed at 3a). The role-to-directory mapping is project-specific and is the same one used by Step 2's per-subproject skill load.
-   - **Author the test file in TS, single-pass.** Interpret each scenario's `Steps:` + `- expect:` bullets and emit one `test()` block per scenario inside one `test.describe()` block. Save UM arquivo no path declarado pelo `target_file:` field do frontmatter do spec (e.g., `tests/e2e/signup.spec.ts` for frontend, `test/auth-register.e2e-spec.ts` for backend). Cardinality: **1 spec → 1 file with exactly one `test.describe()` containing N `test()` blocks** (NOT 1 describe per group, NOT 1 file per scenario — the project rule is one file per feature/flow). The `describe()` label is the spec's `<feature>` (the filename stem, e.g. `signup` from `tests/e2e/signup.spec.ts`). Group headings (`### N. <Group Name>`) are NOT used as describe labels — they exist only as organizational markers inside the `.plan.md`; in the generated `.spec.ts` they may appear as a comment above each block of `test()`s but never as nested describes.
+   - **Author the test file in TS, single-pass.** Interpret each scenario's `Steps:` + `- expect:` bullets and emit one `test()` block per scenario inside one `test.describe()` block. Save UM arquivo no path declarado pelo `target_file:` field do frontmatter do spec (`target_file:` is authoritative — it was resolved by `/plan-test-specs` per the subproject's E2E convention; no path/folder/suffix is assumed here). Cardinality: **1 spec → 1 file with exactly one `test.describe()` containing N `test()` blocks** (NOT 1 describe per group, NOT 1 file per scenario — the project rule is one file per feature/flow). The `describe()` label is the spec's `<feature>` (the filename stem of `target_file:`, e.g. `signup` from `…/signup.e2e-spec.ts`). Group headings (`### N. <Group Name>`) are NOT used as describe labels — they exist only as organizational markers inside the `.plan.md`; in the generated test file they may appear as a comment above each block of `test()`s but never as nested describes.
 
-3. **Frontend — load `playwright-cli` Skill for pattern reference (active invocation).** Before authoring the `.spec.ts`, invoke:
+3. **Frontend — load `playwright-cli` Skill for pattern reference (active invocation).** Before authoring the E2E test file, invoke:
 
    ```
    Skill: playwright-cli
@@ -437,7 +450,7 @@ When the current SI has a `**Test Specs:**` field pointing at a real spec path (
    - `references/request-mocking.md` — `page.route()` patterns. **Do NOT use `page.route()` in generated specs.** The project mocks at the handler layer via the MSW network fixture (`tests/fixtures.ts`); per-scenario overrides MUST use `network.use(http.post(...))` (the MSW fixture override path), not `page.route()`. The reference is loaded so the LLM can recognize `page.route()` patterns when reading vendored docs, but it must NOT emit them.
    - `references/element-attributes.md` — preferred locator strategies.
 
-   The skill load does **not** trigger any binary execution — it just enriches LLM context with the pattern library. The LLM then authors the `.spec.ts` file itself, leveraging the loaded patterns + the spec's `Steps:` + `expect:` bullets.
+   The skill load does **not** trigger any binary execution — it just enriches LLM context with the pattern library. The LLM then authors the E2E test file itself, leveraging the loaded patterns + the spec's `Steps:` + `expect:` bullets.
 
 4. **Imports — runner-specific:**
 
@@ -446,7 +459,7 @@ When the current SI has a `**Test Specs:**` field pointing at a real spec path (
 
 5. **Keep the generated file path in working memory** (1 path per spec, NOT N) — this list feeds Step 4 below.
 
-After completing 3a, proceed with the inline Tests-section files (Unit / Integration / handler tests) per the original Step 3 prose above. Cross-layer SI processed in this step authors 2 spec-derived test files (1 frontend `.spec.ts` + 1 backend `.e2e-spec.ts`) plus whatever inline Tests entries the SI lists.
+After completing 3a, proceed with the inline Tests-section files (Unit / Integration / handler tests) per the original Step 3 prose above. Cross-layer SI processed in this step authors 2 spec-derived test files (1 frontend + 1 backend E2E file, each saved at its spec's `target_file:`) plus whatever inline Tests entries the SI lists.
 
 **Subagent caveat (preserves existing pattern):** the spec content + the loaded Skill context are consumed **only by the main thread** during 3a (authoring) and discarded naturally. The subagent at Step 4 receives only the resulting test file paths — never spec content nor the skill reference docs. The existing pattern of "subagent reads CLAUDE.md, runs the test files listed, returns a noise-stripped report" is unchanged.
 
@@ -456,7 +469,7 @@ Delegate test execution to a subagent via the `Agent` tool with `subagent_type: 
 
 Instruct the subagent to:
 - **First, read `{target-subproject}/CLAUDE.md`** to learn the subproject's command conventions (containerization, env vars, wrappers, etc.). Subagents receive **only** their invocation prompt plus basic environment details (cwd) — they do **not** inherit Claude Code's system prompt, so neither the root `CLAUDE.md` nor the subproject `CLAUDE.md` is visible to them until explicitly read. Without this Read, the subagent will guess a plausible-looking invocation that may run in the wrong environment (e.g., on the host instead of in the container).
-- Run **only** the test files listed in the SI's Tests section — never the full suite. **Modern mode extension:** when `PLAN_MODE=modern` AND Step 3a authored spec-derived files, the list sent to the subagent is the **union** of (Set A) the SI's inline Tests-section paths and (Set B) the spec-derived files saved in working memory. The subagent infers the runner per path/extension based on the subproject's testing conventions (Playwright for `tests/e2e/*.spec.ts`; for other paths, the runner is determined by the per-subproject test conventions — e.g., a frontend unit runner for `*.spec.tsx` in `components/`, the backend's E2E runner for `test/*.e2e-spec.ts`). 1 spec → 1 entry in Set B (NOT 1 per scenario; the file holds N `test()` blocks). Critério de SI completo é unchanged: subagent reports "all N tests pass" para a lista combinada A ∪ B; if any file from A OR B fails, Step 5 fix loop entra. Modo legacy (`PLAN_MODE=legacy`): Set B does not exist; lista enviada ao subagent é apenas Tests-section inline (which in legacy plans may include rows E2E authored as prose by the old `/plan-build`). Behavior Step 3/4/5 stays byte-by-byte preserved.
+- Run **only** the test files listed in the SI's Tests section — never the full suite. **Modern mode extension:** when `PLAN_MODE=modern` AND Step 3a authored spec-derived files, the list sent to the subagent is the **union** of (Set A) the SI's inline Tests-section paths and (Set B) the spec-derived files saved in working memory. Each Set B path is tagged with the runner already determined at Step 3a (from the spec's `subproject:` field, per the L438 mapping) and the subagent runs it with that runner — **no extension-based inference for Set B**, which would be fragile now that frontend and backend E2E files can share the `*.e2e-spec.ts` suffix and differ only by subproject directory. For Set A inline paths the subagent selects the runner per the per-subproject testing conventions (`testing-guide-{subproject}`) — no path/folder/suffix pattern is hardcoded here. 1 spec → 1 entry in Set B (NOT 1 per scenario; the file holds N `test()` blocks). Critério de SI completo é unchanged: subagent reports "all N tests pass" para a lista combinada A ∪ B; if any file from A OR B fails, Step 5 fix loop entra. Modo legacy (`PLAN_MODE=legacy`): Set B does not exist; lista enviada ao subagent é apenas Tests-section inline (which in legacy plans may include rows E2E authored as prose by the old `/plan-build`). Behavior Step 3/4/5 stays byte-by-byte preserved.
 - **Preserve all diagnostic content verbatim** — test names, failure messages, assertion diffs (actual vs expected), stack frames pointing into subproject code, console output emitted by the test, setup/teardown errors, timeouts, unhandled rejections. When in doubt, include it.
 - **Strip only noise** — framework-internal stack frames (e.g., test framework or DI container paths, vendored dependency directories), startup/shutdown banners, coverage tables, and passing-test listings (report these as a single count: "N tests passed").
 - **Fallback to raw output** when: (a) the raw output is already small (<2k tokens), or (b) the subagent is uncertain whether something is diagnostic or noise. Over-inclusion is always preferred to under-inclusion.

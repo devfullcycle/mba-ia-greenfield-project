@@ -1,6 +1,6 @@
 ---
 name: plan-test-specs
-description: "Stage 5 of the plan pipeline (post-build). Generates and syncs <subproject>/specs/<scenario>.plan.md files from phase/task plans, in Microsoft spec-driven format. Specs are later consumed by /implement Step 3a — frontend path loads the playwright-cli Skill for Playwright pattern reference and LLM-authors the .spec.ts; backend path LLM-authors the .e2e-spec.ts (what-to-test and best practices per artifact come from the per-subproject testing-guide skill already loaded at /implement Step 2). Use after /plan-build completes. Triggers: 'plan-test-specs NN', 'plan-test-specs <slug>', 'gerar test specs da fase X'."
+description: "Stage 5 of the plan pipeline (post-build). Generates and syncs <subproject>/specs/<scenario>.plan.md files from phase/task plans, in Microsoft spec-driven format. Specs are later consumed by /implement Step 3a — frontend path loads the playwright-cli Skill for Playwright pattern reference and LLM-authors the E2E test file; backend path LLM-authors its E2E test file (file path/suffix per the per-subproject testing-guide skill; what-to-test and best practices per artifact come from that same skill, already loaded at /implement Step 2). Use after /plan-build completes. Triggers: 'plan-test-specs NN', 'plan-test-specs <slug>', 'gerar test specs da fase X'."
 disable-model-invocation: true
 ---
 
@@ -289,9 +289,10 @@ subproject: backend | frontend       # canonical runner discriminator (consumed 
 runner: <runner-tag>                 # informational only — `playwright` for frontend; per-backend runner tag for backend (e.g., `jest+supertest`, `pytest`, `gotest`); must match `subproject:`; `subproject:` is canonical
 scope: phase-NN-{slug} | task-{slug}
 si: SI-NN.X | SI-N
-target_file: <test-path>/<feature>.spec.ts   # 1 arquivo de teste por spec; cenários viram test() blocks
-                                              # frontend: tests/e2e/<feature>.spec.ts (ex: tests/e2e/signup.spec.ts)
-                                              # backend:  test/<feature>.e2e-spec.ts  (ex: test/auth-register.e2e-spec.ts)
+target_file: <resolved E2E test path>         # 1 arquivo de teste por spec; cenários viram test() blocks.
+                                              # Path concreto (pasta + sufixo + nome) derivado da convenção E2E
+                                              # do subprojeto via testing-guide-{subproject} e resolvido por
+                                              # /plan-test-specs na geração — NÃO hardcodar pasta/sufixo aqui.
 ---
 
 # <Screen | Endpoint> Test Plan
@@ -322,11 +323,11 @@ target_file: <test-path>/<feature>.spec.ts   # 1 arquivo de teste por spec; cen�
 
 ### File-naming convention
 
-- **1 spec → 1 test file**, declarado via `target_file:` no frontmatter. Default: `tests/e2e/<feature>.spec.ts` (frontend) / `test/<feature>.e2e-spec.ts` (backend).
+- **1 spec → 1 test file**, declarado via `target_file:` no frontmatter. O path concreto (pasta + sufixo + nome) é derivado da convenção E2E do subprojeto via `testing-guide-{subproject}` (ver Reason abaixo) e resolvido por `/plan-test-specs` na geração — esta skill NÃO fixa pasta nem sufixo.
 - **N cenários no spec → N `test()` blocks** dentro de um único `test.describe('<feature>')` no arquivo gerado.
 - Cenário individual NÃO tem `**File:**` field — caminho é shared via `target_file:`.
 
-Reason: the project's frontend testing convention is *"one file per feature/flow"* with `test.describe('<feature>')` agrupando. Adotar 1 arquivo por cenário (Microsoft canonical) violaria essa regra. The `testing-guide-{subproject}` Skill (loaded by `/implement` Step 2 for the frontend subproject) is the canonical entry point for that convention.
+Reason: the project's frontend testing convention is *"one file per feature/flow"* with `test.describe('<feature>')` agrupando. Adotar 1 arquivo por cenário (Microsoft canonical) violaria essa regra. The `testing-guide-{subproject}` Skill (loaded by `/implement` Step 2 for the frontend subproject) is the canonical entry point for that convention. It is also the single source of truth for the `target_file:` path itself (folder + suffix per subproject); `/plan-test-specs` reads that convention at generation time and writes a concrete `target_file:` — no folder or suffix is hardcoded in this skill.
 
 ### Per-subproject vocabulary
 
@@ -335,8 +336,8 @@ Reason: the project's frontend testing convention is *"one file per feature/flow
 | `Setup:` | `<frontend-subproject>/tests/fixtures.ts` (MSW network fixture auto-applied) | `beforeEach` truncate test DB; bootstrap backend test module (e.g., NestJS: `Test.createTestingModule(...).compile()`) |
 | Step voice | "Usuário clica em Sign in" (user-actor) | "POST /auth/register com body X" (API-caller) |
 | Expect vocabulary | DOM-observable + URL state + toast text | HTTP status + response body shape + DB state + side-effects |
-| File path (per spec) | `tests/e2e/<feature>.spec.ts` | `test/<feature>.e2e-spec.ts` |
-| Import in generated test | `from '../fixtures'` (NEVER `'@playwright/test'`) | backend test bootstrap module + HTTP client (e.g., NestJS `Test` module + Supertest) |
+| File path (per spec) | per `testing-guide-frontend` E2E convention — resolved at generation, no folder/suffix hardcoded here | per `testing-guide-backend` E2E convention — idem |
+| Import in generated test | the MSW network fixture, imported from its path per `testing-guide-frontend` (NEVER `'@playwright/test'`) | backend test bootstrap module + HTTP client (e.g., NestJS `Test` module + Supertest) |
 
 ### Boundary — what externalizes vs stays inline
 

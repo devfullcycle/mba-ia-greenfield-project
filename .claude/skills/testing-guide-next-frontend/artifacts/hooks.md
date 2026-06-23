@@ -2,82 +2,53 @@
 
 # Custom Hooks (`hooks/*.ts`)
 
-Custom hooks encapsulate stateful logic shared across client components. The `hooks/` directory does not exist yet — it will be created the first time a hook is added (see `next-frontend/CLAUDE.md` → Path Aliases).
+Not yet present (2026-05) — the `@/hooks` alias is reserved; the directory is created when the first hook is added. This guide is proactive.
 
 ## What to test
 
-- **Branching** in the hook's return value (loading/error/success, throttled/idle, validating/valid/invalid).
-- **State transitions** in response to actions (counter increments, debounced updates, optimistic updates that roll back on error).
-- **Effects** that schedule timers, attach listeners, or subscribe — assert that they clean up.
-- **Hooks that call `fetch`** — set up MSW so the hook exercises the real `fetch` against intercepted responses; verify each response shape produces the right hook state.
-
-## What NOT to test
-
-- A hook that simply returns `useState`'s tuple — that's framework behavior.
-- A hook that is a single-line wrapper around another hook — mirror test.
+- **State transitions and branching** — a hook that manages form state, derived state, or a state machine: assert the returned values across the transitions a consumer relies on.
+- **Data-fetching hooks** — a hook that fetches from a same-origin `/api/...` Route Handler: assert loading → success / loading → error, with MSW intercepting the fetch. Do **not** assert intermediate internals; assert the observable returned shape.
+- **Effect side effects with consequence** — e.g., a hook that calls `router.push` under a condition: assert the call as observed behavior, mocking `next/navigation`.
 
 ## Layer assignment
 
-| Hook shape | Vitest `*.test.ts` | E2E |
-|---|---|---|
-| Pure state machine (no `fetch`) | ✅ unit with `renderHook` + `act` | covered via the consuming component's E2E |
-| Calls `fetch` (or a route handler) | ✅ unit with MSW intercepting `fetch` | covered via E2E |
-| Wraps another hook with no logic | ❌ skip | — |
+| Hook shape | Layer |
+|---|---|
+| Pure state/derivation with branching | **Unit** `*.test.ts(x)` via `renderHook` |
+| Fetches a `/api/...` Route Handler | **Unit** `*.test.tsx` + MSW intercepts the fetch |
+| Trivial wrapper with no branching (e.g., `useContext` passthrough) | ❌ skip — no logic to prove |
+
+No integration/E2E layer for a hook itself — its fetch boundary is covered by the route handler's integration test; the critical flow it powers is covered by the page's E2E.
 
 ## Setup pattern
 
-`hooks/__tests__/use-video-upload.test.ts`:
+`*.test.tsx` (rendering/`renderHook` needs DOM) with the **mandatory** jsdom docblock, colocated in `hooks/__tests__/`.
 
-```ts
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { renderHook, act, waitFor } from "@testing-library/react"
-import { http, HttpResponse } from "msw"
-import { server } from "@/mocks/server"
-import { useVideoUpload } from "@/hooks/use-video-upload"
+```tsx
+// @vitest-environment jsdom
+import { describe, expect, it } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
 
-const API_URL = process.env.API_URL ?? "http://api.test"
+import { useCurrentUser } from "@/hooks/use-current-user";
 
-describe("useVideoUpload", () => {
-  beforeEach(() => {
-    server.use(
-      http.post(`${API_URL}/videos`, async () =>
-        HttpResponse.json({ id: "v1", status: "queued" })
-      )
-    )
-  })
+describe("useCurrentUser", () => {
+  it("resolves to the user on a successful /api/auth/me", async () => {
+    // MSW (mocks/handlers/auth.ts) fakes the upstream GET /auth/me.
+    const { result } = renderHook(() => useCurrentUser());
 
-  it("transitions idle → uploading → success", async () => {
-    const { result } = renderHook(() => useVideoUpload())
-    expect(result.current.status).toBe("idle")
-
-    await act(async () => {
-      await result.current.upload(new File(["..."], "clip.mp4"))
-    })
-
-    await waitFor(() => expect(result.current.status).toBe("success"))
-    expect(result.current.video).toEqual({ id: "v1", status: "queued" })
-  })
-
-  it("transitions to error when the API returns 500", async () => {
-    server.use(
-      http.post(`${API_URL}/videos`, () =>
-        HttpResponse.json({ message: "boom" }, { status: 500 })
-      )
-    )
-    const { result } = renderHook(() => useVideoUpload())
-    await act(async () => {
-      await result.current.upload(new File(["..."], "clip.mp4"))
-    })
-    await waitFor(() => expect(result.current.status).toBe("error"))
-  })
-})
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.user).toMatchObject({ email: expect.any(String) });
+  });
+});
 ```
+
+Mock `next/navigation` per-file if the hook uses router/path hooks (`references/gotchas.md`). MSW is global; per-case error fixtures via `server.use(...)`.
 
 ## When to skip
 
-- The hook is a single-line passthrough.
-- The hook returns the same shape as the inner library hook with no transformations.
+- A hook that only forwards a context value or composes other tested hooks with no added branching.
+- Do not re-test the BFF status mapping from inside a hook test — that's the route handler's integration test.
 
-## Examples from this project
+## Examples from project
 
-- No custom hooks exist yet. When the first hook lands (likely `useVideoUpload`, `useDebounce`, or similar), it must have a `*.test.ts` under `hooks/__tests__/` covering each state branch.
+- None yet. When the auth feature adds something like `useCurrentUser`/`useLogin`, apply this recipe; the underlying `/api/auth/*` route handlers still need their own `*.integration.test.ts` (`artifacts/route-handlers.md`).

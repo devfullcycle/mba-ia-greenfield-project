@@ -146,9 +146,9 @@ Advisory, read-only check: warns if Figma design tokens have drifted from the fr
 
 **When:** during Preflight on a resume run, or right after Figma inputs Step 3 on a fresh run (before Step 4 creates the files, so aborting is cheap).
 
-**How:** pick any `fileKey:nodeId` from the reconciled screen list → call `mcp__plugin_figma_figma__get_variable_defs` → compare returned tokens against the matching blocks in `globals.css` (`--color-*` → `@theme inline`; `--radius-*`, `--spacing-*`, and semantic theme tokens → `:root` / `.dark`). If drift is found, warn: `"Detectados N tokens com drift entre Figma e globals.css. Recomendo rodar 'pull-figma-tokens' antes de inventariar. Prosseguir mesmo assim?"`. If no drift, stay silent.
+**How:** pick any `fileKey:nodeId` from the reconciled screen list → call `mcp__plugin_figma_figma__get_variable_defs` → compare returned tokens against the matching blocks in `globals.css` (`--color-*` → `@theme inline`; `--radius-*`, `--spacing-*`, and semantic theme tokens → `:root` / `.dark`). If drift is found, warn: `"Detectados N tokens com drift entre Figma e globals.css. Recomendo rodar 'figma-audit-tokens' antes de inventariar. Prosseguir mesmo assim?"`. If no drift, stay silent.
 
-**The one non-obvious rule:** never invoke `pull-figma-tokens` inline — if the user aborts, they run it separately.
+**The one non-obvious rule:** never invoke `figma-audit-tokens` inline — if the user aborts, they run it separately.
 
 ## Input handling — phase mode (slug-primary)
 
@@ -217,7 +217,7 @@ Once the final screen → URL list is settled, parse each URL. Acceptable forms:
 
 For each URL, extract `fileKey` and `nodeId`. Convert `nodeId` from URL form (`123-456`) to MCP form (`123:456`). If any URL is missing a `nodeId`, stop and ask — the skill inventories a specific screen node, not an entire file. If the user provides a screen name without a URL (e.g., "the /my-videos page"), ask for the exact URL; resolving screen names from a file is guesswork and produces wrong inventories.
 
-Before moving on to Step 4, run the **Token drift detection** subsection (under "Session state — progress file and resume" above). On a fresh run, this is the point where `fileKey:nodeId` pairs first become available — the drift check must fire here so the user can abort and run `pull-figma-tokens` before the inventory and progress files are created.
+Before moving on to Step 4, run the **Token drift detection** subsection (under "Session state — progress file and resume" above). On a fresh run, this is the point where `fileKey:nodeId` pairs first become available — the drift check must fire here so the user can abort and run `figma-audit-tokens` before the inventory and progress files are created.
 
 ### Step 4: Create the inventory and progress files
 
@@ -512,4 +512,4 @@ These rules crystallize invariants implicit in the canonical workflow plan-conte
 - **Never write to `context.md`.** `plan-context` is sole writer. Screen-inventory only reads `## Scope` to extract capability mapping in task mode.
 - **Never invoke `/plan-context`, `/plan-validate`, `/plan-resolve`, `/plan-build`, or `/implement` from within screen-inventory.** Skill is non-orchestrative — user is sole orchestrator of the pipeline. Abort-with-command pattern always returns control to the user.
 - **Never touch `docs/decisions/`.** Decisions docs are owned by `/research` (create) and `plan-resolve` (mutate `**Decision:**` fields). Screen-inventory only reads ad-hoc docs with `Scope: Frontend | Cross-layer` as classification hints, never writes.
-- **Never invoke `pull-figma-tokens` inline.** Drift check (existing behavior) is advisory non-blocking — always delegates the decision to the user.
+- **Never invoke `figma-audit-tokens` inline.** Drift check (existing behavior) is advisory non-blocking — always delegates the decision to the user.

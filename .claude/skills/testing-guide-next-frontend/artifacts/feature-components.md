@@ -1,37 +1,32 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# Feature Components (`components/<feature>/*.tsx`, server, no logic)
+# Feature Components (`components/<feature>/*.tsx` — server, presentational, no logic)
 
-Feature components are presentational composites that live under `components/<feature>/` (e.g., `components/auth/brand-logo.tsx`). They take props, compose primitives, and render. They have no state, no handlers, no `fetch`, no async.
+Cross-route reusable composites that arrange primitives and content. When they have **no state, no handlers, no conditionals** (only prop passing + composition), they are presentational — framework rendering — and are covered via their consumers, not directly.
 
 ## What to test
 
-Almost nothing at the component level. They are covered transitively when:
-
-- The page that uses them is exercised in Playwright (the rendered DOM proves the composition works), or
-- A client component that depends on them is unit-tested (the feature component renders inside that test).
-
-The only exception: a feature component that contains **branching presentational logic** (e.g., `size === "lg" ? "size-10" : "size-8"`) where the branches encode product rules that a designer cares about. Even then, prefer Playwright snapshots over Vitest class-name assertions.
+- Nothing directly while the component is purely presentational.
+- The moment a feature component gains `"use client"` + state/handlers/conditionals, it is no longer a feature component for testing purposes — treat it as a **client component** (`artifacts/client-components.md`).
 
 ## Layer assignment
 
-| Feature-component shape | Vitest unit | E2E |
-|---|---|---|
-| Presentational, no branching | ❌ skip | covered via page E2E |
-| Presentational, trivial branching (size prop, variant prop) | ❌ skip | covered via page E2E |
-| Has handlers or state | Not this category — move it to `client-components.md` |
+| Component shape | Unit | Integration | E2E |
+|---|---|---|---|
+| Server, composes primitives, prop-only, no branching | ❌ skip | ❌ | ✅ via the consuming page's flow |
+| Has a `cn()` conditional class on a `size`/`variant`-style prop only | ❌ skip (visual concern; class assertion is a mirror test) | ❌ | visual parity is a Playwright/screenshot concern |
+| Gains state/handlers/conditional render | → see `artifacts/client-components.md` | | |
 
 ## Setup pattern
 
-There is no setup pattern — these components do not get unit tests.
-
-If you find yourself wanting to test a feature component, ask: *which branch of behavior would break user-visible output?* If the answer is "none" or "the className changes", do not write the test.
+No dedicated test. Coverage is incidental through the page E2E that renders the component in context (`artifacts/pages.md`). If you find yourself wanting a unit test for a feature component, first check whether the thing you want to assert is *behavior* (→ it's really a client component) or *appearance* (→ Playwright visual, not Vitest).
 
 ## When to skip
 
-Always, with the rare exception above.
+- Always skip, unless it crosses into client-component territory (state/handlers/conditional rendering driven by user interaction).
+- Skip `data-slot`/`size`-class assertions — those are mirror tests; the rendered look is verified visually in E2E, not by string-matching Tailwind.
 
-## Examples from this project
+## Examples from project
 
-- `components/auth/brand-logo.tsx` — selects `size-10` vs `size-8` and `text-h1` vs `text-h2` from a `size` prop. Pure presentational. **Skip.** Exercise it via Playwright on the rendered `/login` page.
-- `components/auth/auth-footer.tsx` — renders a question label and a `<Link>` from props. Pure passthrough. **Skip.** Exercise via Playwright (click the link, assert navigation).
+- `components/auth/auth-footer.tsx` (`<AuthFooter>`) — server, renders a `<p>` + `next/link` from props, no logic → **skip**; exercised when the login/signup E2E navigates via its link.
+- `components/auth/brand-logo.tsx` (`<BrandLogo>`) — server, `size`-conditioned `cn()` classes + composes `<StreamTubeIcon>`, no behavior → **skip**; the conditional sizing is a visual concern (Playwright), not a Vitest class assertion.

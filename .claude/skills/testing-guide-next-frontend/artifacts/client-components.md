@@ -1,84 +1,77 @@
 > Part of the `testing-guide-next-frontend` skill (see `../SKILL.md`).
 
-# Client Components (files with `"use client"` directive)
+# Client Components (files with the `"use client"` directive)
 
-Client components are the only React components Vitest can render meaningfully — they own state, handlers, and the user-visible interaction surface.
+The only React component type that is fully unit-renderable in Vitest. State, event handlers, conditional rendering, and form behavior live here.
 
 ## What to test
 
-- **Branching** triggered by state or props: open/closed, loading/error/success, controlled/uncontrolled, validation visible / hidden.
-- **Event handlers**: clicking a button calls the right side effect (with the right arguments), typing into an input updates the rendered value, submitting a form calls the right callback.
-- **Accessibility-visible state**: `aria-invalid`, `aria-expanded`, `disabled`, `role`, accessible name. Use Testing Library's role/name queries to drive assertions — never assert class strings.
-- **Side effects via mocked boundaries**: `fetch` (via MSW), `router.push` / `router.replace` (via `next/navigation` mock), analytics calls.
+- **Interactive behavior** — what the user perceives after an action: submit disables the button, an error message appears, a field is marked `aria-invalid`, a value is cleared.
+- **Conditional rendering** — branches on props/state (loading vs loaded vs error).
+- **Form submission** — calls the same-origin `/api/...` Route Handler with the right body; renders the success/error outcome. The fetch is intercepted by MSW.
+- **Navigation side effects** — that `router.push(...)` was called with the right path *as observed behavior* (a redirect after login), mocking `next/navigation`.
+
+Do **not** assert internal state, class strings, or that a handler "was called" without an observable consequence (`references/mock-health-rules.md`).
 
 ## Layer assignment
 
-| Client component shape | Vitest `*.test.ts` | E2E |
+| Situation | Layer | Notes |
 |---|---|---|
-| Holds state, has handlers, no `fetch` | ✅ unit, RTL, mock `next/navigation` if used | covered indirectly via the page's E2E |
-| Calls `fetch` to a route handler / external URL | ✅ unit with MSW intercepting `fetch` | covered via page E2E |
-| Pure presentational (no state, no handlers) | ❌ — same skip rule as feature-components.md | covered via page E2E |
+| State / handlers / conditional render, no network | **Unit** `*.test.tsx` (jsdom docblock) | render with RTL, drive with `@testing-library/user-event` |
+| Submits to a `/api/...` Route Handler | **Unit** `*.test.tsx` + MSW intercepts the fetch | the handler-as-function contract is covered separately in `artifacts/route-handlers.md` |
+| Part of a critical user flow (login/signup) | also covered by **E2E** | unit proves the component logic; E2E proves the wired flow end-to-end |
+
+No standalone integration layer for components — the BFF contract lives in route-handler integration tests; the component test only proves the component reacts correctly to MSW-faked responses.
 
 ## Setup pattern
 
-`components/<feature>/__tests__/<name>.test.tsx`:
+`*.test.tsx`, colocated in the feature's `__tests__/`. **The `jsdom` docblock is mandatory** — without it the render has no DOM (default env is `node`).
 
 ```tsx
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
-// Mock next/navigation per file — required when the component reads useRouter,
-// usePathname, or useSearchParams. See references/gotchas.md.
-const pushMock = vi.fn()
+const push = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock, replace: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push }),
   usePathname: () => "/login",
   useSearchParams: () => new URLSearchParams(),
-}))
+}));
 
-import { LoginForm } from "@/components/auth/login-form"
+import { LoginForm } from "@/components/auth/login-form";
 
-describe("<LoginForm>", () => {
-  beforeEach(() => pushMock.mockClear())
+describe("<LoginForm />", () => {
+  it("disables submit and redirects on success", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
 
-  it("shows aria-invalid when submitting an empty email", async () => {
-    render(<LoginForm />)
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }))
-    expect(screen.getByLabelText(/email address/i)).toHaveAttribute(
-      "aria-invalid",
-      "true"
-    )
-    expect(pushMock).not.toHaveBeenCalled()
-  })
+    await user.type(screen.getByLabelText("Email address"), "alice@example.com");
+    await user.type(screen.getByLabelText("Password"), "correct-horse");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-  it("submits and navigates to / on success", async () => {
-    // MSW is already configured in vitest setupFiles (see mocks/server.ts).
-    // Override the default handler for this test if needed:
-    //   server.use(http.post(`${API_URL}/auth/login`, () => HttpResponse.json({ token: "x" })))
-    render(<LoginForm />)
-    await userEvent.type(
-      screen.getByLabelText(/email address/i),
-      "user@example.com"
-    )
-    await userEvent.type(screen.getByLabelText(/password/i), "hunter2")
-    await userEvent.click(screen.getByRole("button", { name: /sign in/i }))
-    expect(pushMock).toHaveBeenCalledWith("/")
-  })
-})
+    // MSW (mocks/handlers/auth.ts) fakes POST /auth/login → 200.
+    expect(push).toHaveBeenCalledWith("/");
+  });
+
+  it("shows an inline error on invalid credentials", async () => {
+    // Override the success fixture for this case only.
+    // server.use(http.post(`${env.API_URL}/auth/login`, () =>
+    //   HttpResponse.json({ message: "invalid" }, { status: 401 })));
+    // ...assert the alert is visible
+  });
+});
 ```
 
-## Anti-pattern reminders
-
-- Do **not** mock `<Button>`, `<Input>`, `<Card>` — those are configured-library primitives that compose into the component under test. Render them.
-- Do **not** mock `cn()` from `@/lib/utils` or `next/image` / `next/link`. They have real Node implementations and the test should exercise them.
-- Do **not** assert Tailwind class strings. Assert role + name + `aria-*` + visible text.
+MSW is global (`mocks/setup.ts`); per-case error fixtures via `server.use(...)`. `next/navigation` has no Node implementation — mock it once per file (`references/gotchas.md`).
 
 ## When to skip
 
-- The component is pure presentational with no state or handlers — treat it as a feature component (`feature-components.md`).
-- The behavior is only meaningful when wired into a real page+server stack — escalate to Playwright instead.
+- A `"use client"` component with no state/handlers/conditionals (rare — it shouldn't be a client component) → treat as a feature component, skip unit.
+- Do not unit-test the redirect *target* page — that's the page's E2E concern.
+- Do not duplicate the BFF status-mapping assertions here — that belongs to `artifacts/route-handlers.md`.
 
-## Examples from this project
+## Examples from project
 
-- No client components exist yet. When `<LoginForm>` (or any controlled form) is extracted from `app/login/page.tsx`, it will be a client component and **must** have a `*.test.tsx` covering the validation branches and the submit path with MSW.
+- None yet (2026-05) — no `"use client"` files exist. The auth feature will introduce a client form component (the `/login` and `/signup` pages currently render a static `type="submit"` with no handler). When it lands, it gets a `*.test.tsx` per this recipe **and** is exercised by the auth E2E spec.

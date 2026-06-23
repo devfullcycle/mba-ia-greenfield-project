@@ -23,5 +23,35 @@
  * Feature SIs append aliases here as endpoints are wired through the BFF.
  * The barrel starts empty by design.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { paths } from "./types.gen";
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+// Request bodies (fields are empty in the current openapi.json — will expand as the upstream spec grows)
+export type RegisterDto =
+  paths["/auth/register"]["post"]["requestBody"]["content"]["application/json"];
+
+export type LoginDto =
+  paths["/auth/login"]["post"]["requestBody"]["content"]["application/json"];
+
+export type ForgotPasswordDto =
+  paths["/auth/forgot-password"]["post"]["requestBody"]["content"]["application/json"];
+
+export type RefreshTokenDto =
+  paths["/auth/refresh"]["post"]["requestBody"]["content"]["application/json"];
+
+// Upstream success response bodies
+export type RegisterResponse =
+  paths["/auth/register"]["post"]["responses"][201]["content"]["application/json"];
+
+// LoginTokenPair: upstream 200 body — BFF reads it to seal into the iron-session cookie;
+// tokens never cross to the browser (per phase-02-auth-frontend/TD-02).
+export type LoginTokenPair =
+  paths["/auth/login"]["post"]["responses"][200]["content"]["application/json"];
+
+export type RefreshTokenPair =
+  paths["/auth/refresh"]["post"]["responses"][200]["content"]["application/json"];
+
+// Shared error envelope (all auth 4xx responses)
+export type ApiErrorEnvelope =
+  paths["/auth/register"]["post"]["responses"][400]["content"]["application/json"];

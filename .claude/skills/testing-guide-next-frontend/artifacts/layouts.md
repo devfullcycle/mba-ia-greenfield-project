@@ -2,47 +2,38 @@
 
 # Layouts (`app/**/layout.tsx`)
 
-A layout wraps a route segment with shared chrome (root layout, segment layouts). It typically loads fonts, sets `<html>`/`<body>` classes, and renders `children`.
+Server Components that wrap a route subtree. Most layouts are pure structural shells (fonts, providers, `<html>`/`<body>`) — framework behavior, not test-worthy. A layout becomes test-worthy only when it adds **logic**.
 
 ## What to test
 
-- **Auth gates** in a layout (e.g., a future authenticated route group) — verified via Playwright (unauthenticated → redirect; authenticated → renders).
-- **Conditional rendering branches** (e.g., a future "show sidebar only when logged in" branch) — verified via Playwright in each state.
-- Metadata correctness, when SEO-critical — Playwright via `page.title()` / `page.locator('meta[name=...]')`.
+- **Auth/redirect gates** — a layout that reads a session and redirects unauthenticated users: the redirect behavior → **E2E**.
+- **Conditional rendering** — a layout that renders different chrome based on a condition.
+- Nothing if the layout only wires fonts, metadata, and structural markup.
 
 ## Layer assignment
 
-| Layout shape | Vitest unit | Playwright E2E |
-|---|---|---|
-| Static wrapper (fonts, body class, renders children) | ❌ skip — framework behavior | ❌ skip |
-| Logic-bearing (auth gate, conditional rendering) | ❌ — async/server logic | ✅ verify each branch |
+| Layout shape | Unit | Integration | E2E |
+|---|---|---|---|
+| Structural shell (fonts, `<html>`/`<body>`, providers) | ❌ | ❌ | ❌ — framework behavior |
+| Auth gate / redirect / conditional chrome | ❌ (async RSC — not Vitest-renderable) | ❌ | ✅ Playwright |
 
-Layouts are server-rendered. They have the same async-RSC restriction as pages (see `pages.md`): Vitest cannot render them.
+## Setup pattern
 
-## Setup pattern — Playwright
+When a layout has a gate, cover it through the protected route's E2E spec (it asserts the redirect), per `artifacts/pages.md`'s Playwright template — there is no separate layout-only test.
 
 ```ts
-import { test, expect } from "@playwright/test"
-
-test.describe("authenticated layout", () => {
-  test("unauthenticated visitor is redirected to /login", async ({ page }) => {
-    await page.goto("/dashboard")
-    await expect(page).toHaveURL(/\/login$/)
-  })
-
-  test("authenticated visitor sees the dashboard chrome", async ({ page }) => {
-    // see references/file-conventions.md for the auth.setup.ts storageState pattern
-    await page.goto("/dashboard")
-    await expect(page.getByRole("navigation")).toBeVisible()
-  })
-})
+// tests/protected-route.e2e-spec.ts
+test("anonymous user is redirected away from a gated route", async ({ page }) => {
+  await page.goto("/dashboard");          // layout gate runs server-side
+  await expect(page).toHaveURL("/login");
+});
 ```
 
 ## When to skip
 
-- The layout has no logic — it only sets fonts/classes and renders `children`. The root `app/layout.tsx` falls in this bucket today.
+- The root layout that only loads `Inter`/`Geist_Mono`, sets `metadata`, and renders `<html><body>{children}</body></html>` — **skip entirely**. Asserting the font variable className is a mirror test; metadata is framework behavior.
+- Do not unit-render a layout to check it "renders children" — that is framework behavior.
 
-## Examples from this project
+## Examples from project
 
-- `app/layout.tsx` — root layout: loads `Inter` and `Geist_Mono`, sets `<html>`/`<body>` classes via `cn(...)`, renders `children`. **Skip.** No logic to assert.
-- Future segment layouts under `app/(authenticated)/layout.tsx` with redirect logic → **Playwright**, one test per branch (redirect vs render).
+- `app/layout.tsx` — root layout: fonts via `next/font/google`, `metadata`, `cn()`-composed `<html>` classes, `<body>` structure. **No logic → no test.** If an auth-provider or session gate is ever added here, cover the gate via the gated route's E2E spec.

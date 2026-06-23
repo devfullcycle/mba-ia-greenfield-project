@@ -2,39 +2,30 @@
 
 # shadcn UI Primitives (`components/ui/*.tsx`)
 
-shadcn primitives are configured-library wrappers. They:
-
-- Compose `cva` variants with a fixed base class set,
-- Forward `...props` to a native element (`<button>`, `<input>`, `<div>`),
-- Accept `asChild` and proxy to `radix-ui`'s `Slot.Root` when polymorphism is needed,
-- Set `data-slot`, `data-variant`, `data-size` attributes.
-
-They contain no business logic, no state, no side effects.
+The shadcn/ui layer (style `radix-nova`, baseColor `neutral`) — `cva`-variant wrappers over `radix-ui` primitives, added **only** via `npx shadcn@latest add <name>`. These are *configured-library* artifacts: their behavior is Radix's + `cva`'s, already covered by those libraries' own suites.
 
 ## What to test
 
-Nothing at the primitive level. The behavior of `cva` and Radix is covered by their own test suites; testing it here would duplicate that coverage. Visual correctness of variants is a design concern, validated against Figma during implementation (`figma-implement-design` skill).
+- **Nothing at this layer.** A test here would re-assert `cva` variant→class mapping (a mirror of `buttonVariants`) or Radix `Slot`/focus behavior (the library's own coverage). Both are NOT-worth-testing per the fundamentals.
+- The *configuration contract* (does `variant="destructive"` look destructive, does focus-visible ring render) is a **visual** concern — Playwright/visual parity, never a Vitest class assertion.
 
 ## Layer assignment
 
-| Primitive shape | Vitest | E2E |
-|---|---|---|
-| Stock shadcn primitive (Button, Card, Input, Label, …) | ❌ skip | covered via consumers |
-| Custom primitive that adds branching logic on top (rare) | ✅ unit-test only the new branching | covered via consumers |
+| Primitive | Unit | Integration | E2E |
+|---|---|---|---|
+| `components/ui/*` (Button, Input, Card, Label, …) | ❌ never | ❌ | only incidentally, via a page flow that uses it |
 
 ## Setup pattern
 
-None. If a primitive ever grows real branching (e.g., a future `<DataTable>` that owns sort/pagination state), promote it to a client component and follow `client-components.md` — but that artifact does not belong in `components/ui/` in the first place. Reserve `components/ui/` strictly for shadcn-style stateless primitives.
+None. Coverage is incidental: when a page/client-component test or E2E flow renders `<Button>`/`<Input>`, the primitive is exercised in context. Assert the *consumer's* observable behavior (button submits the form, input is `aria-invalid` on error) — not the primitive's classes.
 
 ## When to skip
 
-Always for stock shadcn primitives.
+- Always skip a dedicated test for anything in `components/ui/`.
+- Never write `expect(<Button>).toHaveClass("bg-primary")` or assert `data-variant` mapping — that is a mirror of `cva` config.
+- If you believe a primitive is broken, the bug is either in the shadcn CLI output (regenerate it) or in *how a consumer uses it* (test the consumer).
 
-## Examples from this project
+## Examples from project
 
-- `components/ui/button.tsx` — `cva` variants + `Slot` passthrough. **Skip.** Coverage comes from every page/component that renders a button.
-- `components/ui/card.tsx`, `input.tsx`, `label.tsx` — same. **Skip.**
-
-## Important rule
-
-Do **not** unit-test shadcn primitives "for completeness". Such tests are mirror tests: they assert that `variant="destructive"` sets `bg-destructive`, which only restates the `cva` config. They never catch real bugs and they make refactors painful.
+- `components/ui/button.tsx` — `cva` `buttonVariants` (6 variants × 4 sizes) + Radix `Slot` for `asChild`. **Skip.** Variant correctness is visual (Playwright); the `asChild` polymorphism is Radix's contract.
+- `components/ui/input.tsx`, `card.tsx`, `label.tsx` — thin styled wrappers. **Skip.** Exercised through the `/login` page form and its E2E.
