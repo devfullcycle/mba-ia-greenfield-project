@@ -22,6 +22,14 @@ Este é um projeto greenfield desenvolvido para demonstrar como construir uma ap
 
 ---
 
+## 🎨 Design System (Figma)
+
+- [FC Tube.fig](./FC%20Tube.fig) — arquivo-fonte do **design system** do projeto no Figma.
+
+Contém os fundamentos visuais do StreamTube — tokens (cores, tipografia, espaçamento, raios), componentes e as telas da plataforma. É a referência de design para a implementação do frontend: os componentes em `next-frontend/components/ui` (shadcn) e os tokens em `next-frontend/app/globals.css` derivam deste arquivo. Abra-o no Figma (`Arquivo → Importar`) para consultar especificações e estados visuais.
+
+---
+
 ## 📋 Pré-requisitos
 
 - Docker e Docker Compose
@@ -175,6 +183,7 @@ green-field-ia-project/
 │   ├── compose.yaml                     # Docker Compose (dev server)
 │   └── Dockerfile.dev
 ├── CLAUDE.md                            # Instruções para IA
+├── FC Tube.fig                          # Design system do projeto (Figma)
 ├── whiteboard.png                       # Quadro branco do projeto
 └── README.md
 ```
