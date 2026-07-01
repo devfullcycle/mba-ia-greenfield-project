@@ -1,5 +1,9 @@
 import { envValidationSchema } from './env.validation';
 
+interface ValidatedEnv {
+  SWAGGER_ENABLED: string;
+}
+
 const requiredEnv = {
   DB_USERNAME: 'user',
   DB_PASSWORD: 'pass',
@@ -32,8 +36,10 @@ describe('envValidationSchema — SWAGGER_ENABLED', () => {
   });
 
   it('should apply default false when SWAGGER_ENABLED is not set', () => {
-    const { value, error } = validate({});
-    expect(error).toBeUndefined();
-    expect(value.SWAGGER_ENABLED).toBe('false');
+    const result = validate({});
+    if (result.error) {
+      throw result.error;
+    }
+    expect((result.value as ValidatedEnv).SWAGGER_ENABLED).toBe('false');
   });
 });
