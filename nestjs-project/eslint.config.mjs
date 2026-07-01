@@ -32,4 +32,14 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // `expect(mock.method).toHaveBeenCalledWith(...)` never invokes the method
+    // with a different `this`, so the rule's concern doesn't apply to
+    // jest.Mocked<T> assertions — see typescript-eslint's own "When Not To
+    // Use It" guidance for unbound-method in Jest test files.
+    files: ['**/*.spec.ts', '**/*.integration-spec.ts', '**/*.e2e-spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );
