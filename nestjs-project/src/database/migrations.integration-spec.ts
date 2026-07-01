@@ -36,6 +36,12 @@ describe('Database migrations (integration)', () => {
         dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`),
       ),
       dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
+      // Dropping the table does not drop enum types created via `CREATE TYPE`
+      // (they are standalone objects) — without this, a second run against a
+      // previously-migrated database fails with "type already exists".
+      dataSource.query(
+        `DROP TYPE IF EXISTS "verification_tokens_type_enum" CASCADE`,
+      ),
     ]);
   });
 
