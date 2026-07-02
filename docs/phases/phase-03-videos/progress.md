@@ -1,6 +1,6 @@
 # phase-03-videos — Progress
 
-**Status:** in_progress
+**Status:** completed
 **SIs:** 12/12 completed
 
 ### SI-03.1 — Infra: Redis, MinIO e libs de fila/storage no Compose
@@ -93,3 +93,11 @@
 - **Observations:**
   - Idêntico à SI-03.11 em estrutura (mesma regra de autorização via `getVideoForRead`, mesmo `@Redirect()`), diferindo apenas em `VideosService.getVideoReadUrl(video, { attachment: true })`, que já existia pronto para essa reutilização desde a SI-03.11 — nenhuma mudança em `StorageService`/`VideosService` foi necessária além de passar a opção.
   - Fecha as 12 SIs da Fase 03. Próximo passo é a Etapa 7 (fechamento): Definition of Done completa, atualização do `CLAUDE.md`/`nestjs-project/CLAUDE.md`, e checklist final de Critérios de Aceite/Reprova automática do `instrucoes.md`.
+
+### Etapa 7 — Fechamento
+- **Status:** completed
+- **Observations:**
+  - Auditoria final contra o `instrucoes.md` (fornecido verbatim pelo usuário nesta etapa) encontrou uma inconsistência entre o Data Model do plano (`### Technical Specifications` → `upload_id`: "limpo após `complete-upload`") e o código real: `VideosService.completeUpload` nunca zerava `upload_id`. Corrigido (`video.upload_id = null` antes do save em `completeUpload`) — além de alinhar plano↔código, corrige um bug real: sem isso, `POST /videos/:id/upload-part-url` podia ser chamado após a conclusão e gerar uma URL pré-assinada para um multipart upload já finalizado (e portanto inválido no S3/MinIO). Teste unitário de `completeUpload` em `videos.service.spec.ts` passou a asserir `upload_id: null` no `save`.
+  - `CLAUDE.md` (raiz e `nestjs-project`) atualizados com a seção de vídeos (fila/worker/storage, endpoints, autorização, lifecycle de status), coerentes com o código.
+  - Checklist final de Critérios de Aceite/Reprova automática do `instrucoes.md` conferido item a item — nenhum item de reprova automática incorrido; todos os artefatos obrigatórios presentes (incluindo a seção `### Events/Messages` das Technical Specifications, com o evento `process-video`).
+  - `feature/phase-03-videos` mesclada em `dev` (local, sem push, por decisão do usuário).

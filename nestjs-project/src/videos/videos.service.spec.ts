@@ -204,6 +204,9 @@ describe('VideosService', () => {
         { videoId: 'video-1' },
         expect.objectContaining({ attempts: 3 }),
       );
+      expect(videoRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ upload_id: null }),
+      );
     });
   });
 

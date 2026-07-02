@@ -126,6 +126,7 @@ export class VideosService {
     );
 
     video.status = VideoStatus.UPLOADED;
+    video.upload_id = null;
     const saved = await this.videoRepository.save(video);
 
     await this.videoProcessingQueue.add(
