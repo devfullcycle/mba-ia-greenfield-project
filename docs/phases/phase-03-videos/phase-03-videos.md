@@ -517,22 +517,22 @@ SI-03.2 (root)
 
 ## Deliverables
 
-- [ ] SI-03.1 — Infra: Redis, MinIO e libs de fila/storage no Compose
-- [ ] SI-03.2 — Migration e entidade `Video`
-- [ ] SI-03.3 — `StorageService` (adapter S3/MinIO)
-- [ ] SI-03.4 — `VideosService`: pré-cadastro e fluxo de upload
-- [ ] SI-03.5 — Endpoint `POST /videos`
-- [ ] SI-03.6 — Endpoint `POST /videos/:id/upload-part-url`
-- [ ] SI-03.7 — Endpoint `POST /videos/:id/complete-upload`
-- [ ] SI-03.8 — Infra: worker de vídeo separado
-- [ ] SI-03.9 — `VideoProcessor`: extração de metadados e thumbnail
-- [ ] SI-03.10 — `GET /videos/:id` com autorização
-- [ ] SI-03.11 — Endpoint `GET /videos/:id/stream`
-- [ ] SI-03.12 — Endpoint `GET /videos/:id/download`
+- [x] SI-03.1 — Infra: Redis, MinIO e libs de fila/storage no Compose
+- [x] SI-03.2 — Migration e entidade `Video`
+- [x] SI-03.3 — `StorageService` (adapter S3/MinIO)
+- [x] SI-03.4 — `VideosService`: pré-cadastro e fluxo de upload
+- [x] SI-03.5 — Endpoint `POST /videos`
+- [x] SI-03.6 — Endpoint `POST /videos/:id/upload-part-url`
+- [x] SI-03.7 — Endpoint `POST /videos/:id/complete-upload`
+- [x] SI-03.8 — Infra: worker de vídeo separado
+- [x] SI-03.9 — `VideoProcessor`: extração de metadados e thumbnail
+- [x] SI-03.10 — `GET /videos/:id` com autorização
+- [x] SI-03.11 — Endpoint `GET /videos/:id/stream`
+- [x] SI-03.12 — Endpoint `GET /videos/:id/download`
 
 **Full test suites:**
 
-- [ ] Testes unitários + integração passam (`docker compose exec nestjs-api npm test -- --runInBand`)
-- [ ] Testes E2E passam (`docker compose exec nestjs-api npm run test:e2e`)
-- [ ] Type-check limpo (`docker compose exec nestjs-api npx tsc --noEmit`)
-- [ ] Lint limpo (`docker compose exec nestjs-api npm run lint`)
+- [x] Testes unitários + integração passam (`docker compose exec nestjs-api npm test -- --runInBand`)
+- [x] Testes E2E passam (`docker compose exec nestjs-api npm run test:e2e`)
+- [x] Type-check limpo (`docker compose exec nestjs-api npx tsc --noEmit`)
+- [x] Lint limpo (`docker compose exec nestjs-api npm run lint`)

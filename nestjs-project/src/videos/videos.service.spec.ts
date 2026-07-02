@@ -3,6 +3,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
+import { Channel } from '../channels/entities/channel.entity';
+import { ChannelsService } from '../channels/channels.service';
 import {
   FileTooLargeException,
   InvalidVideoStatusTransitionException,
@@ -19,6 +21,7 @@ describe('VideosService', () => {
   let videosService: VideosService;
   let videoRepository: jest.Mocked<Repository<Video>>;
   let storageService: jest.Mocked<StorageService>;
+  let channelsService: jest.Mocked<ChannelsService>;
   let queue: jest.Mocked<Queue>;
 
   beforeEach(async () => {
@@ -31,6 +34,7 @@ describe('VideosService', () => {
             create: jest.fn(),
             save: jest.fn(),
             findOne: jest.fn(),
+            findOneBy: jest.fn(),
           },
         },
         {
@@ -43,6 +47,10 @@ describe('VideosService', () => {
           },
         },
         {
+          provide: ChannelsService,
+          useValue: { findByUserId: jest.fn() },
+        },
+        {
           provide: getQueueToken(VIDEO_PROCESSING_QUEUE),
           useValue: { add: jest.fn() },
         },
@@ -52,6 +60,7 @@ describe('VideosService', () => {
     videosService = module.get(VideosService);
     videoRepository = module.get(getRepositoryToken(Video));
     storageService = module.get(StorageService);
+    channelsService = module.get(ChannelsService);
     queue = module.get(getQueueToken(VIDEO_PROCESSING_QUEUE));
   });
 
@@ -195,6 +204,86 @@ describe('VideosService', () => {
         { videoId: 'video-1' },
         expect.objectContaining({ attempts: 3 }),
       );
+    });
+  });
+
+  describe('getVideoForRead', () => {
+    it('throws VideoNotFoundException when the video does not exist', async () => {
+      videoRepository.findOneBy.mockResolvedValue(null);
+
+      await expect(videosService.getVideoForRead('video-1')).rejects.toThrow(
+        VideoNotFoundException,
+      );
+    });
+
+    it('returns a ready video for an anonymous requester', async () => {
+      const video = {
+        id: 'video-1',
+        channel_id: 'channel-1',
+        status: VideoStatus.READY,
+      } as Video;
+      videoRepository.findOneBy.mockResolvedValue(video);
+
+      await expect(videosService.getVideoForRead('video-1')).resolves.toBe(
+        video,
+      );
+      expect(channelsService.findByUserId).not.toHaveBeenCalled();
+    });
+
+    it('returns a ready video for an authenticated non-owner', async () => {
+      const video = {
+        id: 'video-1',
+        channel_id: 'channel-1',
+        status: VideoStatus.READY,
+      } as Video;
+      videoRepository.findOneBy.mockResolvedValue(video);
+
+      await expect(
+        videosService.getVideoForRead('video-1', 'user-2'),
+      ).resolves.toBe(video);
+    });
+
+    it('throws VideoNotFoundException for a non-ready video requested anonymously', async () => {
+      videoRepository.findOneBy.mockResolvedValue({
+        id: 'video-1',
+        channel_id: 'channel-1',
+        status: VideoStatus.PROCESSING,
+      } as Video);
+
+      await expect(videosService.getVideoForRead('video-1')).rejects.toThrow(
+        VideoNotFoundException,
+      );
+    });
+
+    it('throws VideoNotFoundException for a non-ready video requested by a non-owner', async () => {
+      videoRepository.findOneBy.mockResolvedValue({
+        id: 'video-1',
+        channel_id: 'channel-1',
+        status: VideoStatus.PROCESSING,
+      } as Video);
+      channelsService.findByUserId.mockResolvedValue({
+        id: 'channel-2',
+      } as Channel);
+
+      await expect(
+        videosService.getVideoForRead('video-1', 'user-2'),
+      ).rejects.toThrow(VideoNotFoundException);
+    });
+
+    it('returns a non-ready video for its owner', async () => {
+      const video = {
+        id: 'video-1',
+        channel_id: 'channel-1',
+        status: VideoStatus.PROCESSING,
+      } as Video;
+      videoRepository.findOneBy.mockResolvedValue(video);
+      channelsService.findByUserId.mockResolvedValue({
+        id: 'channel-1',
+      } as Channel);
+
+      await expect(
+        videosService.getVideoForRead('video-1', 'user-1'),
+      ).resolves.toBe(video);
     });
   });
 });

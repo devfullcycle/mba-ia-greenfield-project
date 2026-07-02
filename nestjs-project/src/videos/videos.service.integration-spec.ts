@@ -61,6 +61,7 @@ describe('VideosService (integration)', () => {
 
   beforeEach(async () => {
     await cleanAllTables(dataSource);
+    await queue.obliterate({ force: true });
   });
 
   let counter = 0;

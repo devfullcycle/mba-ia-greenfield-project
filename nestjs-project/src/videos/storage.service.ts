@@ -1,3 +1,7 @@
+import { createWriteStream } from 'fs';
+import { readFile } from 'fs/promises';
+import type { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import {
@@ -5,6 +9,7 @@ import {
   CreateBucketCommand,
   CreateMultipartUploadCommand,
   GetObjectCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
 } from '@aws-sdk/client-s3';
@@ -99,6 +104,29 @@ export class StorageService implements OnModuleInit {
             ETag: part.etag,
           })),
         },
+      }),
+    );
+  }
+
+  async downloadToFile(key: string, destinationPath: string): Promise<void> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    await pipeline(result.Body as Readable, createWriteStream(destinationPath));
+  }
+
+  async uploadFile(
+    key: string,
+    filePath: string,
+    contentType?: string,
+  ): Promise<void> {
+    const body = await readFile(filePath);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
       }),
     );
   }

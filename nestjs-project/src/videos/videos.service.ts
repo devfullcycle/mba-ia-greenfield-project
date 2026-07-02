@@ -5,6 +5,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { Repository } from 'typeorm';
+import { ChannelsService } from '../channels/channels.service';
 import { CompleteUploadDto } from './dto/complete-upload.dto';
 import { InitiateUploadDto } from './dto/initiate-upload.dto';
 import { UploadPartUrlDto } from './dto/upload-part-url.dto';
@@ -15,7 +16,7 @@ import {
   UploadPartInvalidException,
   VideoNotFoundException,
 } from './exceptions/video.exception';
-import { StorageService } from './storage.service';
+import { PresignedReadOptions, StorageService } from './storage.service';
 import { Video, VideoStatus } from './video.entity';
 import {
   ACCEPTED_VIDEO_MIME_TYPES,
@@ -23,6 +24,15 @@ import {
   VIDEO_PROCESSING_QUEUE,
   VIDEO_PROCESS_JOB,
 } from './videos.constants';
+
+export interface VideoReadResponse {
+  id: string;
+  title: string;
+  status: VideoStatus;
+  durationSeconds: number | null;
+  createdAt: Date;
+  thumbnailUrl?: string;
+}
 
 type AcceptedMimeType = (typeof ACCEPTED_VIDEO_MIME_TYPES)[number];
 
@@ -36,6 +46,7 @@ export class VideosService {
     @InjectRepository(Video)
     private readonly videoRepository: Repository<Video>,
     private readonly storageService: StorageService,
+    private readonly channelsService: ChannelsService,
     @InjectQueue(VIDEO_PROCESSING_QUEUE)
     private readonly videoProcessingQueue: Queue,
   ) {}
@@ -124,6 +135,49 @@ export class VideosService {
     );
 
     return { id: saved.id, status: saved.status };
+  }
+
+  async getVideoForRead(
+    videoId: string,
+    requesterUserId?: string,
+  ): Promise<Video> {
+    const video = await this.videoRepository.findOneBy({ id: videoId });
+    if (!video) {
+      throw new VideoNotFoundException();
+    }
+    if (video.status === VideoStatus.READY) {
+      return video;
+    }
+    if (requesterUserId) {
+      const channel = await this.channelsService.findByUserId(requesterUserId);
+      if (channel && channel.id === video.channel_id) {
+        return video;
+      }
+    }
+    throw new VideoNotFoundException();
+  }
+
+  async buildVideoReadResponse(video: Video): Promise<VideoReadResponse> {
+    const thumbnailUrl =
+      video.status === VideoStatus.READY && video.thumbnail_key
+        ? await this.storageService.getPresignedReadUrl(video.thumbnail_key)
+        : undefined;
+
+    return {
+      id: video.id,
+      title: video.title,
+      status: video.status,
+      durationSeconds: video.duration_seconds,
+      createdAt: video.created_at,
+      thumbnailUrl,
+    };
+  }
+
+  async getVideoReadUrl(
+    video: Video,
+    options?: PresignedReadOptions,
+  ): Promise<string> {
+    return this.storageService.getPresignedReadUrl(video.storage_key, options);
   }
 
   private async findOwnedVideoOrThrow(

@@ -13,6 +13,10 @@ docker compose ps   # all services must show status "running"
 Then verify each infrastructure service is actually ready to accept connections — not just running:
 
 - **PostgreSQL:** `docker compose exec db pg_isready -U streamtube` — expect `accepting connections`
+- **Redis:** `docker compose exec redis redis-cli ping` — expect `PONG`
+- **MinIO:** `docker compose exec minio curl -f http://localhost:9000/minio/health/live` — expect exit code 0
+
+The `video-worker` service is infrastructure, not the API server — unlike `nestjs-api`, it starts automatically with `docker compose up -d` (see "Videos Module" below for why).
 
 Only start the NestJS dev server (`npm run start:dev`) when the user **explicitly** asks to run the application — never as part of "start the environment".
 
@@ -34,6 +38,10 @@ docker compose exec nestjs-api npm run start:dev
 Services:
 - `nestjs-api` — NestJS API, port `3000`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `redis` — Redis 7, port `6379` — BullMQ job queue backend
+- `minio` — MinIO, ports `9000` (S3 API) / `9001` (console) — S3-compatible object storage for video files and thumbnails
+- `mailpit` — SMTP test server, ports `1025` (SMTP) / `8025` (web UI)
+- `video-worker` — separate Nest process (no HTTP server) that consumes the video processing queue; starts automatically with `docker compose up -d`
 
 All verification and teardown commands run on the **host machine**:
 
@@ -62,6 +70,8 @@ docker compose down
 npm run start:dev                        # Dev server with hot-reload
 npm run build                            # Compile to dist/
 npm run start:prod                       # Run compiled build
+npm run start:worker                     # Video worker with hot-reload (no HTTP server)
+npm run start:worker:prod                # Run compiled worker build
 
 npm test                                 # Unit tests
 npm run test:watch                       # Unit tests in watch mode
@@ -148,6 +158,42 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 
 - Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
 - Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
+
+## Videos Module (Upload, Processing, Storage)
+
+The `videos/` module implements chunked upload, async processing, and read/streaming of videos up to 10GB, split across two separate processes:
+
+- **`nestjs-api`** — exposes the HTTP endpoints below and owns the `Video` entity/repository.
+- **`video-worker`** — a second, independent Nest process (`src/main-worker.ts`, bootstrapped via `NestFactory.createApplicationContext`, no HTTP server) that consumes the processing queue. It reuses the same `Video` entity/module conventions as the API (see `src/videos/worker.module.ts`) rather than duplicating data-access code.
+
+### Upload flow (never proxies bytes through the API)
+
+1. `POST /videos` — registers a `draft` video and starts a multipart upload directly against the storage (MinIO/S3), returning an `uploadId`. The API never receives the file bytes.
+2. `POST /videos/:id/upload-part-url` — returns a presigned URL per part; the client `PUT`s each part directly to storage.
+3. `POST /videos/:id/complete-upload` — finalizes the multipart upload, flips the video to `uploaded`, and enqueues a `process-video` job on the `video-processing` BullMQ queue.
+
+### Processing (`video-worker`)
+
+`VideoProcessor` (`src/videos/video.processor.ts`, `@Processor('video-processing')`) consumes the job: downloads the original file, extracts duration via `ffprobe` and a thumbnail via `ffmpeg` (both installed system-wide — `apt-get install ffmpeg`, wrapped by `fluent-ffmpeg`), uploads the thumbnail, and flips the video to `ready`. After exhausting the configured retry attempts, it flips to `failed` with a `failure_reason`. `ffmpeg` is installed in **both** `Dockerfile.worker` (runtime) and `Dockerfile.dev` (so `video.processor.integration-spec.ts` can run inside `nestjs-api`, per this project's convention that all tests run there).
+
+### Video status lifecycle
+
+`draft → uploaded → processing → ready | failed`
+
+### Read authorization (`GET /videos/:id`, `/stream`, `/download`)
+
+These three endpoints are `@Public()` but resolve an **optional** authenticated user (see `OptionalUser` decorator and the `JwtAuthGuard`'s public-route handling below) to apply: a video is visible to anonymous/non-owner requesters only when `status === 'ready'`; the owner can always read/stream/download their own video regardless of status. Non-visible videos return `404 VIDEO_NOT_FOUND` — never `403` — to avoid revealing existence to unauthorized requesters.
+
+`stream`/`download` respond `302` with a `Location` pointing to a presigned storage read URL (`download` adds `response-content-disposition=attachment`); range requests for streaming are handled natively by the storage, not by the API.
+
+### `JwtAuthGuard` optional-auth mode for `@Public()` routes
+
+Because the read endpoints above need to know "is there a valid, authenticated owner?" without *requiring* authentication, `JwtAuthGuard` decodes an `Authorization` header when present even on `@Public()` routes — but never throws `401` on a `@Public()` route if the header is missing or the token is invalid; it just leaves `request.user` unset. Use `@CurrentUser()` when a route requires a user (guaranteed by the guard); use `@OptionalUser()` when a route is public but wants to special-case an authenticated owner.
+
+### Storage and queue
+
+- `StorageService` (`src/videos/storage.service.ts`) wraps `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`; every call goes through this adapter — no controller/service should import the S3 SDK directly.
+- Queue: `@nestjs/bullmq` + `bullmq`, connected to the `redis` service. The queue name and job name live in `src/videos/videos.constants.ts` — never hardcode the string literals elsewhere.
 
 ## Code Conventions
 
