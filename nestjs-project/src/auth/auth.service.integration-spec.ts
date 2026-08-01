@@ -7,7 +7,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import appConfig from '../config/app.config';
 import authConfig from '../config/auth.config';
-import mailConfig from '../config/mail.config';
 import * as argon2 from 'argon2';
 import {
   EmailAlreadyExistsException,
@@ -16,7 +15,7 @@ import {
   TokenExpiredException,
   TokenReuseDetectedException,
 } from '../common/exceptions/domain.exception';
-import { MailModule } from '../mail/mail.module';
+import { MailService } from '../mail/mail.service';
 import { Channel } from '../channels/entities/channel.entity';
 import { User } from '../users/entities/user.entity';
 import { UsersModule } from '../users/users.module';
@@ -34,13 +33,27 @@ import {
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 
+// AuthService's own tests never send real mail — every send is captured via
+// jest.spyOn on this fake. Importing the real MailModule here would boot a
+// live SMTP transporter and the Handlebars/css-inline native addon for no
+// benefit; that combination is what MailService's own integration suite
+// (mail.service.integration-spec.ts) exists to exercise.
+function createFakeMailService(): jest.Mocked<
+  Pick<MailService, 'sendConfirmationEmail' | 'sendPasswordResetEmail'>
+> {
+  return {
+    sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 async function createAuthTestModule(): Promise<TestingModule> {
   const ds = createTestDataSource(ALL_ENTITIES);
   return Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
         isGlobal: true,
-        load: [appConfig, authConfig, mailConfig],
+        load: [appConfig, authConfig],
       }),
       TypeOrmModule.forRoot(ds.options),
       TypeOrmModule.forFeature([
@@ -57,9 +70,11 @@ async function createAuthTestModule(): Promise<TestingModule> {
         }),
       }),
       UsersModule,
-      MailModule,
     ],
-    providers: [AuthService],
+    providers: [
+      AuthService,
+      { provide: MailService, useValue: createFakeMailService() },
+    ],
   }).compile();
 }
 
@@ -92,12 +107,13 @@ async function registerConfirmAndLogin(
 
 describe('AuthService — register (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
   let userRepository: Repository<User>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
@@ -105,7 +121,10 @@ describe('AuthService — register (integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -183,12 +202,13 @@ describe('AuthService — register (integration)', () => {
 
 describe('AuthService — confirm (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
   let userRepository: Repository<User>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
@@ -196,7 +216,10 @@ describe('AuthService — confirm (integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -254,18 +277,22 @@ describe('AuthService — confirm (integration)', () => {
 
 describe('AuthService — resendConfirmation (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -306,12 +333,13 @@ describe('AuthService — resendConfirmation (integration)', () => {
 
 describe('AuthService — login (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let jwtService: JwtService;
   let dataSource: DataSource;
   let refreshTokenRepository: Repository<RefreshToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     jwtService = module.get(JwtService);
     dataSource = module.get(DataSource);
@@ -319,7 +347,10 @@ describe('AuthService — login (integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -385,12 +416,13 @@ describe('AuthService — login (integration)', () => {
 
 describe('AuthService — refresh (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let jwtService: JwtService;
   let dataSource: DataSource;
   let refreshTokenRepository: Repository<RefreshToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     jwtService = module.get(JwtService);
     dataSource = module.get(DataSource);
@@ -398,7 +430,10 @@ describe('AuthService — refresh (integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -503,18 +538,22 @@ describe('AuthService — refresh (integration)', () => {
 
 describe('AuthService — logout (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let refreshTokenRepository: Repository<RefreshToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     refreshTokenRepository = dataSource.getRepository(RefreshToken);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -573,18 +612,22 @@ function capturePasswordResetToken(authService: AuthService): Promise<string> {
 
 describe('AuthService — forgotPassword (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
@@ -654,13 +697,14 @@ describe('AuthService — forgotPassword (integration)', () => {
 
 describe('AuthService — resetPassword (integration)', () => {
   let authService: AuthService;
+  let module: TestingModule;
   let dataSource: DataSource;
   let verificationTokenRepository: Repository<VerificationToken>;
   let userRepository: Repository<User>;
   let refreshTokenRepository: Repository<RefreshToken>;
 
   beforeAll(async () => {
-    const module = await createAuthTestModule();
+    module = await createAuthTestModule();
     authService = module.get(AuthService);
     dataSource = module.get(DataSource);
     verificationTokenRepository = dataSource.getRepository(VerificationToken);
@@ -669,7 +713,10 @@ describe('AuthService — resetPassword (integration)', () => {
   });
 
   afterAll(async () => {
-    await dataSource.destroy();
+    if (dataSource?.isInitialized) {
+      await dataSource.destroy();
+    }
+    await module?.close();
   });
 
   beforeEach(async () => {
