@@ -1,8 +1,11 @@
 services:
   nestjs-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.dev
+    command: npm run start:dev
+    env_file:
+      - .env
     ports:
       - 3000:3000
     volumes:
