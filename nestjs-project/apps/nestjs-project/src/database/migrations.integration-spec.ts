@@ -5,16 +5,20 @@ import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
 import { CreateUsersAndChannels1775687773260 } from './migrations/1775687773260-CreateUsersAndChannels';
 import { CreateAuthTokens1777579850478 } from './migrations/1777579850478-CreateAuthTokens';
+import { CreateVideos1785621122372 } from './migrations/1785621122372-CreateVideos';
 import { createTestDataSource } from '../test/create-test-data-source';
+import { Video } from '../videos/entities/video.entity';
 
 const MANAGED_TABLES = [
   'users',
   'channels',
   'refresh_tokens',
   'verification_tokens',
+  'videos',
 ];
 
 const VERIFICATION_TOKENS_TYPE_ENUM = 'verification_tokens_type_enum';
+const VIDEOS_STATUS_ENUM = 'videos_status_enum';
 
 async function getEnumValues(
   dataSource: DataSource,
@@ -51,12 +55,13 @@ describe('Database migrations (integration)', () => {
 
   beforeAll(async () => {
     dataSource = createTestDataSource(
-      [User, Channel, RefreshToken, VerificationToken],
+      [User, Channel, RefreshToken, VerificationToken, Video],
       {
         synchronize: false,
         migrations: [
           CreateUsersAndChannels1775687773260,
           CreateAuthTokens1777579850478,
+          CreateVideos1785621122372,
         ],
       },
     );
@@ -65,15 +70,20 @@ describe('Database migrations (integration)', () => {
 
     // Ensures the migrations run against a completely empty PostgreSQL
     // database — tables, tracking table, and leftover enum types alike.
-    await Promise.all([
-      ...MANAGED_TABLES.map((table) =>
-        dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`),
-      ),
-      dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
-      dataSource.query(
-        `DROP TYPE IF EXISTS "public"."${VERIFICATION_TOKENS_TYPE_ENUM}"`,
-      ),
-    ]);
+    // Dropped sequentially (not Promise.all): concurrent DROP TABLE ...
+    // CASCADE statements across FK-related tables (channels -> videos,
+    // users -> channels/refresh_tokens/verification_tokens) can acquire
+    // ACCESS EXCLUSIVE locks in different orders and deadlock in Postgres.
+    for (const table of MANAGED_TABLES) {
+      await dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
+    }
+    await dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`);
+    await dataSource.query(
+      `DROP TYPE IF EXISTS "public"."${VERIFICATION_TOKENS_TYPE_ENUM}"`,
+    );
+    await dataSource.query(
+      `DROP TYPE IF EXISTS "public"."${VIDEOS_STATUS_ENUM}"`,
+    );
   });
 
   afterAll(async () => {
@@ -83,10 +93,10 @@ describe('Database migrations (integration)', () => {
     await dataSource.destroy();
   });
 
-  it('should apply all migrations on an empty database and create all four tables', async () => {
+  it('should apply all migrations on an empty database and create all five tables', async () => {
     const ranMigrations = await dataSource.runMigrations();
 
-    expect(ranMigrations).toHaveLength(2);
+    expect(ranMigrations).toHaveLength(3);
 
     const result = await dataSource.query<{ table_name: string }[]>(
       `SELECT table_name FROM information_schema.tables
@@ -101,7 +111,16 @@ describe('Database migrations (integration)', () => {
       'refresh_tokens',
       'users',
       'verification_tokens',
+      'videos',
     ]);
+  });
+
+  it('should create the videos_status_enum with the expected values', async () => {
+    const exists = await enumTypeExists(dataSource, VIDEOS_STATUS_ENUM);
+    expect(exists).toBe(true);
+
+    const values = await getEnumValues(dataSource, VIDEOS_STATUS_ENUM);
+    expect(values).toEqual(['draft', 'processing', 'ready', 'failed']);
   });
 
   it('should create the verification_tokens_type_enum with the expected values', async () => {
@@ -129,7 +148,21 @@ describe('Database migrations (integration)', () => {
     expect(result[0].udt_name).toBe(VERIFICATION_TOKENS_TYPE_ENUM);
   });
 
-  it('should revert the last migration and remove token tables and the enum type', async () => {
+  it('should revert the last migration and remove the videos table and enum type', async () => {
+    await dataSource.undoLastMigration();
+
+    const result = await dataSource.query<{ table_name: string }[]>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = 'public'
+         AND table_name = 'videos'`,
+    );
+    expect(result).toHaveLength(0);
+
+    const enumExists = await enumTypeExists(dataSource, VIDEOS_STATUS_ENUM);
+    expect(enumExists).toBe(false);
+  });
+
+  it('should revert the previous migration and remove token tables and the enum type', async () => {
     await dataSource.undoLastMigration();
 
     const result = await dataSource.query<{ table_name: string }[]>(
@@ -147,28 +180,38 @@ describe('Database migrations (integration)', () => {
     expect(enumExists).toBe(false);
   });
 
-  it('should re-apply the migration successfully after a full revert', async () => {
+  it('should re-apply both migrations successfully after a full revert', async () => {
     const ranMigrations = await dataSource.runMigrations();
 
-    expect(ranMigrations).toHaveLength(1);
-    expect(ranMigrations[0].name).toBe('CreateAuthTokens1777579850478');
+    expect(ranMigrations).toHaveLength(2);
+    expect(ranMigrations.map((m) => m.name)).toEqual([
+      'CreateAuthTokens1777579850478',
+      'CreateVideos1785621122372',
+    ]);
 
     const result = await dataSource.query<{ table_name: string }[]>(
       `SELECT table_name FROM information_schema.tables
        WHERE table_schema = 'public'
          AND table_name = ANY($1::text[])
        ORDER BY table_name`,
-      [['refresh_tokens', 'verification_tokens']],
+      [['refresh_tokens', 'verification_tokens', 'videos']],
     );
     expect(result.map((r) => r.table_name)).toEqual([
       'refresh_tokens',
       'verification_tokens',
+      'videos',
     ]);
 
-    const enumExists = await enumTypeExists(
+    const tokensEnumExists = await enumTypeExists(
       dataSource,
       VERIFICATION_TOKENS_TYPE_ENUM,
     );
-    expect(enumExists).toBe(true);
+    expect(tokensEnumExists).toBe(true);
+
+    const videosEnumExists = await enumTypeExists(
+      dataSource,
+      VIDEOS_STATUS_ENUM,
+    );
+    expect(videosEnumExists).toBe(true);
   });
 });

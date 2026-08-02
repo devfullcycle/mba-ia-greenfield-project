@@ -28,7 +28,9 @@ export class ChannelsService {
       let nickname = baseNickname;
 
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const existing = await manager.findOne(Channel, { where: { nickname } });
+        const existing = await manager.findOne(Channel, {
+          where: { nickname },
+        });
         if (existing) {
           nickname = appendRandomSuffix(baseNickname);
           continue;
@@ -56,5 +58,11 @@ export class ChannelsService {
         'Nickname conflict could not be resolved after max retries',
       );
     });
+  }
+
+  async findByUserId(userId: string): Promise<Channel | null> {
+    return this.dataSource
+      .getRepository(Channel)
+      .findOneBy({ user_id: userId });
   }
 }

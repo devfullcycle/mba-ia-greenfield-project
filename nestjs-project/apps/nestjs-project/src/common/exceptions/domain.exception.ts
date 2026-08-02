@@ -48,3 +48,35 @@ export class TokenReuseDetectedException extends DomainException {
     );
   }
 }
+
+export class VideoNotFoundException extends DomainException {
+  constructor() {
+    super('VIDEO_NOT_FOUND', 404, 'Video not found');
+  }
+}
+
+export class VideoNotOwnedException extends DomainException {
+  constructor() {
+    super('VIDEO_NOT_OWNED', 403, 'You do not own this video');
+  }
+}
+
+export class VideoAlreadyUploadedException extends DomainException {
+  constructor() {
+    super(
+      'VIDEO_ALREADY_UPLOADED',
+      409,
+      'Video upload has already been completed',
+    );
+  }
+}
+
+export class UploadFinalizationFailedException extends DomainException {
+  constructor() {
+    super(
+      'UPLOAD_FINALIZATION_FAILED',
+      502,
+      'Failed to finalize the video upload',
+    );
+  }
+}

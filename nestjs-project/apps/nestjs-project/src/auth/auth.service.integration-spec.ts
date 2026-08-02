@@ -30,8 +30,9 @@ import {
   VerificationToken,
   VerificationTokenType,
 } from './entities/verification-token.entity';
+import { Video } from '../videos/entities/video.entity';
 
-const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
 
 // AuthService's own tests never send real mail — every send is captured via
 // jest.spyOn on this fake. Importing the real MailModule here would boot a
