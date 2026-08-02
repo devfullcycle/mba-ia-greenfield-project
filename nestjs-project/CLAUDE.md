@@ -142,9 +142,11 @@ Whenever possible, prefer storing only the bare address in `.env` and composing 
 
 `tsc` (and therefore `nest build`) only emits compiled `.ts` files to `dist/`. Any non-TypeScript runtime asset — Handlebars templates (`.hbs`), JSON fixtures, static config files, etc. — must be declared in `nest-cli.json` under `compilerOptions.assets` (with `watchAssets: true` for dev). Without that, the file exists in `src/` but is missing in `dist/` and runtime fails only after build.
 
+**`__dirname` resolves differently under webpack (`start:dev`/`start:prod`) than under `ts-jest`/`ts-node` (tests).** In Nest CLI monorepo mode, `nest-cli.json` sets `"webpack": true`, so the running server is a single bundled file — `__dirname` there is the bundle root (e.g. `dist/apps/nestjs-project`), and any copied asset sits at whatever path Nest CLI preserved relative to the app's `sourceRoot` (e.g. a template declared at `mail/templates` in `compilerOptions.assets` lands at `dist/apps/nestjs-project/mail/templates`). Under Jest, `__dirname` is resolved per-file instead (e.g. `.../src/mail`, one level up from a direct-child `templates/` folder). Code that builds a path with `join(__dirname, 'templates')` and only tests it via Jest will pass every automated test and still crash the real server with `ENOENT` — Jest never exercises the webpack bundle, so this class of bug is invisible to `npm test`/`npm run test:e2e` and only shows up by actually running `start:dev`/`start:prod` and hitting the code path manually. If a module needs to resolve a bundled asset path, either try both layouts (`existsSync` fallback) or resolve the path in a way that doesn't depend on `__dirname`'s bundling-dependent meaning.
+
 ## Architecture
 
-NestJS with standard module structure. Source lives in `src/`, compiled output in `dist/`.
+NestJS CLI monorepo mode: `apps/nestjs-project` (the API) and `apps/video-worker` (the background video-processing consumer, no HTTP) share one `node_modules`/`package.json`/`tsconfig.json`. Each app's source lives in `apps/<app>/src/`, and each has its own compiled output under `dist/apps/<app>/`. The two apps share code via direct relative imports (e.g. `video-worker` importing config/entities from `../../nestjs-project/src/...`) rather than a Nest CLI `libs/` package, to keep cross-app coupling explicit and minimal.
 
 - Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
 - Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
