@@ -56,6 +56,8 @@ npm run start:dev
 
 A API estará disponível em `http://localhost:3000`.
 
+O `docker compose up -d` também sobe a infraestrutura de upload/processamento de vídeo: `minio` (armazenamento de objetos S3-compatível, console em `http://localhost:9001`), `redis` (fila BullMQ) e `video-worker` (consumidor da fila, processa vídeos com FFmpeg — inicia automaticamente junto com os demais serviços).
+
 ### Executar testes
 
 ```bash
@@ -77,14 +79,24 @@ green-field-ia-project/
 │   ├── project-plan.md                  # Planejamento geral do projeto
 │   └── diagrams/
 │       └── software-arch.mermaid        # Diagrama de arquitetura (C4)
-├── nestjs-project/                      # Backend API
-│   ├── src/
-│   │   ├── main.ts                      # Entry point
-│   │   ├── app.module.ts                # Módulo raiz
-│   │   ├── app.controller.ts            # Controller principal
-│   │   └── app.service.ts               # Service principal
-│   ├── test/                            # Testes e2e
-│   ├── compose.yaml                     # Docker Compose (API + PostgreSQL)
+├── nestjs-project/                      # Monorepo Nest CLI (API + Video Worker)
+│   ├── apps/
+│   │   ├── nestjs-project/              # Backend API
+│   │   │   ├── src/
+│   │   │   │   ├── main.ts              # Entry point
+│   │   │   │   ├── app.module.ts        # Módulo raiz
+│   │   │   │   ├── auth/                # Cadastro, login, tokens
+│   │   │   │   ├── channels/            # Canais de usuário
+│   │   │   │   ├── videos/              # Upload e metadados de vídeo
+│   │   │   │   ├── storage/             # Cliente S3/MinIO
+│   │   │   │   ├── queue/               # Fila BullMQ compartilhada
+│   │   │   │   └── mail/                # E-mails transacionais (SMTP)
+│   │   │   └── test/                    # Testes e2e (supertest)
+│   │   └── video-worker/                # Worker de processamento (sem HTTP)
+│   │       └── src/
+│   │           ├── main.ts              # Entry point (createApplicationContext)
+│   │           └── video-processing/    # Consumer BullMQ + pipeline FFmpeg
+│   ├── compose.yaml                     # Docker Compose (API, worker, Postgres, MinIO, Redis, Mailpit)
 │   └── Dockerfile.dev                   # Dockerfile de desenvolvimento
 ├── CLAUDE.md                            # Instruções para IA
 ├── whiteboard.png                       # Quadro branco do projeto
