@@ -7,24 +7,27 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "build:video-worker": "nest build video-worker",
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "start:prod": "node dist/apps/nestjs-project/main",
+    "start:dev:video-worker": "nest start video-worker --watch",
+    "start:prod:video-worker": "node dist/apps/video-worker/main",
+    "lint": "eslint \"{apps,libs}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:integration": "jest --runInBand --testRegex=\"\\.integration-spec\\.ts$\"",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --config ./apps/nestjs-project/test/jest-e2e.json --runInBand",
     "typeorm": "typeorm-ts-node-commonjs",
-    "migration:run": "npm run typeorm -- migration:run -d src/database/data-source.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d src/database/data-source.ts",
-    "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
+    "migration:run": "npm run typeorm -- migration:run -d apps/nestjs-project/src/database/data-source.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d apps/nestjs-project/src/database/data-source.ts",
+    "migration:generate": "npm run typeorm -- migration:generate -d apps/nestjs-project/src/database/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create",
-    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts"
+    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' apps/nestjs-project/src/database/seeds/seed.ts"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.3.4",
@@ -76,7 +79,7 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
+    "rootDir": ".",
     "testRegex": ".*\\.(spec|integration-spec)\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
@@ -84,8 +87,13 @@
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
+    "coverageDirectory": "./coverage",
     "testEnvironment": "node",
-    "setupFiles": ["dotenv/config"]
+    "setupFiles": [
+      "dotenv/config"
+    ],
+    "roots": [
+      "<rootDir>/apps/"
+    ]
   }
 }

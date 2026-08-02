@@ -12,6 +12,6 @@ export const AppDataSource = new DataSource({
   password: dbConfig.password,
   database: dbConfig.name,
   synchronize: false,
-  migrations: ['src/database/migrations/*.ts'],
-  entities: ['src/**/*.entity.ts'],
+  migrations: ['apps/nestjs-project/src/database/migrations/*.ts'],
+  entities: ['apps/nestjs-project/src/**/*.entity.ts'],
 });
