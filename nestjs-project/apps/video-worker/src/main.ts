@@ -6,4 +6,4 @@ async function bootstrap() {
   await NestFactory.createApplicationContext(AppModule);
   Logger.log('Video Worker started', 'Bootstrap');
 }
-bootstrap();
+void bootstrap();
