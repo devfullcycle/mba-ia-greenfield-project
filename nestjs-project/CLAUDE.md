@@ -34,6 +34,11 @@ docker compose exec nestjs-api npm run start:dev
 Services:
 - `nestjs-api` — NestJS API, port `3000`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `mailpit` — SMTP test server + web UI, ports `1025` (SMTP) / `8025` (HTTP UI/API)
+- `minio` — S3-compatible object storage (video files and thumbnails), ports `9000` (API) / `9001` (console)
+- `minio-init` — one-shot init container (`minio/mc`) that creates the `videos` bucket and applies its access policy on startup, then exits
+- `redis` — backing store for the BullMQ video-processing queue, port `6379`
+- `video-worker` — second NestJS application (no HTTP), consumes the `video-processing` queue and runs FFmpeg/ffprobe; no exposed ports
 
 All verification and teardown commands run on the **host machine**:
 
@@ -59,17 +64,23 @@ docker compose down
 ### Container-only commands (always prefix with `docker compose exec nestjs-api`)
 
 ```bash
-npm run start:dev                        # Dev server with hot-reload
-npm run build                            # Compile to dist/
-npm run start:prod                       # Run compiled build
+npm run start:dev                        # API dev server with hot-reload
+npm run build                            # Compile API to dist/apps/nestjs-project
+npm run start:prod                       # Run compiled API build
 
-npm test                                 # Unit tests
+npm run start:dev:video-worker           # Video Worker dev server with hot-reload (no HTTP)
+npm run build:video-worker               # Compile worker to dist/apps/video-worker
+npm run start:prod:video-worker          # Run compiled worker build
+
+npm test                                 # Unit + integration tests
 npm run test:watch                       # Unit tests in watch mode
 npm run test:cov                         # Coverage report
+npm run test:integration                 # Integration tests only (*.integration-spec.ts), --runInBand
 npm run test:e2e                         # End-to-end tests (always with --runInBand)
 
-npx tsc --noEmit                         # Type-check (required before declaring a task done)
-npm run lint                             # ESLint with auto-fix
+npx tsc --noEmit -p apps/nestjs-project/tsconfig.app.json   # Type-check the API
+npx tsc --noEmit -p apps/video-worker/tsconfig.app.json     # Type-check the worker
+npm run lint                             # ESLint with auto-fix (whole monorepo: apps + libs)
 npm run format                           # Prettier formatting
 ```
 
@@ -150,6 +161,23 @@ NestJS CLI monorepo mode: `apps/nestjs-project` (the API) and `apps/video-worker
 
 - Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
 - Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
+
+## Video Processing (Phase 03)
+
+Infrastructure:
+- **PostgreSQL** — `videos` table (status enum, storage/thumbnail keys, duration, failure reason)
+- **MinIO/S3** (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) — bucket `videos`, wrapped by `StorageService`; both apps talk to it via `STORAGE_*` env vars
+- **Redis/BullMQ** (`@nestjs/bullmq` + `bullmq`) — queue `video-processing`; `nestjs-api` is the producer, `video-worker` is the sole consumer
+- **FFmpeg/ffprobe** (`fluent-ffmpeg` + `ffmpeg-static`/`ffprobe-static`) — used only inside `video-worker` to extract duration/metadata and generate a thumbnail frame
+
+Endpoints (`VideosController`, all under `/videos`):
+- `POST /videos` — JWT required; pre-registers the video as `draft` and returns presigned multipart upload part URLs
+- `POST /videos/:id/complete-upload` — JWT required, owner-only; finalizes the multipart upload and enqueues the processing job
+- `GET /videos/:id` — `@Public()`; returns metadata, and presigned `streamUrl`/`downloadUrl`/`thumbnailUrl` only once `status: 'ready'`
+
+Flow: the client uploads parts **directly to MinIO** via the presigned URLs from `POST /videos` (the API never proxies file bytes) — `draft` → `processing` (set on `complete-upload`, job enqueued) → `ready` | `failed` (set exclusively by `video-worker`, no automatic retry). On success, `video-worker` generates a thumbnail and stores it back in MinIO. Streaming and download both reuse the same presigned `GetObject` URL — HTTP `Range` requests against it are served natively by MinIO/S3 (`206 Partial Content`), not by a custom endpoint.
+
+Full API contracts, data model, authorization matrix, and error catalog: `docs/phases/phase-03-videos/phase-03-videos.md`.
 
 ## Code Conventions
 
