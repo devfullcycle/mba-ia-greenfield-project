@@ -1,8 +1,10 @@
 # Fase 03 — Upload e Processamento de Vídeos — Progresso
 
 **Status geral:** completed (aguardando autorização do usuário para commit)
-**Branch:** `feature/phase-03-videos`
-**Última atualização:** 2026-08-02 por `streamtube-phase-orchestrator`
+**Branch original:** `feature/phase-03-videos` (já mesclada); auditoria de conformidade de entrega final em `feature/phase-03-delivery-compliance`
+**Última atualização:** 2026-08-03 por `streamtube-phase-documentation`
+
+> **Nota de reorganização (2026-08-03):** este documento e seus irmãos (`validation.md`, `phase-03-videos.md`) foram movidos de `docs/phases/*.md` (arquivos soltos) para `docs/phases/phase-03-videos/` para atender à estrutura documental exigida pelo enunciado de entrega final. O conteúdo de `docs/phases/phase-03-videos/context.md` e `docs/phases/phase-03-videos/context.md` (removidos) foi consolidado em `docs/phases/phase-03-videos/context.md`. As referências abaixo foram atualizadas para os novos caminhos; o conteúdo histórico narrado permanece inalterado.
 
 ---
 
@@ -13,7 +15,7 @@
 - **Branch atual:** `feature/phase-03-videos` (esperado: `feature/phase-03-*`, nunca `main`/`dev`) — OK
 - **Git status na abertura:** limpo (únicos itens não rastreados são os próprios skills novos em `.claude/skills/` e `.claude/templates/`, não trabalho pendente da fase)
 - **Baseline validada:** Sim — Fase 02 (`docs/phases/phase-02-auth.progress.md`) está `completed`, 18/18 SIs concluídos, todos os testes reportados como passando, sem veredito DIRTY registrado
-- **Enunciado oficial localizado em:** `docs/project-plan.md`, seção "Fase 03 — Upload e Processamento de Vídeos" (linhas 67-83). Não existe ainda `docs/phases/phase-03-[slug].md` (legado) nem `docs/phases/phase-03-plan.md` (desta família) — ambos pendentes.
+- **Enunciado oficial localizado em:** `docs/project-plan.md`, seção "Fase 03 — Upload e Processamento de Vídeos" (linhas 67-83). Não existe ainda `docs/phases/phase-03-[slug].md` (legado) nem `docs/phases/phase-03-videos/context.md` (desta família) — ambos pendentes.
 - **Observações:** Nenhum documento de research ou planning existe ainda para a Fase 03. Próximo passo do lifecycle é `streamtube-phase-research`.
 
 ---
@@ -22,11 +24,11 @@
 
 <!-- owner: streamtube-phase-research -->
 
-- **Documento:** `docs/phases/phase-03-research.md` — Criado
+- **Documento:** `docs/phases/phase-03-videos/context.md` — Criado
 - **Requisitos e critérios de aceite extraídos:** Sim (9 capacidades do project-plan.md, seção 1 do research doc)
 - **Código existente auditado:** Sim (módulos `auth`, `channels`, `users`, `common`, `config`, `database`, `mail` — ver seção 2 do research doc)
 - **Alternativas comparadas:** 6 decisões técnicas em `docs/decisions/technical-decisions-phase-03-videos.md` (storage client, estratégia de upload 10GB, tecnologia de fila, lib de processamento de vídeo, estratégia de entrega/streaming, modelo de deployment do worker)
-- **Decisões ainda não tomadas (bloqueiam planning):** Não — todas as 12 decisões (6 técnicas TD-01 a TD-06 + 6 de produto/escopo) foram apresentadas ao usuário em 2026-08-01 e confirmadas, todas seguindo a recomendação. Registradas em `docs/decisions/technical-decisions-phase-03-videos.md` (Decisions Summary) e `docs/phases/phase-03-research.md` (seção 4).
+- **Decisões ainda não tomadas (bloqueiam planning):** Não — todas as 12 decisões (6 técnicas TD-01 a TD-06 + 6 de produto/escopo) foram apresentadas ao usuário em 2026-08-01 e confirmadas, todas seguindo a recomendação. Registradas em `docs/decisions/technical-decisions-phase-03-videos.md` (Decisions Summary) e `docs/phases/phase-03-videos/context.md` (seção 4).
 - **Observações:** Context7 MCP indisponível neste ambiente — pesquisa usou WebSearch como fallback documentado.
 
 ---
@@ -35,8 +37,8 @@
 
 <!-- owner: streamtube-phase-planning -->
 
-- **Documento:** `docs/phases/phase-03-plan.md` — Criado
-- **Plano técnico detalhado (SIs), se existir:** `docs/phases/phase-03-videos.md` (12 SIs, via `plan-phase`)
+- **Documento:** `docs/phases/phase-03-videos/context.md` — Criado
+- **Plano técnico detalhado (SIs), se existir:** `docs/phases/phase-03-videos/phase-03-videos.md` (12 SIs, via `plan-phase`)
 - **Arquitetura/domínio/estados/endpoints/infra definidos:** Sim
 - **Total de incrementos definidos:** 12 (INC-03.1 a INC-03.12, mapeamento 1:1 com as SIs)
 - **Observações:** Plano validado contra `testing-guide-nestjs-project` durante o planning — corrigidas duas violações de convenção antes de finalizar: (1) testes unitários de controller removidos (cobertura só via E2E, conforme regra do projeto); (2) `StorageService` reclassificado de unit test com S3Client mockado para integration test contra MinIO real (dependência de efeito colateral). Checagem de ownership do vídeo movida do controller para o service (controllers não têm lógica de negócio). Nenhuma ambiguidade adicional encontrada na validação (Passo de Validação do `plan-phase`) — as 12 decisões já resolvidas na Seção 2 cobriram os pontos de arquitetura/regra de negócio.
@@ -70,15 +72,16 @@
 
 <!-- owner: streamtube-quality-gate -->
 
-- **Execução mais recente:** 2026-08-02
-- **Docker Compose (`config`/`ps`/logs):** OK — `docker compose config` válido; 6/6 serviços `Up`/`healthy` (`db`, `mailpit`, `minio`, `redis` com healthcheck OK; `nestjs-api` e `video-worker` sem healthcheck definido, mas confirmados servindo/processando via logs — `GET /` retorna 200, worker processou jobs reais e rejeitou corretamente um arquivo corrompido via `ffprobe` real)
+- **Execução mais recente:** 2026-08-03 (branch `feature/phase-03-delivery-compliance`, re-execução para a auditoria de conformidade de entrega final)
+- **Docker Compose (`config`/`ps`/logs):** OK — `docker compose config` válido; 6/6 serviços `Up`/`healthy` (`db`, `mailpit`, `minio`, `redis` com healthcheck OK; `nestjs-api` e `video-worker` confirmados servindo via logs — rotas de vídeo mapeadas, `GET /` retorna 200)
 - **Migrations:** OK — schema com as 6 tabelas esperadas (`users`, `channels`, `refresh_tokens`, `verification_tokens`, `videos`, `migrations`); 3/3 migrations aplicadas na ordem correta
 - **Testes unit+integration (`--runInBand`):** OK — 29/29 suites, 173/173 testes passando
 - **Testes e2e (`--runInBand`):** OK — 3/3 suites, 60/60 testes passando (inclui o fluxo completo real upload→processamento→pronto via worker rodando de verdade)
-- **TypeScript (`tsc --noEmit`):** OK — exit code 0
-- **Regressão de fases anteriores:** OK — `auth.e2e-spec.ts` e todos os testes da Fase 02 seguem 100% passando em toda execução da suíte completa ao longo da Fase 03
-- **Veredito:** **CLEAN — qualificado ao escopo da Fase 03** (usuário decidiu aceitar a dívida de lint pré-existente das Fases 01/02 como pendência conhecida, em vez de corrigi-la nesta branch — ver Pendências)
-- **Observações:** `npm run lint` do projeto inteiro falha com 148 erros + 42 warnings, mas **100% localizados em código das Fases 01/02** (nenhum arquivo `videos/*`, `storage/*`, `queue/*`, `video-processing/*` aparece na lista). Breakdown: `auth.service.spec.ts` (77), `test/auth.e2e-spec.ts` (48), `channels.service.spec.ts` (20), `mail.service.integration-spec.ts` (18), `auth.service.integration-spec.ts` (8), `domain-exception.filter.spec.ts` (7), `channels.service.ts` (6), `video-worker/src/main.ts` (2 — warning `no-floating-promises` em `bootstrap()`, mesmo padrão já aceito no `main.ts` original da API), `validation-exception.filter.spec.ts` (2), `users.service.integration-spec.ts` (1), `create-test-data-source.ts` (1), `nestjs-project/src/main.ts` (1). Todos os arquivos da Fase 03, individualmente, passam em lint limpo — verificado a cada incremento.
+- **TypeScript (`tsc --noEmit`):** OK — exit code 0 nas duas apps (`nestjs-project` e `video-worker`)
+- **`npm run lint` (projeto inteiro):** **OK — exit code 0, 0 erros, 0 warnings** (verificado lendo o exit code real do processo, não através de pipe)
+- **Regressão de fases anteriores:** OK — `auth.e2e-spec.ts` e todos os testes das Fases 01/02 seguem 100% passando
+- **Veredito:** **CLEAN — sem ressalvas** (a dívida de lint das Fases 01/02, antes aceita como pendência conhecida, foi corrigida nesta branch por exigência do enunciado de entrega final, que trata lint quebrado como reprovação automática)
+- **Observações:** Antes desta execução, `npm run lint` falhava com 148 erros + 42 warnings, 100% em código das Fases 01/02 (`auth.service.spec.ts`, `test/auth.e2e-spec.ts`, `channels.service.spec.ts`, `mail.service.integration-spec.ts`, `auth.service.integration-spec.ts`, `domain-exception.filter.spec.ts`, `validation-exception.filter.spec.ts`, `channels.service.ts`, `users.service.integration-spec.ts`, `create-test-data-source.ts`, `test/mailpit.ts`, `main.ts` de ambas as apps). Corrigido com mudanças de tipagem apenas (interfaces de mock em vez de `jest.Mocked<ClasseReal>`, casts `as unknown as Entidade` em vez de `as any`, `IsNull()` em vez de `revoked_at: null as any`, `void bootstrap()` em vez de floating promise) — nenhuma mudança de comportamento; suíte completa e `tsc` re-executados após o fix e permanecem 100% verdes. Detalhes por arquivo no diff da branch.
 
 ---
 
@@ -86,11 +89,20 @@
 
 <!-- owner: streamtube-manual-validation -->
 
-- **Documento:** `docs/phases/phase-03-validation.md` — Criado
+- **Documento:** `docs/phases/phase-03-videos/validation.md` — Criado
 - **Endpoints reais levantados:** 3 endpoints da Fase 03 (`POST /videos`, `POST /videos/:id/complete-upload`, `GET /videos/:id`) + 4 endpoints da Fase 02 usados como pré-requisito de cadeia (`register`, `confirm-email`, `login`, `forgot-password`)
 - **Endpoints validados (sucesso + erro):** Sim — sucesso (201/200/204) e todos os caminhos de erro relevantes por endpoint (400 payload, 401 sem token/token expirado, 403 ownership, 404 not-found, 409 conflito de upload já finalizado), todos via `curl` real contra o stack Docker Compose rodando, execução em duas rodadas completas do fluxo funcional (upload→processamento→pronto)
 - **Efeitos verificados:** PostgreSQL OK (linha `videos` com `status`/`duration_seconds`/`thumbnail_key` corretos via `psql` direto) · Mailpit OK (e-mails reais de confirmação e reset de senha recuperados via API HTTP, token extraído do corpo real) · MinIO OK (`mc ls -r` confirma objetos `original`+`thumbnail.jpg` reais, ambos re-baixados com sucesso via URL pré-assinada) · Redis OK (job BullMQ mais recente em `completed` com payload `videoId` batendo com o vídeo testado) · Worker OK (logs reais `Processing`→`Finished` para o `videoId` exato, sem erros)
 - **Observações:** **Dois bugs reais encontrados e corrigidos durante esta validação, nenhum detectável pela suíte automatizada** — detalhes completos na Seção 5 do documento de validação. Resumo: (1) container `nestjs-api` nunca reiniciado desde o INC-03.2 (rodando 19h+ com código obsoleto, zero rotas de vídeo mapeadas) — questão operacional, corrigida com `docker compose restart`; (2) **bug real de código** em `mail.module.ts` — resolução do diretório de templates Handlebars (`join(__dirname, 'templates')`) incompatível com o bundle webpack do Nest CLI em modo monorepo, causando `ENOENT` não tratado que derrubava o processo Node inteiro em qualquer `POST /auth/register`; invisível a testes automatizados porque nenhum teste Jest passa pelo build webpack. Corrigido com fallback duplo via `existsSync`. Após ambas as correções, suíte completa re-executada (233/233 testes, `tsc --noEmit` limpo, lint limpo em `mail.module.ts`) — todos os resultados permanecem verdes, quality gate da Seção 5 continua válido.
+
+### Revisão 2026-08-03 — conformidade de entrega final
+
+- **Motivo:** o enunciado exige prova técnica de streaming real (Range/206), não apenas `GET` 200 — lacuna registrada no INC-03.8 ("não testei suporte a `Range` via HTTP real"). Aproveitada a rodada para também exercitar o caminho de vídeo corrompido → `failed` via HTTP real (antes só coberto por testes automatizados com fixture) e os 5 códigos de erro (400/401/403/404/409) numa única execução.
+- **Execução:** script Node rodado dentro do container `nestjs-api` (sem mocks) cobrindo dois usuários e dois vídeos reais — ver `docs/phases/phase-03-videos/validation.md`, Seções 2-4 para o passo a passo e evidências completas.
+- **Streaming Range/206:** comprovado — `Range: bytes=0-99` e `Range: bytes=1000-1199` contra o `streamUrl` presigned do MinIO retornam `206 Partial Content` + `Content-Range` corretos, bytes recebidos idênticos ao arquivo original; download completo sem `Range` retorna `200` com o arquivo inteiro, também byte-a-byte idêntico.
+- **Vídeo corrompido → failed:** comprovado via fluxo HTTP real (upload do fixture `corrupted.mp4` → `complete-upload` → polling) — `ffprobe` real rejeitou o arquivo, vídeo marcado `failed` com `failure_reason` populado, sem thumbnail gerado, confirmado em Postgres e MinIO.
+- **Esclarecimento (não é bug):** o job BullMQ do vídeo corrompido aparece no set `completed` do Redis, não em `failed` — decisão de produto do INC-03.11 (o processor nunca relança a exceção para a fila, só marca o vídeo como `failed` no Postgres). Documentado para não ser confundido com um bug em auditorias futuras.
+- **Resultado:** `docs/phases/phase-03-videos/validation.md` fechado com status final **clean**, sem divergências.
 
 ---
 
@@ -105,7 +117,14 @@
   - `README.md` — seção "Estrutura do Projeto" atualizada do layout pré-monorepo (`src/` único) para o layout real pós-INC-03.2 (`apps/nestjs-project/` + `apps/video-worker/`); seção "Instalação" ganhou nota sobre os novos serviços de infra (`minio`, `redis`, `video-worker`) subindo junto com `docker compose up -d`
   - `docs/diagrams/software-arch.mermaid` — `Object Storage` de `"S3 or MinIO"` para `"MinIO (S3-compatible)"`; `Message Queue` de `"TBD"` para `"BullMQ + Redis"` (decisões técnicas TD-01/TD-03 da fase, já resolvidas e implementadas)
   - `nestjs-project/CLAUDE.md` — seção "Build Assets" ganhou um novo troubleshooting entry documentando a divergência de resolução de `__dirname` entre o bundle webpack (`start:dev`/`start:prod`) e `ts-jest` (testes), causa raiz do bug real encontrado na validação manual (Seção 6); seção "Architecture" corrigida para descrever o layout de monorepo Nest CLI (`apps/nestjs-project` + `apps/video-worker`) em vez do `src/` único, desatualizado desde o INC-03.2
-- **Observações:** Não documentado (nem no README nem em troubleshooting) o container `nestjs-api` nunca reiniciado — é um estado operacional pontual desta sessão, não uma característica reproduzível do sistema; registrado apenas na evidência da Seção 6. `docs/phases/phase-03-validation.md` é a fonte de verdade usada para escrever esta seção, conforme convenção da skill.
+- **Observações:** Não documentado (nem no README nem em troubleshooting) o container `nestjs-api` nunca reiniciado — é um estado operacional pontual desta sessão, não uma característica reproduzível do sistema; registrado apenas na evidência da Seção 6. `docs/phases/phase-03-videos/validation.md` é a fonte de verdade usada para escrever esta seção, conforme convenção da skill.
+
+### Revisão 2026-08-03 — auditoria de conformidade de entrega final
+
+- **Pré-requisito (Quality Gate CLEAN):** Sim — reverificado na Seção 5 após a correção do lint (veredito CLEAN sem ressalvas)
+- **README / arquitetura / variáveis de ambiente / comandos:** Nenhuma mudança necessária — esta rodada corrigiu apenas tipagem em código de teste e dois `main.ts` (sem impacto em endpoints, env vars, comandos ou arquitetura); README, `software-arch.mermaid` e `nestjs-project/CLAUDE.md` permanecem precisos.
+- **Arquivos alterados:** `docs/phases/phase-03-videos/progress.md` (Seção 5 atualizada com o novo veredito de lint; Seção 9 anotada com a resolução da dívida antes aceita)
+- **Observações:** Nenhum troubleshooting novo a registrar — nenhum problema de ambiente/infra inédito foi encontrado nesta rodada, apenas a correção de tipagem já detalhada na Seção 5.
 
 ---
 
@@ -127,3 +146,4 @@
 > Itens fora do escopo identificados durante a fase, decisões técnicas não resolvidas, dívidas conhecidas. Não é uma lista de tarefas da fase — é o que fica para depois.
 
 - **`npm run lint` falha na baseline pré-existente (Fases 01/02), fora do escopo da Fase 03 — DECISÃO DO USUÁRIO: aceito como dívida conhecida, não corrigido nesta branch (2026-08-02).** 148 erros + 42 warnings ESLint, 100% em arquivos das Fases 01/02 (nenhum arquivo `videos/*`, `storage/*`, `queue/*`, `video-processing/*` afetado — verificado individualmente a cada incremento). Breakdown completo no quality gate (Seção 5). Causa raiz majoritária: `@typescript-eslint/no-unsafe-member-access`/`no-unsafe-assignment` por acessar campos de `response.body` (tipado `any` pelo supertest) sem type assertion em testes e2e/integration, mais alguns `require-await`/`no-unused-vars`/`no-unsafe-call`. Descoberto durante o quality check do INC-03.1 (o `npm run lint` anterior só parecia "verde" porque o exit code foi lido através de um pipe `\| tail`, que mascara o código de saída real do comando). Recomendação para quando for tratado: tipar as respostas do supertest com interfaces locais (`response.body as ExpectedShape`), seguindo o padrão já usado em `apps/nestjs-project/test/videos.e2e-spec.ts` (que nasceu limpo de lint por já usar esse padrão). — origem: verificação de lint do INC-03.1, INC-03.3 e quality gate final
+  - **RESOLVIDO em 2026-08-03, branch `feature/phase-03-delivery-compliance`.** O enunciado da entrega final define lint quebrado como reprovação automática, invalidando a decisão anterior de aceitar esta dívida. Corrigido com mudanças de tipagem apenas (sem alteração de comportamento) em 12 arquivos — ver Seção 5 (Quality Gate) para o veredito e o resumo por arquivo. `npm run lint` agora retorna exit code 0 no projeto inteiro.

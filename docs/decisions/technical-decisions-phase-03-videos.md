@@ -112,7 +112,7 @@
 
 **Recommendation:** **Option A (Presigned GET URLs)** — consistent with the presigned-upload model (TD-02), keeps the storage layer private by default, and doesn't foreclose reasonable future requirements (e.g. a not-yet-processed video shouldn't be streamable) without redesign. This does not, on its own, resolve *whether* draft/processing videos should be blocked from viewing — see open product decision in the research document.
 
-**Decision:** A (Presigned GET URLs). Confirmed alongside the product decision that draft/processing videos are blocked from playback/download until `ready` (see `docs/phases/phase-03-research.md` §4.1).
+**Decision:** A (Presigned GET URLs). Confirmed alongside the product decision that draft/processing videos are blocked from playback/download until `ready` (see `docs/phases/phase-03-videos/context.md` §Decisões já resolvidas, item 1).
 
 ---
 
