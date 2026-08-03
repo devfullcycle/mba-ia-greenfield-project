@@ -1,8 +1,14 @@
-import { QueryFailedError } from 'typeorm';
+import { DataSource, QueryFailedError } from 'typeorm';
 import { ChannelsService } from './channels.service';
 import { Channel } from './entities/channel.entity';
 
-function makeManager(overrides: Record<string, jest.Mock> = {}): any {
+interface MockManager {
+  findOne: jest.Mock;
+  create: jest.Mock;
+  save: jest.Mock;
+}
+
+function makeManager(overrides: Partial<MockManager> = {}): MockManager {
   return {
     findOne: jest.fn(),
     create: jest.fn(),
@@ -24,16 +30,24 @@ function makeChannel(nickname: string): Channel {
 }
 
 function makeUniqueError(): QueryFailedError {
-  const err = new QueryFailedError('INSERT', [], new Error()) as any;
-  err.code = '23505';
-  err.detail = 'Key (nickname)=(abc) already exists.';
-  return err;
+  const err = new QueryFailedError('INSERT', [], new Error());
+  return Object.assign(err, {
+    code: '23505',
+    detail: 'Key (nickname)=(abc) already exists.',
+  });
 }
 
-function makeDataSource(manager: any): any {
-  return {
-    transaction: jest.fn((cb: (manager: any) => Promise<any>) => cb(manager)),
+interface MockDataSource {
+  transaction: jest.Mock;
+}
+
+function makeDataSource(manager: MockManager): DataSource {
+  const dataSource: MockDataSource = {
+    transaction: jest.fn((cb: (manager: MockManager) => Promise<unknown>) =>
+      cb(manager),
+    ),
   };
+  return dataSource as unknown as DataSource;
 }
 
 describe('ChannelsService', () => {
