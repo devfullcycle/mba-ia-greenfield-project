@@ -1,6 +1,7 @@
 import { DataSource, Repository } from 'typeorm';
 import { Channel } from '../../channels/entities/channel.entity';
 import { User } from '../../users/entities/user.entity';
+import { Video } from '../../videos/entities/video.entity';
 import {
   cleanAllTables,
   createTestDataSource,
@@ -11,7 +12,7 @@ import {
   VerificationTokenType,
 } from './verification-token.entity';
 
-const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
 
 describe('VerificationToken entity (integration)', () => {
   let dataSource: DataSource;
