@@ -149,6 +149,16 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 - Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
 - Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
 
+## Video Upload, Storage, and Processing
+
+Videos flow through direct-to-storage upload, async transcoding, and range-based streaming:
+
+- **`StorageService`/`StorageModule`** (`src/storage/`) — wraps the AWS S3 SDK against MinIO (service name `storage`, buckets `videos`/`thumbnails`). Presigned PUT URLs let the client upload directly to storage; presigned GET URLs back downloads and thumbnails. `getObjectStream` supports HTTP Range requests for video streaming.
+- **`VideosService`/`VideosModule`** (`src/videos/`) — owns the upload lifecycle: `uploadInit` (create a `DRAFT` video + presigned upload URL) → `uploadComplete` (verify the object exists in storage, flip to `PROCESSING`, enqueue a BullMQ job) → worker processes it → `getByUrlCode`/`stream`/`download` serve metadata and bytes. `stream`/`download` allow both `PROCESSING` and `READY` status, since `storage_key` always points at the original raw upload regardless of transcoding progress.
+- **`QueueModule`** (`src/queue/`) — registers the `video-processing` BullMQ queue backed by Redis (service name `redis`).
+- **`VideoProcessor`** (`src/videos/worker/video-processor.ts`) — BullMQ worker consuming `video-processing` jobs; runs FFmpeg/FFprobe (thumbnail extraction, duration/resolution/codec probing) and updates the `Video` entity's `status`, `thumbnail_key`, `duration_seconds`, `resolution_width/height`, `codec`. Runs as its own container (`video-worker` in `compose.yaml`), sharing the same codebase but started via `src/worker.ts` instead of `main.ts`.
+- **Video status machine:** `DRAFT` → `PROCESSING` → `READY` | `ERROR`.
+
 ## Code Conventions
 
 - **TypeScript:** `nodenext` module resolution, `ES2023` target, `strictNullChecks` on, `noImplicitAny` off
