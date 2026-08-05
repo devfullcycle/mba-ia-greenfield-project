@@ -45,4 +45,4 @@ async function bootstrap() {
   console.log('Video Worker Application initialized and listening for jobs...');
 }
 
-bootstrap();
+void bootstrap();
