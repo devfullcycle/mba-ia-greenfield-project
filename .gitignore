@@ -1,2 +1,4 @@
 .history/
 settings.local.json
+# Serena MCP cache
+.serena/

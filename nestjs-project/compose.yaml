@@ -1,10 +1,12 @@
 services:
   nestjs-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.dev
     ports:
       - 3000:3000
+    env_file:
+      - .env
     volumes:
       - .:/home/node/app
     depends_on:
@@ -12,11 +14,40 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+
+  # Video processing worker (phase 03) — consumes the BullMQ queue and runs
+  # ffmpeg/ffprobe. Same codebase/image as the API, started via a worker-only
+  # entrypoint (src/main.worker.ts). Depends on installed node_modules in the
+  # shared volume; the worker entrypoint lands in SI-03.8.
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: sh -c "npm run start:worker"
+    working_dir: /home/node/app
+    env_file:
+      - .env
+    volumes:
+      - .:/home/node/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
 
   db:
     image: postgres:17
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       - POSTGRES_USER=streamtube
       - POSTGRES_PASSWORD=streamtube
@@ -33,4 +64,46 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # Message queue backend (phase 03). Not published to the host to avoid
+  # collisions with other local Redis instances; reachable in-network as "redis".
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
+  # Object storage (phase 03), S3-compatible. The API port is in-network only;
+  # the web console is published for human inspection.
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=streamtube
+      - MINIO_ROOT_PASSWORD=streamtube123
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # One-shot bucket bootstrap: creates the videos bucket idempotently, then exits.
+  minio-setup:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 streamtube streamtube123 &&
+      mc mb --ignore-existing local/streamtube-videos &&
+      echo 'bucket streamtube-videos ready'
+      "
+
+volumes:
+  minio-data:

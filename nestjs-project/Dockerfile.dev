@@ -1,6 +1,8 @@
 FROM node:25.6.0-slim
 
-RUN apt update && apt install -y procps curl
+# ffmpeg/ffprobe are required by the video-worker (phase 03) for metadata
+# extraction and thumbnail generation; harmless on the API image.
+RUN apt update && apt install -y procps curl ffmpeg
 
 WORKDIR /home/node/app
 
