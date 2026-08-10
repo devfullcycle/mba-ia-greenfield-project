@@ -46,6 +46,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# local manual-testing artifacts
+sample.mp4
+
 # Runtime data
 pids
 *.pid

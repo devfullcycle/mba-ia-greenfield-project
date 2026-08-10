@@ -118,3 +118,89 @@ Content-Type: {{contentType}}
   "token": "{{resetToken}}",
   "new_password": "new-password123"
 }
+
+
+###
+# ─────────────────────────────────────────────
+# VÍDEOS
+# ─────────────────────────────────────────────
+# Pré-requisitos:
+# 1. Rode os passos 1-4 acima (registro + confirmação + login) para ter um
+#    @accessToken válido — o canal é criado automaticamente no registro.
+# 2. Adicione ao arquivo hosts do Windows (C:\Windows\System32\drivers\etc\hosts,
+#    editar como Administrador): `127.0.0.1 minio`
+#    Isso é necessário porque as URLs pré-assinadas retornadas pela API apontam
+#    para `http://minio:9000` (nome do serviço Docker); sem esse mapeamento seu
+#    navegador/VS Code não conseguem resolver o host a partir do Windows.
+# 3. Gere um arquivo de vídeo de teste (aparece em nestjs-project/sample.mp4
+#    graças ao volume montado):
+#    docker compose exec nestjs-api ffmpeg -y -f lavfi -i testsrc=duration=3:size=320x240:rate=15 -f lavfi -i sine=frequency=1000:duration=3 -shortest sample.mp4
+
+@videoFilename = sample.mp4
+@videoSizeBytes = 43759
+@videoId = {{initiateUpload.response.body.$.id}}
+
+### 10. Iniciar upload — cria o vídeo em 'draft' e abre o multipart upload
+# @name initiateUpload
+POST {{baseUrl}}/videos
+Authorization: Bearer {{accessToken}}
+Content-Type: {{contentType}}
+
+{
+  "filename": "{{videoFilename}}",
+  "mimeType": "video/mp4",
+  "sizeBytes": {{videoSizeBytes}}
+}
+
+
+### 11. Pedir URL pré-assinada para a parte 1 (upload em uma única parte)
+# @name partUrls
+POST {{baseUrl}}/videos/{{videoId}}/upload-part-urls
+Authorization: Bearer {{accessToken}}
+Content-Type: {{contentType}}
+
+{
+  "partNumbers": [1]
+}
+
+
+### 12. Enviar os bytes do vídeo para a URL pré-assinada (fora da API)
+# Copie a URL de partUrls.response.body.$.urls[0].url e cole abaixo.
+# Depois de enviar, copie o header "ETag" da resposta (com aspas) para @eTag.
+PUT <cole a URL pré-assinada aqui>
+Content-Type: video/mp4
+
+< ./sample.mp4
+
+### 13. Concluir o upload — cole o ETag do passo 12 (com aspas, ex: "abc123...")
+@eTag = <cole o ETag aqui>
+POST {{baseUrl}}/videos/{{videoId}}/complete-upload
+Authorization: Bearer {{accessToken}}
+Content-Type: {{contentType}}
+
+{
+  "parts": [{ "partNumber": 1, "eTag": "{{eTag}}" }]
+}
+
+
+### 14. Consultar metadados / status do vídeo
+# status vai de 'processing' para 'ready' (ou 'failed') assim que o
+# video-worker processar o job — rode de novo até o status mudar.
+# Acompanhe em paralelo: docker compose logs -f video-worker
+GET {{baseUrl}}/videos/{{videoId}}
+Authorization: Bearer {{accessToken}}
+
+
+### 15. Stream (302 redirect para URL pré-assinada inline) — só funciona com status 'ready'
+GET {{baseUrl}}/videos/{{videoId}}/stream
+Authorization: Bearer {{accessToken}}
+
+
+### 16. Download (302 redirect para URL pré-assinada attachment) — só funciona com status 'ready'
+GET {{baseUrl}}/videos/{{videoId}}/download
+Authorization: Bearer {{accessToken}}
+
+
+### 17. Reprocessar um vídeo com status 'failed' (limpa failure_reason e reenfileira)
+POST {{baseUrl}}/videos/{{videoId}}/reprocess
+Authorization: Bearer {{accessToken}}

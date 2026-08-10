@@ -6,6 +6,10 @@ const requiredEnv = {
   DB_NAME: 'db',
   JWT_SECRET: 'secret',
   JWT_REFRESH_SECRET: 'refresh-secret',
+  STORAGE_ENDPOINT: 'http://minio:9000',
+  STORAGE_ACCESS_KEY_ID: 'access-key',
+  STORAGE_SECRET_ACCESS_KEY: 'secret-key',
+  QUEUE_CONNECTION_STRING: 'postgres://user:pass@db:5432/db',
 };
 
 const validate = (env: Record<string, string>) =>

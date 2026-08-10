@@ -33,7 +33,10 @@ docker compose exec nestjs-api npm run start:dev
 
 Services:
 - `nestjs-api` — NestJS API, port `3000`
-- `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube` — also backs the `pg-boss` job queue (no separate queue infra service)
+- `mailpit` — SMTP capture for local email testing, ports `1025` (SMTP), `8025` (web UI)
+- `minio` — S3-compatible object storage for video/thumbnail files, ports `9000` (API), `9001` (console); `minio-init` runs once to create the `streamtube-videos` bucket
+- `video-worker` — consumes the `video-processing` pg-boss queue (ffprobe duration + thumbnail capture via `fluent-ffmpeg`), runs `npm run start:worker` against the **compiled** `dist/worker.main.js` — it does **not** hot-reload. After changing worker code, run `docker compose exec nestjs-api npm run build` then `docker compose restart video-worker` to pick up changes.
 
 All verification and teardown commands run on the **host machine**:
 
@@ -159,3 +162,58 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 ## REST Conventions
 
 This is a RESTful API. All endpoints must follow standard REST conventions — correct HTTP methods, proper status codes, plural resource nouns, and consistent URL structure. Details are enforced via rules on controller files.
+
+## Videos Module (Phase 03)
+
+### Overview
+
+The videos module provides multipart upload, automated background processing, streaming, and download for video files up to 10 GB without blocking the API during the upload. Three new modules support it:
+
+- `src/videos/` — controller, service, DTOs, entity (`Video`), registered in `AppModule`
+- `src/storage/` — S3-compatible object storage wrapper targeting MinIO locally and real S3 in production
+- `src/queue/` — pg-boss queue wrapper backed by the same PostgreSQL instance (no separate queue infra)
+- `src/worker/` — standalone NestJS bootstrap (`worker.main.ts`) that consumes the `video-processing` pg-boss queue; compiled to `dist/worker.main.js` and run by the `video-worker` Compose service
+
+### Upload flow
+
+1. **Initiate** — `POST /videos` with `{ filename, mimeType, sizeBytes }`. API opens a multipart upload in MinIO and persists the video as `draft` in the DB. Returns `{ id, uploadId, key, status: 'draft' }`. The public `id` is an 11-char nanoid slug (unique-indexed); internal UUID is never exposed.
+2. **Part URLs** — `POST /videos/:id/upload-part-urls` with `{ partNumbers: number[] }`. Returns presigned PUT URLs (1 h TTL). Client uploads each part directly to MinIO, collecting the `ETag` response header per part.
+3. **Complete** — `POST /videos/:id/complete-upload` with `{ parts: [{ partNumber, eTag }] }`. Within a single DB transaction: completes the multipart upload in MinIO, sets status to `'processing'`, and enqueues a `video-processing` job in pg-boss. Returns `{ id, status: 'processing' }`.
+
+### Processing flow (video-worker)
+
+For each `video-processing` job the worker:
+1. Runs `ffprobe` on the original object in MinIO to extract `duration_seconds` and `metadata` (format name, bit rate, per-stream codec/resolution).
+2. Captures a thumbnail frame at ~10% of duration via `ffmpeg`, uploads it to MinIO as `videos/{channelId}/{videoId}/thumbnail.jpg`.
+3. Updates the DB row to `status: 'ready'` with `duration_seconds`, `metadata`, and `thumbnail_key`.
+4. On exhausted retries (dead-letter queue via pg-boss `deadLetter` option), marks the video `status: 'failed'` with `failure_reason`.
+
+### API endpoints (all require `Authorization: Bearer <token>`)
+
+| Method | Path | Status | Description |
+|--------|------|--------|-------------|
+| `POST` | `/videos` | 201 | Initiate upload — returns `{ id, uploadId, key, status }` |
+| `POST` | `/videos/:id/upload-part-urls` | 200 | Presigned PUT URLs per part number |
+| `POST` | `/videos/:id/complete-upload` | 200 | Finalize upload, enqueue processing |
+| `GET`  | `/videos/:id` | 200 | Video metadata (owner only) |
+| `GET`  | `/videos/:id/stream` | 302 | Redirect to presigned inline URL (video must be `ready`) |
+| `GET`  | `/videos/:id/download` | 302 | Redirect to presigned attachment URL (video must be `ready`) |
+| `POST` | `/videos/:id/reprocess` | 200 | Re-enqueue a `failed` video for processing |
+
+Error codes: `FILE_TOO_LARGE` (400), `VIDEO_NOT_FOUND` (404), `VIDEO_NOT_OWNED` (403), `INVALID_VIDEO_STATUS` (409), `STORAGE_ERROR` (502).
+
+### Storage layout
+
+Bucket: `streamtube-videos`. Key pattern inside the bucket:
+
+- `videos/{channelId}/{videoId}/original.<ext>` — original uploaded file
+- `videos/{channelId}/{videoId}/thumbnail.jpg` — generated thumbnail
+
+### Updating the video worker
+
+The worker runs the compiled `dist/worker.main.js` and does **not** hot-reload. After changing worker code:
+
+```bash
+docker compose exec nestjs-api npm run build
+docker compose restart video-worker
+```
