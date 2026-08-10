@@ -27,8 +27,10 @@ describe('DomainExceptionFilter', () => {
       }),
       getArgs: () => [],
       getArgByIndex: () => null,
-      switchToRpc: () => ({}) as any,
-      switchToWs: () => ({}) as any,
+      switchToRpc: () =>
+        ({}) as unknown as ReturnType<ArgumentsHost['switchToRpc']>,
+      switchToWs: () =>
+        ({}) as unknown as ReturnType<ArgumentsHost['switchToWs']>,
       getType: () => 'http',
     } as unknown as ArgumentsHost;
   });

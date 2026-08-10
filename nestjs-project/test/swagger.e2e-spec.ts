@@ -1,12 +1,14 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { SwaggerModule } from '@nestjs/swagger';
+import { getQueueToken } from '@nestjs/bullmq';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { buildSwaggerConfig } from '../src/swagger/swagger-document';
+import { VIDEO_QUEUE_NAME } from '../src/videos/videos.constants';
 
 async function createApp(withSwagger: boolean): Promise<INestApplication<App>> {
   const moduleFixture = await Test.createTestingModule({
@@ -35,6 +37,7 @@ async function createApp(withSwagger: boolean): Promise<INestApplication<App>> {
   }
 
   await app.init();
+  moduleFixture.get(getQueueToken(VIDEO_QUEUE_NAME)).on('error', () => {});
   return app;
 }
 

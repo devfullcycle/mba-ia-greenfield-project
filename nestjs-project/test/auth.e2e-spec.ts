@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource, Repository } from 'typeorm';
@@ -12,6 +13,7 @@ import { VerificationToken } from '../src/auth/entities/verification-token.entit
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { cleanAllTables } from '../src/test/create-test-data-source';
+import { VIDEO_QUEUE_NAME } from '../src/videos/videos.constants';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
@@ -44,6 +46,7 @@ describe('Auth (e2e)', () => {
     refreshTokenRepository = dataSource.getRepository(RefreshToken);
     throttlerStorage =
       moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    moduleFixture.get(getQueueToken(VIDEO_QUEUE_NAME)).on('error', () => {});
   });
 
   afterAll(async () => {
@@ -64,8 +67,9 @@ describe('Auth (e2e)', () => {
     let capturedToken = '';
     jest
       .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+      .mockImplementationOnce((_e: string, _n: string, t: string) => {
         capturedToken = t;
+        return Promise.resolve();
       });
     await request(app.getHttpServer())
       .post('/auth/register')
@@ -516,8 +520,9 @@ describe('Auth (e2e)', () => {
     let captured = '';
     jest
       .spyOn(mailServiceInstance, 'sendPasswordResetEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+      .mockImplementationOnce((_e: string, _n: string, t: string) => {
         captured = t;
+        return Promise.resolve();
       });
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
@@ -685,6 +690,7 @@ describe('Rate Limiting (e2e)', () => {
     dataSource = moduleFixture.get(DataSource);
     throttlerStorage =
       moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    moduleFixture.get(getQueueToken(VIDEO_QUEUE_NAME)).on('error', () => {});
   });
 
   afterAll(async () => {

@@ -10,9 +10,16 @@ More info in the project overview: [docs/project-plan.md](docs/project-plan.md)
 
 This is a monorepo with two main areas:
 
-- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
+- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Has its own `compose.yaml` and `CLAUDE.md` with all development commands.
+- `next-frontend/` — Frontend (Next.js App Router, React 19). Has its own `compose.yaml` and `CLAUDE.md` with all development commands.
 - `docs/` — Project documentation, architecture diagrams, and planning.
-- `next-frontend/` (Next.js) — not yet initialized
+
+## Sub-project Documentation
+
+Each sub-project has its own `CLAUDE.md` with detailed commands, container rules, code conventions, and testing strategies. **Read these files before working in any sub-project.**
+
+- [`nestjs-project/CLAUDE.md`](nestjs-project/CLAUDE.md) — environment startup, Docker commands, migrations, test types (`*.spec.ts` vs `*.integration-spec.ts` vs `*.e2e-spec.ts`), REST and code conventions.
+- [`next-frontend/CLAUDE.md`](next-frontend/CLAUDE.md) — environment startup, BFF model, RSC vs Client Components, OpenAPI contract, Vitest + Playwright + MSW testing, design tokens.
 
 ## Architecture (C4 Container Diagram)
 
@@ -51,8 +58,9 @@ A change is only considered complete when **all** of the following pass:
 
 1. The relevant test suite passes (unit + integration + e2e affected by the change).
 2. The full test suite passes before finishing the task.
-3. TypeScript compiles cleanly: `npx tsc --noEmit` exits with code 0. Compilation errors must never be left as debt for future tasks.
-4. Lint passes: `npm run lint`.
+3. Database migrations are up to date: `npm run migration:run` was executed after any entity change (backend only).
+4. TypeScript compiles cleanly: `npx tsc --noEmit` exits with code 0. Compilation errors must never be left as debt for future tasks.
+5. Lint passes: `npm run lint`.
 
 If any of these fails, the task is not done — fix the underlying issue before declaring completion.
 
@@ -105,3 +113,9 @@ Skip documentation lookup only for trivial operations such as:
 
 If a library is involved and there is uncertainty, documentation lookup is mandatory.
 If the documentation returned does not match the installed version, flag the discrepancy before proceeding.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan:
+[specs/001-phase-03-video-upload/plan.md](specs/001-phase-03-video-upload/plan.md)
+<!-- SPECKIT END -->

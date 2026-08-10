@@ -1,12 +1,15 @@
 import { DataSource, EntitySchema, MigrationInterface } from 'typeorm';
 
+type EntityClassOrSchema =
+  (abstract new (...args: unknown[]) => object) | string | EntitySchema<object>;
+
 interface TestDataSourceOptions {
   synchronize?: boolean;
   migrations?: (new () => MigrationInterface)[];
 }
 
 export function createTestDataSource(
-  entities: (Function | string | EntitySchema<any>)[],
+  entities: EntityClassOrSchema[],
   options: TestDataSourceOptions = {},
 ): DataSource {
   const { synchronize = true, migrations } = options;
@@ -26,6 +29,9 @@ export function createTestDataSource(
 export async function cleanAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query('DELETE FROM "refresh_tokens"');
   await dataSource.query('DELETE FROM "verification_tokens"');
+  await dataSource.query('DELETE FROM "videos"').catch(() => {
+    /* table may not exist in all test suites */
+  });
   await dataSource.query('DELETE FROM "channels"');
   await dataSource.query('DELETE FROM "users"');
 }

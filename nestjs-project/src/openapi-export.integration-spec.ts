@@ -128,4 +128,61 @@ describe('exportSpec (integration)', () => {
       }
     }
   });
+
+  it('includes all 8 video endpoints (T055)', () => {
+    const paths = document.paths as Record<
+      string,
+      Record<string, Record<string, unknown>>
+    >;
+    const expectedEndpoints: [string, string][] = [
+      ['/videos', 'post'],
+      ['/videos/{id}/upload-complete', 'post'],
+      ['/videos/{id}', 'get'],
+      ['/videos/{id}/stream', 'get'],
+      ['/videos/{id}/download', 'get'],
+      ['/channels/{channelId}/videos', 'get'],
+      ['/videos/{id}', 'patch'],
+      ['/videos/{id}', 'delete'],
+    ];
+
+    for (const [path, method] of expectedEndpoints) {
+      const operation = paths[path]?.[method];
+      expect(operation).toBeDefined();
+    }
+  });
+
+  it('video endpoints have correct auth levels', () => {
+    const paths = document.paths as Record<
+      string,
+      Record<string, Record<string, unknown>>
+    >;
+
+    const protectedEndpoints: [string, string][] = [
+      ['/videos', 'post'],
+      ['/videos/{id}/upload-complete', 'post'],
+      ['/videos/{id}/download', 'get'],
+      ['/channels/{channelId}/videos', 'get'],
+      ['/videos/{id}', 'patch'],
+      ['/videos/{id}', 'delete'],
+    ];
+    for (const [path, method] of protectedEndpoints) {
+      const operation = paths[path]?.[method];
+      const security = operation?.security as
+        Array<Record<string, unknown>> | undefined;
+      expect(security?.some((req) => 'access-token' in req)).toBe(true);
+    }
+
+    const publicEndpoints: [string, string][] = [
+      ['/videos/{id}', 'get'],
+      ['/videos/{id}/stream', 'get'],
+    ];
+    for (const [path, method] of publicEndpoints) {
+      const operation = paths[path]?.[method];
+      const security = operation?.security as
+        Array<Record<string, unknown>> | undefined;
+      expect(!security || !security.some((req) => 'access-token' in req)).toBe(
+        true,
+      );
+    }
+  });
 });
