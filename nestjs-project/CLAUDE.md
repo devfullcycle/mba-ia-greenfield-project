@@ -159,3 +159,21 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 ## REST Conventions
 
 This is a RESTful API. All endpoints must follow standard REST conventions — correct HTTP methods, proper status codes, plural resource nouns, and consistent URL structure. Details are enforced via rules on controller files.
+
+## Videos Module (Fase 3)
+
+The Videos Module implements the pre-registration, multipart upload, background transcoding/screenshot processing, and chunked streaming delivery.
+
+- **Pre-signed upload endpoints:**
+  - `POST /videos/upload/initiate` — Pre-registers the video as `DRAFT` and initiates S3/MinIO multipart upload.
+  - `POST /videos/:id/upload/part-url` — Generates a pre-signed chunk URL.
+  - `POST /videos/:id/upload/complete` — Concludes the upload and enqueues video processing.
+- **Worker & Transcoding:**
+  - Enqueued to BullMQ queue `video-processing`.
+  - Conditional loading: `VideoProcessor` is loaded as a provider only when `IS_WORKER === 'true'`.
+  - Extracts duration and full format/stream metadata using `ffprobe` and stores it.
+  - Extracts screenshot at 10% of duration using `ffmpeg`, uploads to `thumbnails` bucket, and sets status to `READY`.
+- **Delivery:**
+  - `GET /videos/:unique_url_id/stream` — Supports Range Requests (HTTP 206) for video players.
+  - `GET /videos/:unique_url_id/download` — Returns the original file as an attachment.
+  - `GET /videos/:unique_url_id` — Exposes video metadata and status.

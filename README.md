@@ -43,11 +43,11 @@ O projeto é um monorepo baseado em containers Docker. Cada subprojeto sobe sua 
 
 - **Frontend** (Next.js 16, App Router + React Server Components) — interface da plataforma. Segue o **modelo BFF**: o navegador nunca chama a API NestJS diretamente; todo tráfego passa por Route Handlers same-origin em `app/api/**`, que fazem proxy server-side para a API.
 - **API** (NestJS 11) — regras de negócio, autenticação (JWT + refresh token rotation), envio de e-mails e acesso ao banco.
-- **Database** (PostgreSQL 17) — usuários, canais e tokens de autenticação.
+- **Database** (PostgreSQL 17) — usuários, canais, vídeos e tokens de autenticação.
 - **Email Service** (Mailpit) — captura os e-mails transacionais (confirmação de conta e recuperação de senha) em uma UI local.
-- **Video Worker** (FFmpeg) — processamento de vídeos *(planejado — Fase 03)*.
-- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails *(planejado — Fase 03)*.
-- **Message Queue** — fila de processamento de vídeos *(planejado — Fase 03)*.
+- **Video Worker** (FFmpeg) — processa vídeos da fila: extrai duração/metadados com ffprobe, gera thumbnail com ffmpeg, atualiza o banco.
+- **Object Storage** (MinIO/S3) — armazena arquivos de vídeo (bucket `videos`) e thumbnails (bucket `thumbnails`).
+- **Message Queue** (BullMQ/Redis) — fila `video-processing` que desacopla o upload do processamento.
 
 O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.mermaid`.
 
@@ -80,6 +80,9 @@ Serviços disponíveis:
 | API NestJS | http://localhost:3000 |
 | PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
 | Mailpit (UI de e-mails) | http://localhost:8025 |
+| MinIO (Object Storage API) | http://localhost:9000 |
+| MinIO Console | http://localhost:9001 (user/senha: `minioadmin`) |
+| Redis | `localhost:6379` |
 | Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
 
 ### 2. Frontend (Next.js)
@@ -124,7 +127,7 @@ Sufixos: `*.test.ts(x)` (unitário), `*.integration.test.ts(x)` (Route Handlers 
 
 ## ✅ Funcionalidades implementadas
 
-**Fase 01 — Configuração base** e **Fase 02 — Autenticação** estão concluídas (backend + frontend).
+**Fase 01 — Configuração base**, **Fase 02 — Autenticação** e **Fase 03 — Upload e Processamento de Vídeos** estão concluídas (backend).
 
 ### Autenticação (Fase 02)
 
@@ -143,6 +146,21 @@ Endpoints da API (`nestjs-project`):
 | `POST /auth/forgot-password` | Solicita e-mail de recuperação de senha |
 | `POST /auth/reset-password` | Redefine a senha via token |
 | `GET /auth/me` | Dados do usuário autenticado (protegido por JWT) |
+
+### Upload e Processamento de Vídeos (Fase 03)
+
+Upload multipart de até **10 GB** diretamente no MinIO via URLs pré-assinadas (NestJS nunca recebe o arquivo). Processamento assíncrono em worker separado com FFmpeg. Streaming via Range Requests.
+
+Endpoints da API (`nestjs-project`):
+
+| Método & Rota | Auth | Descrição |
+|---------------|------|-----------|
+| `POST /videos/upload/initiate` | JWT | Pré-cadastra o vídeo como rascunho e inicia o upload multipart no MinIO |
+| `POST /videos/:id/upload/part-url` | JWT (dono) | Gera URL pré-assinada para upload de um chunk |
+| `POST /videos/:id/upload/complete` | JWT (dono) | Finaliza o upload no MinIO e enfileira o processamento |
+| `GET /videos/:unique_url_id` | Pública | Retorna metadados e status do vídeo |
+| `GET /videos/:unique_url_id/stream` | Pública | Streaming via HTTP Range Requests (206 Partial Content) |
+| `GET /videos/:unique_url_id/download` | Pública | Download do arquivo original como anexo |
 
 Telas e Route Handlers BFF (`next-frontend`):
 
@@ -195,7 +213,7 @@ green-field-ia-project/
 |------|-----------|--------|
 | **01** | Configuração Base do Projeto | ✅ Concluída |
 | **02** | Cadastro, Login e Gerenciamento de Conta | ✅ Concluída |
-| **03** | Upload e Processamento de Vídeos | ⏳ Planejada |
+| **03** | Upload e Processamento de Vídeos | ✅ Concluída |
 | **04** | Gerenciamento de Vídeos e Canal | ⏳ Planejada |
 | **05** | Página de Visualização do Vídeo | ⏳ Planejada |
 | **06** | Interações Sociais (Likes, Comentários, Inscrições) | ⏳ Planejada |
@@ -208,7 +226,11 @@ Detalhes completos em `docs/project-plan.md`.
 | Camada | Tecnologia |
 |--------|------------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, React Hook Form + Zod, iron-session, openapi-fetch |
-| Backend | NestJS 11, TypeScript, TypeORM, JWT, Argon2, Mailer (Handlebars) |
+| Backend | NestJS 11, TypeScript, TypeORM, JWT, Argon2, Mailer (Handlebars), BullMQ |
+| Object Storage | MinIO (S3-compatible), AWS SDK v3 |
+| Message Queue | BullMQ + Redis 7 |
+| Video Processing | fluent-ffmpeg (ffmpeg + ffprobe) |
+| Unique IDs | nanoid |
 | Banco de Dados | PostgreSQL 17 |
 | E-mail (dev) | Mailpit |
 | Containerização | Docker, Docker Compose |
