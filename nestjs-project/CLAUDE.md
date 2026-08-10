@@ -34,6 +34,10 @@ docker compose exec nestjs-api npm run start:dev
 Services:
 - `nestjs-api` — NestJS API, port `3000`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `mailpit` — SMTP capture for local dev, web UI on port `8025`
+- `minio` — S3-compatible object storage for video files/thumbnails, API on port `9000`, console on port `9001`
+- `redis` — backs the `video-processing` BullMQ queue, port `6379`
+- `worker` — video processing worker (FFmpeg); gated behind the `worker` Compose profile, does **not** start with `docker compose up -d`. Start it explicitly: `docker compose --profile worker up -d worker`
 
 All verification and teardown commands run on the **host machine**:
 

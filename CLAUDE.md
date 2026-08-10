@@ -23,8 +23,20 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ + Redis) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
+
+## Video Upload & Processing (Phase 03)
+
+Videos belong to a channel (`videos.channel_id` → `channels.id`) and go through the lifecycle `draft → processing → ready | error`.
+
+- **Upload:** `POST /videos` creates a `draft` video and initiates an S3 multipart upload against MinIO/S3 (pre-signed part URLs, 100MB parts) — the API never receives the video binary. `POST /videos/:id/upload-complete` finalizes the multipart upload and publishes a `process-video` job.
+- **Processing:** the video worker (`nestjs-project/src/worker/`, entry point `src/worker/main.ts`, run as the `worker` Docker Compose service) consumes `process-video` jobs from the `video-processing` BullMQ queue, extracts duration/codec/resolution/bitrate/fps via `ffprobe` and generates a thumbnail via `fluent-ffmpeg` — both reading the video directly from a pre-signed MinIO URL, without downloading the full file. On success the video moves to `ready`; after 3 failed attempts (BullMQ retry + exponential backoff) it moves to `error` with `error_message` set.
+- **Retrieval:** `GET /videos/:slug` returns video metadata (public); `GET /videos/:slug/stream-url` returns a pre-signed GET URL for playback (public, MinIO/S3 handles HTTP range requests natively); `GET /videos/:slug/download-url` returns a pre-signed GET URL with `Content-Disposition: attachment` (authenticated).
+- **Unique identifier:** each video has an 11-char `slug` (`crypto.randomBytes(8).toString('base64url')`), used in all public-facing URLs instead of the internal UUID.
+- **Storage:** `StorageService` (`nestjs-project/src/storage/`) wraps `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, configured for MinIO in development (`forcePathStyle: true`) and swappable to AWS S3 in production via env vars only.
+- **Queue:** `QueueModule` (`nestjs-project/src/queue/`) wraps `@nestjs/bullmq`; `VideoQueueService.publishProcessingJob()` is the only producer of `process-video` jobs.
+- **Local infra:** `minio` and `redis` are started by default via `docker compose up -d`; the `worker` service is gated behind the `worker` Compose profile (`docker compose --profile worker up -d worker`) so it doesn't start with the default stack.
 
 ## Docker Networking
 

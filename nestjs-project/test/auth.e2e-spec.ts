@@ -12,6 +12,10 @@ import { VerificationToken } from '../src/auth/entities/verification-token.entit
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { cleanAllTables } from '../src/test/create-test-data-source';
+import {
+  captureConfirmationToken as captureConfirmationTokenHelper,
+  registerConfirmAndLogin as registerConfirmAndLoginHelper,
+} from './helpers/auth-e2e.helpers';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
@@ -59,35 +63,14 @@ describe('Auth (e2e)', () => {
     email: string,
     password = 'password123',
   ): Promise<string> {
-    const authService = app.get(AuthService);
-    const mailServiceInstance = (authService as any).mailService;
-    let capturedToken = '';
-    jest
-      .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
-        capturedToken = t;
-      });
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email, password });
-    return capturedToken;
+    return captureConfirmationTokenHelper(app, email, password);
   }
 
   async function registerConfirmAndLogin(
     email: string,
     password = 'password123',
   ): Promise<{ access_token: string; refresh_token: string }> {
-    const token = await captureConfirmationToken(email, password);
-    await request(app.getHttpServer())
-      .get('/auth/confirm-email')
-      .query({ token });
-    const res = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email, password });
-    return {
-      access_token: res.body.access_token,
-      refresh_token: res.body.refresh_token,
-    };
+    return registerConfirmAndLoginHelper(app, email, password);
   }
 
   describe('POST /auth/register', () => {
