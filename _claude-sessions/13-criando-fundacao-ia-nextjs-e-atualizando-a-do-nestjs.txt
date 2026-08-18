@@ -1,0 +1,794 @@
+ ▐▛███▜▌   Claude Code v2.1.140
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ /init quero atualizar o @next-frontend/CLAUDE.md, mas ele já tem muitas       
+coisas do projeto Next.js e design system, queria adicionar informações de      
+ambiente, execução e arquitetura como o @nestjs-project/CLAUDE.md, vamos        
+planejar isto                                                                   
+
+  Read 9 files, listed 4 directories (ctrl+o to expand)
+
+● Vou explorar e planejar. Primeiro deixe-me checar como o frontend conversa com
+   a API (rede compose).
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+● Tenho o contexto necessário. Vou escrever o plano inicial e depois confirmar
+  alguns pontos.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● Antes de finalizar, preciso confirmar alguns pontos com você:
+
+● User answered Claude's questions:
+  ⎿  · Onde colocar as novas seções operacionais (Environment, Commands, 
+     Architecture) no arquivo? → Antes do bloco Figma (topo)
+     · Incluir referência à integração com a API NestJS (URL, env var como 
+     NEXT_PUBLIC_API_URL, network entre composes)? → Sim, mencionar de forma 
+     leve
+     · Incluir uma seção de testes mesmo sem infra de testes hoje? → Incluir um 
+     placeholder TBD
+
+● Vou atualizar o plano com as respostas.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/quero-atualizar-o-next-frontend-claude-m-com
+     pressed-crystal.md · /plan to edit
+     Plan — Atualizar next-frontend/CLAUDE.md com Ambiente, Execução e 
+     Arquitetura
+
+     Context
+
+     O next-frontend/CLAUDE.md atual é rico em regras de Figma, design tokens,
+     padrões shadcn, ícones e qualidade de código — mas não tem seções
+     operacionais como o nestjs-project/CLAUDE.md (ambiente Docker, comandos
+     docker compose exec, processos longos, verificação de startup, arquitetura
+     de alto nível).
+
+     O usuário quer adicionar essas seções faltantes, mantendo todo o conteúdo
+     existente. A motivação é que agentes futuros saibam:
+     - Como subir o ambiente do frontend (Docker)
+     - Quais comandos rodar dentro do container vs no host
+     - Como executar o dev server (que é long-running)
+     - O lugar do Next.js no panorama arquitetural do StreamTube (papel do App
+     Router/RSC, consumo da API NestJS)
+
+     Tudo que já existe no arquivo (warning de Next.js, Stack Summary, Project
+     Structure, Design Tokens, Component Patterns, Icons, Asset Handling, Figma
+     Flow, Code Quality, When in Doubt) permanece intacto.
+
+     Fatos relevantes coletados do repo
+
+     - next-frontend/compose.yaml define um único serviço: next-frontend,
+     mapeando porta 3001:3000 (host:container) com bind mount em /home/node/app.
+     - Dockerfile.dev baseado em node:25.6.0-slim, usuário node, CMD tail -f 
+     /dev/null — ou seja, o container fica vivo sem iniciar o Next; tudo é
+     executado via docker compose exec.
+     - package.json scripts: dev, build, start, lint. Não há scripts de teste
+     ainda (sem test, sem Jest/Vitest).
+     - Sem arquivos .env* ainda. Sem código consumindo a API NestJS por enquanto
+      (só a tela de login está estruturalmente presente).
+     - Compose do frontend é separado do compose do nestjs-project. Os stacks
+     não compartilham network hoje. Portas do host: API em 3000, frontend em
+     3001.
+     - tsconfig.json define paths: { "@/*": ["./*"] }, strict: true, noEmit: 
+     true. Type-check correto é npx tsc --noEmit.
+
+     Estrutura proposta do novo next-frontend/CLAUDE.md
+
+     A ordem privilegia o que é operacional antes das regras de design/Figma
+     (que são longas), mas preserva o warning inicial:
+
+     1. # This is NOT the Next.js you know (mantido como está)
+     2. NOVO — ## Environment Startup Verification
+       - Default: subir o container next-frontend mas não iniciar o dev server,
+     a menos que o usuário peça explicitamente ("rode o projeto", "suba o
+     servidor").
+       - Verificar com docker compose ps que o container está running.
+       - Confirmar que o dev server (se iniciado) responde em
+     http://localhost:3001.
+     3. NOVO — ## Development Environment
+       - Comandos para iniciar: docker compose up -d, docker compose exec 
+     next-frontend npm install (primeira vez), docker compose exec next-frontend
+      npm run dev (em background).
+       - Mapa de portas: host 3001 → container 3000. Browser acessa em 
+     http://localhost:3001.
+       - Container Compose service name: next-frontend. Bind mount em
+     /home/node/app.
+       - Comando para teardown: docker compose down.
+     4. NOVO — ## Commands
+       - Regra estrita: todo npm, npx, node, tsc roda dentro do container
+     (docker compose exec next-frontend …).
+       - Container-only:
+           - npm run dev (background — long-running)
+         - npm run build
+         - npm run start
+         - npm run lint
+         - npx tsc --noEmit (Definition of Done)
+         - npx shadcn@latest add <component> (instalar primitivas)
+       - Host-only:
+           - docker compose ps
+         - docker compose logs next-frontend
+         - curl http://localhost:3001
+     5. NOVO — ## Long-running Processes
+       - Mesmo padrão do nestjs CLAUDE.md: dev server (npm run dev) e qualquer
+     watcher devem rodar em background via Bash tool, senão o agent bloqueia.
+     6. NOVO — ## Architecture
+       - Curta: Next.js 16 App Router + React 19 Server Components por default.
+     Rotas/layouts/páginas em app/.
+       - Server Components chamam a API NestJS direto via fetch (server-side);
+     Client Components (com "use client") só quando há
+     state/effects/refs/browser APIs.
+       - Frontend consome a REST API do NestJS. Hoje os composes do
+     next-frontend/ e do nestjs-project/ são stacks Docker Compose separados —
+     não compartilham network por enquanto. Implicações a serem documentadas de
+     forma leve:
+           - Do browser (client): chamar http://localhost:3000 (porta exposta da
+      API no host).
+         - Do server (RSC/route handlers) dentro do container: precisaria de
+     network compartilhada ou host.docker.internal — a ser definido quando a
+     primeira integração server-side existir.
+         - Convenção de env var: NEXT_PUBLIC_API_URL (client) e API_URL (server)
+      — mencionar como convenção planejada, sem prescrever valores definitivos
+     ainda.
+       - Streams de mídia virão do Object Storage (S3/MinIO) — TBD.
+       - Referência ao diagrama C4: docs/diagrams/software-arch.mermaid.
+     7. NOVO — ## Testing (placeholder TBD)
+       - Hoje não há scripts de teste no package.json. Tooling (Vitest/Jest +
+     Playwright/Testing Library) ainda não foi definido.
+       - Nota apontando para "Definition of Done (Technical)" no CLAUDE.md
+     global: tests fazem parte do critério de conclusão, então este placeholder
+     deve ser substituído por instruções concretas assim que o setup for
+     escolhido.
+     8. (Mantido — sem alterações) o resto do arquivo, começando em # Figma MCP 
+     Integration Rules — next-frontend e seguindo até ## When in Doubt.
+
+     Critical files
+
+     - /home/argen/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project/next-fr
+     ontend/CLAUDE.md — único arquivo modificado.
+
+     Verification
+
+     1. Inspeção visual do diff: as novas seções aparecem antes de # Figma MCP 
+     Integration Rules — next-frontend; nada do conteúdo Figma/design tokens é
+     alterado.
+     2. Renderizar o markdown (ou ler no Claude Code) para conferir hierarquia
+     de headings (## consistentes) e listas/blocos de código.
+     3. Smoke test manual dos comandos documentados:
+       - docker compose up -d no diretório next-frontend/
+       - docker compose ps mostra next-frontend running
+       - docker compose exec next-frontend npm run lint executa sem erro
+       - docker compose exec next-frontend npx tsc --noEmit retorna 0
+       - docker compose exec next-frontend npm run dev (background) e curl 
+     http://localhost:3001 retorna HTML
+
+● Update(next-frontend/CLAUDE.md)
+  ⎿  Added 108 lines
+        4  This version has breaking changes — APIs, conventions, and fil
+           e structure may all differ from your training data. Read the r
+           elevant guide in `node_modules/next/dist/docs/` before writing
+            any code. Heed deprecation notices.
+        5  <!-- END:nextjs-agent-rules -->
+        6  
+        7 +## Environment Startup Verification                           
+        8 +                                                              
+        9 +**Default behavior:** starting the environment means starting 
+          +**only the `next-frontend` container** — **never** start the N
+          +ext.js dev server unless the user explicitly asks to run/serve
+          + the project (e.g., "rode o projeto", "suba o servidor", "run 
+          +the app").                                                    
+       10 +                                                              
+       11 +After starting the container, always confirm it is up before p
+          +roceeding:                                                    
+       12 +                                                              
+       13 +```bash                                                       
+       14 +docker compose ps   # next-frontend must show status "running"
+       15 +```                                                           
+       16 +                                                              
+       17 +The base image's command is `tail -f /dev/null`, so the contai
+          +ner stays alive **without** booting Next. The dev server is on
+          +ly started on demand via `docker compose exec`.               
+       18 +                                                              
+       19 +If the dev server has been started, verify it actually serves 
+          +before claiming success:                                      
+       20 +                                                              
+       21 +```bash                                                       
+       22 +curl -I http://localhost:3001   # expect HTTP/1.1 200 OK      
+       23 +```                                                           
+       24 +                                                              
+       25 +Only start `npm run dev` when the user **explicitly** asks to 
+          +run the application — never as part of "start the environment"
+          +.                                                             
+       26 +                                                              
+       27 +## Development Environment                                    
+       28 +                                                              
+       29 +This project runs inside Docker. Always use the container for 
+          +development:                                                  
+       30 +                                                              
+       31 +```bash                                                       
+       32 +# Start container (from next-frontend/)                       
+       33 +docker compose up -d                                          
+       34 +                                                              
+       35 +# Install dependencies (first time only)                      
+       36 +docker compose exec next-frontend npm install                 
+       37 +                                                              
+       38 +# Run the dev server (watch mode) — see "Long-running Processe
+          +s" below                                                      
+       39 +docker compose exec next-frontend npm run dev                 
+       40 +```                                                           
+       41 +                                                              
+       42 +Service:                                                      
+       43 +- `next-frontend` — Next.js dev container, host port `3001` → 
+          +container port `3000`. Browser accesses the app at **`http://l
+          +ocalhost:3001`**.                                             
+       44 +                                                              
+       45 +Bind mount: the repo's `next-frontend/` directory is mounted a
+          +t `/home/node/app` inside the container, so file edits on the 
+          +host are reflected immediately.                               
+       46 +                                                              
+       47 +Teardown and inspection commands run on the **host machine**: 
+       48 +                                                              
+       49 +```bash                                                       
+       50 +# Verify the dev server is responding (after it has been start
+          +ed)                                                           
+       51 +curl -I http://localhost:3001                                 
+       52 +                                                              
+       53 +# Check container logs                                        
+       54 +docker compose logs next-frontend                             
+       55 +                                                              
+       56 +# Tear down                                                   
+       57 +docker compose down                                           
+       58 +```                                                           
+       59 +                                                              
+       60 +## Commands                                                   
+       61 +                                                              
+       62 +**Strict rule:** every `npm`, `npx`, `node`, `tsc`, and shadcn
+          + command runs **inside the container**, never on the host. Run
+          +ning on the host uses a different Node version, bypasses the c
+          +ontainer's working directory, and can leave artifacts owned by
+          + the wrong user on the bind mount.                            
+       63 +                                                              
+       64 +### Container-only commands (always prefix with `docker compos
+          +e exec next-frontend`)                                        
+       65 +                                                              
+       66 +```bash                                                       
+       67 +npm run dev                              # Dev server with hot
+          +-reload (run in background)                                   
+       68 +npm run build                            # Production build (.
+          +next/)                                                        
+       69 +npm run start                            # Serve the productio
+          +n build                                                       
+       70 +npm run lint                             # ESLint (eslint-conf
+          +ig-next)                                                      
+       71 +                                                              
+       72 +npx tsc --noEmit                         # Type-check (require
+          +d before declaring a task done)                               
+       73 +npx shadcn@latest add <component>        # Add a shadcn primit
+          +ive — respects components.json                                
+       74 +```                                                           
+       75 +                                                              
+       76 +### Host-only commands (Docker / connectivity probes)         
+       77 +                                                              
+       78 +```bash                                                       
+       79 +docker compose ps                                             
+       80 +docker compose logs next-frontend                             
+       81 +curl -I http://localhost:3001                                 
+       82 +```                                                           
+       83 +                                                              
+       84 +## Long-running Processes                                     
+       85 +                                                              
+       86 +Commands that never exit (dev server, watch modes) must be run
+          + **in background** in the Bash tool — otherwise the agent bloc
+          +ks indefinitely waiting for the process to return.            
+       87 +                                                              
+       88 +This applies to: `npm run dev`, `npm run start`, and any other
+          + persistent process. After starting in background, validate wi
+          +th `curl -I http://localhost:3001`.                           
+       89 +                                                              
+       90 +## Architecture                                               
+       91 +                                                              
+       92 +Next.js 16 App Router with React 19 Server Components by defau
+          +lt. Routes, layouts, and pages live under `app/`.             
+       93 +                                                              
+       94 +- **Server Components** (default): can `fetch` from the NestJS
+          + API directly server-side. Prefer this for data loading — keep
+          +s payloads small and avoids client-side waterfalls.           
+       95 +- **Client Components** (`"use client"`): only when the compon
+          +ent uses `useState`/`useEffect`/refs/browser APIs or interacti
+          +ve event handlers. Keep client boundaries as deep in the tree 
+          +as possible.                                                  
+       96 +                                                              
+       97 +### Talking to the NestJS API                                 
+       98 +                                                              
+       99 +Today the `next-frontend/` and `nestjs-project/` Docker Compos
+          +e stacks are **separate** — they do not share a network. Impli
+          +cations:                                                      
+      100 +                                                              
+      101 +- **From the browser (client components):** call the API at **
+          +`http://localhost:3000`** (the host-exposed port of `nestjs-ap
+          +i`).                                                          
+      102 +- **From the server (RSC, route handlers, server actions) insi
+          +de the container:** the container cannot reach `localhost:3000
+          +` of the host. A shared Compose network or `host.docker.intern
+          +al` will be required — **to be defined** when the first server
+          +-side integration lands.                                      
+      103 +- **Env var convention (planned):** `NEXT_PUBLIC_API_URL` for 
+          +client-side reads, `API_URL` for server-side reads. Treat thes
+          +e as the conventional names; concrete values are not prescribe
+          +d yet.                                                        
+      104 +                                                              
+      105 +Media streaming will eventually come from Object Storage (S3/M
+          +inIO) — TBD.                                                  
+      106 +                                                              
+      107 +Refer to the C4 container diagram at `docs/diagrams/software-a
+          +rch.mermaid` for the full system view.                        
+      108 +                                                              
+      109 +## Testing                                                    
+      110 +                                                              
+      111 +**TBD.** No test scripts are wired in `package.json` yet, and 
+          +the tooling (Vitest/Jest, Testing Library, Playwright, …) has 
+          +not been selected.                                            
+      112 +                                                              
+      113 +The global [`CLAUDE.md`](../CLAUDE.md) → "Definition of Done (
+          +Technical)" requires tests to pass before a task is complete. 
+          +Until the test setup is chosen and added here, this section is
+          + a placeholder — replace it with concrete instructions (how to
+          + run unit/integration/e2e, conventions, file suffixes) as soon
+          + as the tooling decision is made.                             
+      114 +                                                              
+      115  # Figma MCP Integration Rules — next-frontend
+      116  
+      117  These rules tell AI coding agents how to translate Figma desig
+           ns into code for this project. They MUST be followed for every
+            Figma-driven change.
+
+● Pronto. Adicionei seis novas seções ao next-frontend/CLAUDE.md, logo após o
+  warning de topo e antes do bloco Figma:
+
+  - Environment Startup Verification — default é subir só o container, não
+  iniciar o dev server.
+  - Development Environment — docker compose up -d, mapping 3001:3000, bind
+  mount em /home/node/app.
+  - Commands — regra estrita "tudo dentro do container", lista de comandos
+  container-only vs host-only.
+  - Long-running Processes — npm run dev deve rodar em background.
+  - Architecture — App Router + RSC, regra de Server vs Client Components, nota
+  leve sobre integração com a API NestJS (composes separados hoje, convenção
+  NEXT_PUBLIC_API_URL/API_URL planejada).
+  - Testing — placeholder TBD apontando para o Definition of Done global.
+
+  Todo o conteúdo original (Figma flow, design tokens, padrões shadcn, ícones,
+  etc.) ficou intacto.
+
+✻ Brewed for 2m 28s
+
+❯ um trecho como o Project Structure & Path Aliases está dentro do Figma MCP,   
+  acho que deveria estar fora, analise este trecho e outros que você vê que     
+  deveriam ser reordenados                                                      
+  ⎿  ⧉ Selected 1 lines from next-frontend/CLAUDE.md in Visual Studio Code - Insiders
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● O plano anterior é sobre uma tarefa diferente (adicionar seções operacionais —
+   já concluído). Vou tratar este como um novo pedido (reorganização de seções)
+  e sobrescrever o plano.
+
+  Analisando a estrutura atual: o bloco # Figma MCP Integration Rules — 
+  next-frontend (linhas 115-239) contém várias subseções que são convenções do 
+  projeto inteiro e não regras específicas de Figma. Vou propor o que extrair.
+
+● Updated plan
+  ⎿  /plan to preview
+● User answered Claude's questions:
+  ⎿  · Sobre `## Asset Handling` (mistura regras Figma e gerais): qual cut 
+     prefere? → Dividir em dois blocos
+     · Sobre `## When in Doubt` (fecha o arquivo hoje): onde deve ficar? → Fora 
+     do Figma, como fechamento do arquivo
+
+● As respostas confirmam o plano já escrito. Vou finalizar.
+
+● User approved Claude's plan
+  ⎿  Plan saved to: ~/.claude/plans/quero-atualizar-o-next-frontend-claude-m-com
+     pressed-crystal.md · /plan to edit
+     Plan — Reorganizar next-frontend/CLAUDE.md: separar convenções do projeto 
+     de regras Figma-específicas
+
+     Context
+
+     A iteração anterior adicionou seções operacionais (Environment, Commands,
+     Architecture, Testing) ao topo do next-frontend/CLAUDE.md — isso já está
+     commitado no arquivo.
+
+     Agora o usuário identificou um problema estrutural: o H1 # Figma MCP 
+     Integration Rules — next-frontend engloba subseções que não são específicas
+      de Figma (ex.: Project Structure & Path Aliases). Isso induz o leitor a
+     pensar que essas regras só valem quando se está traduzindo design — quando
+     na verdade são convenções do projeto inteiro.
+
+     O objetivo é reordenar o arquivo para que cada regra fique sob o cabeçalho
+     certo, sem alterar o conteúdo das regras em si. Movimento puro de blocos.
+
+     Análise por subseção atual
+
+     Linhas referenciadas são do arquivo atual.
+
+     Subseção atual (sob # Figma MCP …): Stack Summary
+     Linhas: 119–121
+     Escopo real: Projeto inteiro
+     Ação: Mover para fora (antes do Figma)
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Project Structure & Path Aliases
+     Linhas: 123–142
+     Escopo real: Projeto inteiro
+     Ação: Mover para fora
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Design Tokens — Source of Truth (+
+       Semantic, Palette, Typography, Radius/Spacing/Shadows, Dark mode)
+     Linhas: 144–174
+     Escopo real: Projeto inteiro
+     Ação: Mover para fora
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Component Patterns
+     Linhas: 176–188
+     Escopo real: Projeto inteiro (cita reconciliação com Figma como um bullet,
+     mas
+       o padrão cva/data-slot/asChild é universal)
+     Ação: Mover para fora, manter o bullet de reconciliação Figma intacto
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Icons
+     Linhas: 190–196
+     Escopo real: Projeto inteiro (política "sem lib externa, SVG custom")
+     Ação: Mover para fora, manter o último bullet que aplica a regra a payloads
+
+       Figma
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Asset Handling
+     Linhas: 198–205
+     Escopo real: Misto
+     Ação: Dividir: criar ## Static Assets & Images (project-wide: public/,
+       next/image) e mover apenas os bullets Figma (localhost endpoint, não
+     inventar
+        placeholders, não instalar pacotes de ícones) para uma subseção ## Figma
+      
+       Assets dentro do bloco Figma
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Required Figma-to-Code Flow
+     Linhas: 207–223
+     Escopo real: Figma-específico
+     Ação: Manter no bloco Figma
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): Code Quality Conventions
+     Linhas: 225–233
+     Escopo real: Projeto inteiro
+     Ação: Mover para fora
+     ────────────────────────────────────────
+     Subseção atual (sob # Figma MCP …): When in Doubt
+     Linhas: 235–239
+     Escopo real: Projeto inteiro (1º e 3º bullets gerais; 2º bullet menciona
+     Figma
+       mas é uma instância do princípio "add token first")
+     Ação: Mover para fora (último, como fechamento)
+
+     Nova ordem final do arquivo
+
+     Sem alterar nenhum conteúdo das subseções — apenas reordenando blocos
+     inteiros.
+
+     1. # This is NOT the Next.js you know (mantido)
+     2. Seções operacionais (já existentes, mantidas)
+       - ## Environment Startup Verification
+       - ## Development Environment
+       - ## Commands
+       - ## Long-running Processes
+       - ## Architecture
+       - ## Testing
+     3. Convenções do projeto (extraídas do bloco Figma)
+       - ## Stack Summary
+       - ## Project Structure & Path Aliases
+       - ## Design Tokens — Source of Truth (com Semantic colors, Palette
+     scales, Typography utilities, Radius/Spacing/Shadows, Dark mode como ###
+     subseções)
+       - ## Component Patterns
+       - ## Icons
+       - ## Static Assets & Images (novo H2, contém os 2 últimos bullets do 
+     atual Asset Handling: public/ + next/image)
+       - ## Code Quality Conventions
+       - ## When in Doubt
+     4. # Figma MCP Integration Rules — next-frontend (H1, agora bem menor)
+       - Parágrafo intro mantido ("These rules tell AI coding agents…")
+       - ## Figma Assets (novo H2, contém os 3 primeiros bullets do atual Asset 
+     Handling: localhost endpoint, não instalar pacotes de ícones, não inserir 
+     placeholders quando há localhost source)
+       - ## Required Figma-to-Code Flow (mantido)
+
+     Princípios de reorganização
+
+     - Movimento, não edição. O texto de cada bullet/parágrafo permanece
+     byte-a-byte idêntico após o movimento. Headings podem mudar de nível (## ↔
+     ###) só se necessário para manter hierarquia consistente — neste plano não
+     há mudança de nível, todos os blocos já estão em ## ou ###.
+     - Splits explícitos. O único bloco que precisa ser dividido é ## Asset 
+     Handling. Os bullets vão para dois lugares distintos sem reescrita.
+     - Bullet sobre reconciliação Figma em Component Patterns: permanece dentro
+     de ## Component Patterns mesmo após o move — porque é uma instrução sobre
+     como o padrão de componente lida com Figma, e faz parte da especificação do
+      padrão.
+     - Último bullet de ## Icons (Figma SVG → componente em @/components/icons):
+      permanece dentro de ## Icons pelo mesmo motivo — é a aplicação da política
+      a um caso de Figma.
+
+     Critical files
+
+     - /home/argen/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project/next-fr
+     ontend/CLAUDE.md — único arquivo modificado.
+
+     Verification
+
+     1. Diff sem perdas: comparar contagem de palavras e bullets antes/depois —
+     a soma deve ser igual (com leve aumento devido aos dois novos H2: ## Static
+      Assets & Images e ## Figma Assets).
+     2. Render visual: ler o markdown e validar que:
+       - Sob # Figma MCP Integration Rules — next-frontend agora há apenas ## 
+     Figma Assets e ## Required Figma-to-Code Flow (mais o intro).
+       - Todas as outras subseções estão no nível raiz do documento, fora do
+     bloco Figma.
+     3. Smoke search: grep -n "^## " next-frontend/CLAUDE.md deve listar as
+     seções na ordem prevista acima.
+     4. Conteúdo preservado: spot-check em três regras-chave (cva pattern,
+     design tokens em globals.css, fluxo get_design_context) — texto inalterado.
+
+● Vou reescrever o arquivo com a nova ordem.
+
+● Write(next-frontend/CLAUDE.md)
+  ⎿  Added 26 lines, removed 23 lines
+      112  
+      113  The global [`CLAUDE.md`](../CLAUDE.md) → "Definition of Done (
+           Technical)" requires tests to pass before a task is complete. 
+           Until the test setup is chosen and added here, this section is
+            a placeholder — replace it with concrete instructions (how to
+            run unit/integration/e2e, conventions, file suffixes) as soon
+            as the tooling decision is made.
+      114  
+      115 -# Figma MCP Integration Rules — next-frontend                 
+      116 -                                                              
+      117 -These rules tell AI coding agents how to translate Figma desig
+          -ns into code for this project. They MUST be followed for every
+          - Figma-driven change.                                         
+      118 -                                                              
+      115  ## Stack Summary
+      116  
+      117  Next.js App Router with React Server Components, TypeScript st
+           rict, React 19, Tailwind CSS v4 (CSS-first config via `@theme 
+           inline` in `app/globals.css` — there is NO `tailwind.config.js
+           `), shadcn/ui (style `radix-nova`, baseColor `neutral`, `cssVa
+           riables: true`) on top of `radix-ui` primitives, `class-varian
+           ce-authority` (`cva`) with extended `tailwind-merge`, custom S
+           VG icon components in `components/icons/` (no external icon li
+           brary), `Inter` + `Geist_Mono` fonts loaded via `next/font/goo
+           gle` in `app/layout.tsx`. Exact versions in `package.json`.
+     ...
+      191  - Inside a `cva` primitive, size icons via the descendant sele
+           ctor pattern (`[&_svg:not([class*='size-'])]:size-5`), not by 
+           hand on each usage — works the same with these SVG components 
+           since they render a plain `<svg>`.
+      192  - When Figma returns an inline SVG or `localhost` asset URL, c
+           onvert it to a new component under `@/components/icons/` follo
+           wing the rules above. Do NOT inline raw SVG markup inside feat
+           ure components.
+      193  
+      198 -## Asset Handling                                             
+      194 +## Static Assets & Images                                     
+      195  
+      196 +- Static assets that ship with the app go in `public/` and are
+          + referenced as `/file.svg` (or via `<Image src="/file.svg" … /
+          +>` from `next/image` when raster).                            
+      197 +- Use `next/image` (`import Image from "next/image"`) for all 
+          +raster images so Next can optimize them — never plain `<img>`.
+      198 +                                                              
+      199 +## Code Quality Conventions                                   
+      200 +                                                              
+      201 +- TypeScript strict; no `any`. Use `React.ComponentProps<"tag"
+          +>` to extend native element props.                            
+      202 +- Imports: built-in / third-party / `@/…` aliases / relative —
+          + separated by blank lines.                                    
+      203 +- File naming: kebab-case for files (`button.tsx`, `video-card
+          +.tsx`), PascalCase for the exported component (`Button`, `Vide
+          +oCard`).                                                      
+      204 +- Server Components by default. Add `"use client"` deliberatel
+          +y.                                                            
+      205 +- Use `cn(...)` from `@/lib/utils` for every conditional / mer
+          +ged className. Never string-concatenate Tailwind classes manua
+          +lly.                                                          
+      206 +- Use Next.js primitives (`next/image`, `next/link`, `next/fon
+          +t`) — do NOT replace them with native elements for navigation/
+          +images.                                                       
+      207 +- Lint must pass: `npm run lint`. TypeScript must compile: `np
+          +x tsc --noEmit`.                                              
+      208 +                                                              
+      209 +## When in Doubt                                              
+      210 +                                                              
+      211 +- Compare against `components/ui/button.tsx` (canonical primit
+          +ive) and `app/globals.css` (canonical token registry).        
+      212 +- If a Figma value has no matching token, ADD the token to `ap
+          +p/globals.css` first, then consume it — do not inline a hex/px
+          + value.                                                       
+      213 +- If the design implies a missing shadcn primitive, install it
+          + via `npx shadcn@latest add <name>` rather than hand-rolling i
+          +t.                                                            
+      214 +                                                              
+      215 +# Figma MCP Integration Rules — next-frontend                 
+      216 +                                                              
+      217 +These rules tell AI coding agents how to translate Figma desig
+          +ns into code for this project. They MUST be followed for every
+          + Figma-driven change.                                         
+      218 +                                                              
+      219 +## Figma Assets                                               
+      220 +                                                              
+      221  - The Figma MCP server serves images and SVGs from a localhost
+            endpoint embedded in the design payload.
+      222  - IMPORTANT: If the Figma MCP server returns a `localhost` sou
+           rce for an image or SVG, use that source directly.
+      223  - IMPORTANT: DO NOT install new icon packages — icons are cust
+           om SVG components under `@/components/icons/` (see the Icons s
+           ection). Convert Figma SVG payloads into components there.
+      224  - IMPORTANT: DO NOT invent or insert placeholder images when a
+            `localhost` source is provided.
+      204 -- Static assets that ship with the app go in `public/` and are
+          - referenced as `/file.svg` (or via `<Image src="/file.svg" … /
+          ->` from `next/image` when raster).                            
+      205 -- Use `next/image` (`import Image from "next/image"`) for all 
+          -raster images so Next can optimize them — never plain `<img>`.
+      225  
+      226  ## Required Figma-to-Code Flow
+      227  
+     ...
+      240     - Reuse `@/components/ui/*` primitives (Button, etc.) inste
+           ad of re-implementing them.
+      241     - Server Components by default; add `"use client"` ONLY whe
+           n the component uses state, effects, refs, or browser APIs.
+      242  6. **Validate** the rendered output against the Figma screensh
+           ot — pixel-level visual parity AND interactive states (hover, 
+           focus-visible, disabled, dark mode).
+      224 -                                                              
+      225 -## Code Quality Conventions                                   
+      226 -                                                              
+      227 -- TypeScript strict; no `any`. Use `React.ComponentProps<"tag"
+          ->` to extend native element props.                            
+      228 -- Imports: built-in / third-party / `@/…` aliases / relative —
+          - separated by blank lines.                                    
+      229 -- File naming: kebab-case for files (`button.tsx`, `video-card
+          -.tsx`), PascalCase for the exported component (`Button`, `Vide
+          -oCard`).                                                      
+      230 -- Server Components by default. Add `"use client"` deliberatel
+          -y.                                                            
+      231 -- Use `cn(...)` from `@/lib/utils` for every conditional / mer
+          -ged className. Never string-concatenate Tailwind classes manua
+          -lly.                                                          
+      232 -- Use Next.js primitives (`next/image`, `next/link`, `next/fon
+          -t`) — do NOT replace them with native elements for navigation/
+          -images.                                                       
+      233 -- Lint must pass: `npm run lint`. TypeScript must compile: `np
+          -x tsc --noEmit`.                                              
+      234 -                                                              
+      235 -## When in Doubt                                              
+      236 -                                                              
+      237 -- Compare against `components/ui/button.tsx` (canonical primit
+          -ive) and `app/globals.css` (canonical token registry).        
+      238 -- If a Figma value has no matching token, ADD the token to `ap
+          -p/globals.css` first, then consume it — do not inline a hex/px
+          - value.                                                       
+      239 -- If the design implies a missing shadcn primitive, install it
+          - via `npx shadcn@latest add <name>` rather than hand-rolling i
+          -t.                                                            
+
+● Verificando a nova ordem das seções:
+
+  Searched for 1 pattern (ctrl+o to expand)
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+● Reorganização concluída. A nova ordem das seções está exatamente conforme o
+  plano:
+
+  Convenções do projeto (fora do bloco Figma):
+  - Environment Startup Verification → Development Environment → Commands →
+  Long-running Processes → Architecture → Testing
+  - Stack Summary → Project Structure & Path Aliases → Design Tokens → Component
+   Patterns → Icons → Static Assets & Images → Code Quality Conventions → When
+  in Doubt
+
+  # Figma MCP Integration Rules — next-frontend (agora enxuto):
+  - Figma Assets (3 bullets sobre localhost endpoint, não instalar ícone-libs,
+  não inventar placeholders)
+  - Required Figma-to-Code Flow
+
+  Conteúdo movido byte-a-byte, sem reescrita. O split do antigo ## Asset 
+  Handling ficou: os 4 bullets Figma foram para ## Figma Assets dentro do bloco
+  Figma; os 2 bullets gerais (public/, next/image) foram para ## Static Assets &
+   Images fora dele.
+
+  O diagnóstico cSpell sobre "subfolders" é um falso positivo do linter —
+  palavra inglesa válida no conteúdo original que apenas se moveu junto com o
+  bloco; sem ação.
+
+✻ Brewed for 2m 33s
+
+! npx skills add https://github.com/vercel-labs/next-skills --skill             
+  next-best-practices                                                           
+  ⎿  npm warn exec The following package was not found and will be installed:
+     skills@1.5.6
+
+     │
+     ●   claude-code_2-1-139_agent  Agent detected — installing
+     non-interactively
+     │
+     ◇  Source: https://github.com/vercel-labs/next-skills.git
+     │
+     ◒  Fetching skills◐  Fetching skills◓  Fetching skills◑  Fetching skills◒
+     Fetching skills◐  Fetching skills◓  Fetching skills◑  Fetching skills◒
+     Fetching skills.◐  Fetching skills.◓  Fetching skills.◑  Fetching skills.◒
+      Fetching skills.◐  Fetching skills.◓  Fetching skills.◑  Fetching skills.◒
+       Fetching skills..◐  Fetching skills..◓  Fetching skills..◑  Fetching
+     skills..◒  Fetching skills..◐  Fetching skills..◓  Fetching skills..◇
+     Found 3 skills
+     │
+     ●  Selected 1 skill: next-best-practices
+     │
+     ◇  55 agents
+     │
+     ●  Installing to: Claude Code, Cursor, GitHub Copilot
+
+     │
+     ◇  Installation Summary
+     ───────────────────────────────────────────────────────────────────────╮
+     │
+                         │
+     │  ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project/.agents/skills/n
+     ext-best-practices  │
+     │    universal: Cursor, GitHub Copilot, Amp, Antigravity, Cline +8 more
+                         │
+     │    symlink → Claude Code
+                         │
+     │
+                         │
+     ├──────────────────────────────────────────────────────────────────────────
+     ────────────────────╯
+     │
+     ◇  Security Risk Assessments ─────────────────────────────────────────╮
+     │                                                                     │
+     │                       Gen               Socket            Snyk      │
+     │  next-best-practices  Safe              0 alerts          Low Risk  │
+     │                                                                     │
+     │  Details: https://skills.sh/vercel-labs/next-skills                 │
+     │                                                                     │
+     ├─────────────────────────────────────────────────────────────────────╯
+     │
+     ◇  Installation complete
+
+     │
+     ◇  Installed 1 skill ──────────────────────────────────────────────────────
+     ──────────────────────╮
+     │
+                           │
+     │  ✓ ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project/.agents/skills
+     /next-best-practices  │
+     │    universal: Cursor, GitHub Copilot, Amp, Antigravity, Cline +8 more
+                           │
+     │    symlinked: Claude Code
+                           │
+     │
+                           │
+     ├──────────────────────────────────────────────────────────────────────────
+     ──────────────────────╯
+
+     │
+     └  Done!  Review skills before use; they run with full agent permissions.
