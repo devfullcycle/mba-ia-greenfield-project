@@ -1,6 +1,6 @@
 FROM node:25.6.0-slim
 
-RUN apt update && apt install -y procps curl
+RUN apt update && apt install -y procps curl ffmpeg
 
 WORKDIR /home/node/app
 
