@@ -12,6 +12,22 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+      storage:
+        condition: service_healthy
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: ["node_modules/.bin/ts-node", "-r", "tsconfig-paths/register", "src/worker.main.ts"]
+    volumes:
+      - .:/home/node/app
+    stop_grace_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
 
   db:
     image: postgres:17
@@ -34,3 +50,37 @@ services:
       - "8025:8025"
 
 
+
+  storage:
+    image: chrislusf/seaweedfs:latest
+    command: mini -dir=/data -s3.allowedOrigins=*
+    ports:
+      - "8333:8333"
+    environment:
+      - AWS_ACCESS_KEY_ID=streamtube
+      - AWS_SECRET_ACCESS_KEY=streamtube-secret
+      - S3_BUCKET=streamtube-videos
+    volumes:
+      - storage-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8333/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  storage-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      - AWS_ACCESS_KEY_ID=streamtube
+      - AWS_SECRET_ACCESS_KEY=streamtube-secret
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - ./storage/cors.json:/cors.json:ro
+    entrypoint: ["aws", "--endpoint-url", "http://storage:8333", "s3api", "put-bucket-cors", "--bucket", "streamtube-videos", "--cors-configuration", "file:///cors.json"]
+    restart: "no"
+
+volumes:
+  storage-data:

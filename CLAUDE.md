@@ -20,11 +20,22 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 
 - **Frontend** (Next.js) → calls API via REST, streams from Object Storage
 - **API** (Nest.js) → business rules, auth, reads/writes DB, uploads to storage, publishes jobs to queue, sends emails
-- **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
+- **Video Worker** (FFmpeg) → `video-worker` Compose service, second Nest entrypoint (`nestjs-project/src/worker.main.ts`); consumes jobs from the queue, runs ffprobe/ffmpeg, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
-- **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Object Storage** (SeaweedFS, S3 API; `storage` service) → video files and thumbnails. Code speaks plain S3 (`@aws-sdk/client-s3`), so the provider is swappable (AWS S3 in production)
+- **Message Queue** (pg-boss on the existing PostgreSQL, no extra service) → `video.process` jobs and the recurring `video.upload.reap` job; enqueue shares the DB transaction with the video status update
 - **Email Service** (SMTP) → account confirmation and password recovery
+
+## Videos (Phase 03)
+
+Backend module `nestjs-project/src/videos/`; planning artifacts in `docs/phases/phase-03-upload-processing/` and decisions in `docs/decisions/technical-decisions-upload-processing.md`.
+
+- **Upload (up to 10 GB):** the file never goes through the API. `POST /videos` creates the video as a draft (`status=uploading`, `visibility=draft`) and opens an S3 multipart upload; the client asks for presigned part URLs (`POST /videos/:publicId/upload/part-urls`), `PUT`s the parts straight to storage, then calls `POST /videos/:publicId/upload/complete` (202), which completes the multipart and enqueues `video.process` in the same DB transaction.
+- **Status cycle:** `uploading → processing → ready | failed` (column `status`); `visibility` is `draft` (published is reserved for Phase 04). The worker retries `video.process` 3 times (30 s, backoff) before marking `failed`.
+- **Endpoints:** `POST /videos`, `POST /videos/:publicId/upload/part-urls`, `POST /videos/:publicId/upload/complete`, `GET /videos/:publicId`, `GET /videos/:publicId/stream`, `GET /videos/:publicId/download`. Stream and download return JSON `{ url, expires_in }` with a short-lived presigned GET URL; the storage serves Range (`206`) itself. Only the owning channel can access a draft.
+- **Public URL id:** `public_id`, 11-char nanoid with a unique index (retry on conflict). Storage keys: `videos/{publicId}/original` and `videos/{publicId}/thumbnail.jpg`.
+- **Worker:** `src/worker/` (`VideoProcessingHandler`, `FfmpegService`, `UploadReaperHandler`). It extracts duration/metadata with ffprobe and a thumbnail with ffmpeg; the reaper (hourly cron) aborts multipart uploads inactive for 24 h and deletes their rows.
+- **Infra (Compose):** `storage` (SeaweedFS, S3 on `:8333`), `storage-init` (applies `storage/cors.json`), `video-worker`. Hosts inside containers are Compose service names (`storage`, `db`); only presigned URLs use the browser-facing `STORAGE_PUBLIC_ENDPOINT`.
 
 ## Docker Networking
 

@@ -1,12 +1,16 @@
 import { DataSource, EntitySchema, MigrationInterface } from 'typeorm';
 
+type EntityClassOrSchema =
+  | (abstract new (...args: never[]) => object)
+  | EntitySchema;
+
 interface TestDataSourceOptions {
   synchronize?: boolean;
   migrations?: (new () => MigrationInterface)[];
 }
 
 export function createTestDataSource(
-  entities: (Function | string | EntitySchema<any>)[],
+  entities: (EntityClassOrSchema | string)[],
   options: TestDataSourceOptions = {},
 ): DataSource {
   const { synchronize = true, migrations } = options;
@@ -24,6 +28,10 @@ export function createTestDataSource(
 }
 
 export async function cleanAllTables(dataSource: DataSource): Promise<void> {
+  // `videos` may not exist yet in suites that sync a subset of entities.
+  await dataSource.query(
+    `DO $$ BEGIN IF to_regclass('public.videos') IS NOT NULL THEN DELETE FROM "videos"; END IF; END $$`,
+  );
   await dataSource.query('DELETE FROM "refresh_tokens"');
   await dataSource.query('DELETE FROM "verification_tokens"');
   await dataSource.query('DELETE FROM "channels"');

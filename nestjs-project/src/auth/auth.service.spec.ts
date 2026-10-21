@@ -3,7 +3,9 @@ import * as crypto from 'crypto';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
+import { User } from '../users/entities/user.entity';
+import type { MockOf } from '../test/mock-of';
 import authConfig from '../config/auth.config';
 import {
   EmailAlreadyExistsException,
@@ -33,9 +35,9 @@ const mockAuthConfig = {
 
 describe('AuthService — register', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let mailService: jest.Mocked<MailService>;
-  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+  let usersService: MockOf<UsersService>;
+  let mailService: MockOf<MailService>;
+  let verificationTokenRepository: MockOf<Repository<VerificationToken>>;
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
@@ -95,7 +97,7 @@ describe('AuthService — register', () => {
     usersService.findByEmail.mockResolvedValue({
       id: 'u1',
       email: 'test@example.com',
-    } as any);
+    } as unknown as User);
 
     await expect(
       authService.register({
@@ -111,8 +113,8 @@ describe('AuthService — register', () => {
       id: 'u1',
       email: 'new@example.com',
       channel: { name: 'new' },
-    } as any);
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    } as unknown as User);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     await authService.register({
       email: 'new@example.com',
@@ -130,8 +132,8 @@ describe('AuthService — register', () => {
       id: 'u1',
       email: 'new@example.com',
       channel: { name: 'new' },
-    } as any);
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    } as unknown as User);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     await authService.register({
       email: 'new@example.com',
@@ -150,7 +152,7 @@ describe('AuthService — register', () => {
       id: 'u1',
       email: 'new@example.com',
       channel: { name: 'new' },
-    } as any);
+    } as unknown as User);
     const createdToken = {
       type: VerificationTokenType.EMAIL_CONFIRMATION,
     } as VerificationToken;
@@ -176,8 +178,8 @@ describe('AuthService — register', () => {
       id: 'u1',
       email: 'new@example.com',
       channel: { name: 'mynick' },
-    } as any);
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    } as unknown as User);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     await authService.register({
       email: 'new@example.com',
@@ -197,8 +199,8 @@ describe('AuthService — register', () => {
       id: 'u1',
       email: 'new@example.com',
       channel: { name: 'new' },
-    } as any);
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    } as unknown as User);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     const result = await authService.register({
       email: 'new@example.com',
@@ -263,8 +265,8 @@ function buildTestModule() {
 
 describe('AuthService — confirm', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+  let usersService: MockOf<UsersService>;
+  let verificationTokenRepository: MockOf<Repository<VerificationToken>>;
 
   beforeEach(async () => {
     const module = await buildTestModule();
@@ -281,14 +283,14 @@ describe('AuthService — confirm', () => {
       .createHash('sha256')
       .update(rawToken)
       .digest('hex');
-    const user = { id: 'u1', is_confirmed: false } as any;
+    const user = { id: 'u1', is_confirmed: false } as unknown as User;
     const record = {
       token_hash: tokenHash,
       type: VerificationTokenType.EMAIL_CONFIRMATION,
       used_at: null,
       expires_at: new Date(Date.now() + 60_000),
       user,
-    } as any;
+    } as unknown as VerificationToken;
 
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
@@ -316,7 +318,7 @@ describe('AuthService — confirm', () => {
       used_at: null,
       expires_at: new Date(Date.now() - 1000),
       user: { id: 'u1', is_confirmed: false },
-    } as any;
+    } as unknown as VerificationToken;
 
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
@@ -328,9 +330,9 @@ describe('AuthService — confirm', () => {
 
 describe('AuthService — resendConfirmation', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let mailService: jest.Mocked<MailService>;
-  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+  let usersService: MockOf<UsersService>;
+  let mailService: MockOf<MailService>;
+  let verificationTokenRepository: MockOf<Repository<VerificationToken>>;
 
   beforeEach(async () => {
     const module = await buildTestModule();
@@ -356,7 +358,7 @@ describe('AuthService — resendConfirmation', () => {
       id: 'u1',
       is_confirmed: true,
       channel: { name: 'nick' },
-    } as any);
+    } as unknown as User);
 
     await expect(
       authService.resendConfirmation('confirmed@example.com'),
@@ -370,7 +372,7 @@ describe('AuthService — resendConfirmation', () => {
       email: 'user@example.com',
       is_confirmed: false,
       channel: { name: 'nick' },
-    } as any;
+    } as unknown as User;
     usersService.findByEmailWithChannel.mockResolvedValue(user);
 
     const qbMock = {
@@ -381,9 +383,9 @@ describe('AuthService — resendConfirmation', () => {
       execute: jest.fn().mockResolvedValue(undefined),
     };
     verificationTokenRepository.createQueryBuilder.mockReturnValue(
-      qbMock as any,
+      qbMock as unknown as SelectQueryBuilder<VerificationToken>,
     );
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     await authService.resendConfirmation('user@example.com');
 
@@ -404,8 +406,8 @@ describe('AuthService — resendConfirmation', () => {
 
 describe('AuthService — login', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let usersService: MockOf<UsersService>;
+  let refreshTokenRepository: MockOf<Repository<RefreshToken>>;
   let hashedTestPassword: string;
 
   beforeAll(async () => {
@@ -436,7 +438,7 @@ describe('AuthService — login', () => {
       email: 'user@example.com',
       password: hashedTestPassword,
       is_confirmed: true,
-    } as any);
+    } as unknown as User);
 
     await expect(
       authService.login({
@@ -452,7 +454,7 @@ describe('AuthService — login', () => {
       email: 'user@example.com',
       password: hashedTestPassword,
       is_confirmed: false,
-    } as any);
+    } as unknown as User);
 
     await expect(
       authService.login({
@@ -468,7 +470,7 @@ describe('AuthService — login', () => {
       email: 'user@example.com',
       password: hashedTestPassword,
       is_confirmed: true,
-    } as any);
+    } as unknown as User);
 
     const result = await authService.login({
       email: 'user@example.com',
@@ -485,9 +487,9 @@ describe('AuthService — login', () => {
 
 describe('AuthService — refresh', () => {
   let authService: AuthService;
-  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let refreshTokenRepository: MockOf<Repository<RefreshToken>>;
 
-  const mockUser = { id: 'u1', email: 'user@example.com' } as any;
+  const mockUser = { id: 'u1', email: 'user@example.com' } as unknown as User;
   const rawToken = 'a'.repeat(64);
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
@@ -513,7 +515,7 @@ describe('AuthService — refresh', () => {
       user: mockUser,
       expires_at: new Date(Date.now() - 1000),
       revoked_at: null,
-    } as any;
+    } as unknown as RefreshToken;
     refreshTokenRepository.findOne.mockResolvedValue(record);
 
     await expect(authService.refresh(rawToken)).rejects.toThrow(
@@ -529,9 +531,9 @@ describe('AuthService — refresh', () => {
       user: mockUser,
       expires_at: new Date(Date.now() + 60_000),
       revoked_at: null,
-    } as any;
+    } as unknown as RefreshToken;
     refreshTokenRepository.findOne.mockResolvedValue(record);
-    refreshTokenRepository.create.mockReturnValue({} as any);
+    refreshTokenRepository.create.mockReturnValue({} as RefreshToken);
 
     const result = await authService.refresh(rawToken);
 
@@ -554,7 +556,7 @@ describe('AuthService — refresh', () => {
       user: mockUser,
       expires_at: new Date(Date.now() + 60_000),
       revoked_at: revokedAt,
-    } as any;
+    } as unknown as RefreshToken;
     refreshTokenRepository.findOne.mockResolvedValue(record);
 
     const result = await authService.refresh(rawToken);
@@ -573,7 +575,7 @@ describe('AuthService — refresh', () => {
       user: mockUser,
       expires_at: new Date(Date.now() + 60_000),
       revoked_at: revokedAt,
-    } as any;
+    } as unknown as RefreshToken;
     refreshTokenRepository.findOne.mockResolvedValue(record);
 
     const qbMock = {
@@ -583,7 +585,9 @@ describe('AuthService — refresh', () => {
       andWhere: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
-    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(
+      qbMock as unknown as SelectQueryBuilder<RefreshToken>,
+    );
 
     await expect(authService.refresh(rawToken)).rejects.toThrow(
       TokenReuseDetectedException,
@@ -598,7 +602,7 @@ describe('AuthService — refresh', () => {
 
 describe('AuthService — logout', () => {
   let authService: AuthService;
-  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let refreshTokenRepository: MockOf<Repository<RefreshToken>>;
 
   beforeEach(async () => {
     const module = await buildTestModule();
@@ -614,11 +618,15 @@ describe('AuthService — logout', () => {
       andWhere: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
-    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(
+      qbMock as unknown as SelectQueryBuilder<RefreshToken>,
+    );
 
     await authService.logout('user-id-123');
 
-    expect(qbMock.set).toHaveBeenCalledWith({ revoked_at: expect.any(Date) });
+    expect(qbMock.set).toHaveBeenCalledWith({
+      revoked_at: expect.any(Date) as Date,
+    });
     expect(qbMock.where).toHaveBeenCalledWith('user_id = :userId', {
       userId: 'user-id-123',
     });
@@ -629,9 +637,9 @@ describe('AuthService — logout', () => {
 
 describe('AuthService — forgotPassword', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let mailService: jest.Mocked<MailService>;
-  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
+  let usersService: MockOf<UsersService>;
+  let mailService: MockOf<MailService>;
+  let verificationTokenRepository: MockOf<Repository<VerificationToken>>;
 
   beforeEach(async () => {
     const module = await buildTestModule();
@@ -657,7 +665,7 @@ describe('AuthService — forgotPassword', () => {
       id: 'u1',
       email: 'user@example.com',
       channel: { name: 'nick' },
-    } as any;
+    } as unknown as User;
     usersService.findByEmailWithChannel.mockResolvedValue(user);
 
     const qbMock = {
@@ -668,9 +676,9 @@ describe('AuthService — forgotPassword', () => {
       execute: jest.fn().mockResolvedValue(undefined),
     };
     verificationTokenRepository.createQueryBuilder.mockReturnValue(
-      qbMock as any,
+      qbMock as unknown as SelectQueryBuilder<VerificationToken>,
     );
-    verificationTokenRepository.create.mockReturnValue({} as any);
+    verificationTokenRepository.create.mockReturnValue({} as VerificationToken);
 
     await authService.forgotPassword('user@example.com');
 
@@ -694,9 +702,9 @@ describe('AuthService — forgotPassword', () => {
 
 describe('AuthService — resetPassword', () => {
   let authService: AuthService;
-  let usersService: jest.Mocked<UsersService>;
-  let verificationTokenRepository: jest.Mocked<Repository<VerificationToken>>;
-  let refreshTokenRepository: jest.Mocked<Repository<RefreshToken>>;
+  let usersService: MockOf<UsersService>;
+  let verificationTokenRepository: MockOf<Repository<VerificationToken>>;
+  let refreshTokenRepository: MockOf<Repository<RefreshToken>>;
 
   beforeEach(async () => {
     const module = await buildTestModule();
@@ -724,7 +732,7 @@ describe('AuthService — resetPassword', () => {
       used_at: null,
       expires_at: new Date(Date.now() - 1000),
       user: { id: 'u1', password: 'oldhash' },
-    } as any;
+    } as unknown as VerificationToken;
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
     await expect(
@@ -734,14 +742,14 @@ describe('AuthService — resetPassword', () => {
 
   it('hashes the new password, marks token used, and revokes refresh tokens', async () => {
     const rawToken = 'd'.repeat(64);
-    const user = { id: 'u1', password: 'oldhash' } as any;
+    const user = { id: 'u1', password: 'oldhash' } as unknown as User;
     const record = {
       token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'),
       type: VerificationTokenType.PASSWORD_RESET,
       used_at: null,
       expires_at: new Date(Date.now() + 60_000),
       user,
-    } as any;
+    } as unknown as VerificationToken;
     verificationTokenRepository.findOne.mockResolvedValue(record);
 
     const qbMock = {
@@ -751,7 +759,9 @@ describe('AuthService — resetPassword', () => {
       andWhere: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
-    refreshTokenRepository.createQueryBuilder.mockReturnValue(qbMock as any);
+    refreshTokenRepository.createQueryBuilder.mockReturnValue(
+      qbMock as unknown as SelectQueryBuilder<RefreshToken>,
+    );
 
     await authService.resetPassword(rawToken, 'newplaintext');
 

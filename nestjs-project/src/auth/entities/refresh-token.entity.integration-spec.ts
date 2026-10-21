@@ -1,5 +1,6 @@
 import { DataSource, Repository } from 'typeorm';
 import { Channel } from '../../channels/entities/channel.entity';
+import { Video } from '../../videos/entities/video.entity';
 import { User } from '../../users/entities/user.entity';
 import {
   cleanAllTables,
@@ -8,7 +9,7 @@ import {
 import { RefreshToken } from './refresh-token.entity';
 import { VerificationToken } from './verification-token.entity';
 
-const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
 
 describe('RefreshToken entity (integration)', () => {
   let dataSource: DataSource;

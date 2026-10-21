@@ -34,6 +34,9 @@ docker compose exec nestjs-api npm run start:dev
 Services:
 - `nestjs-api` — NestJS API, port `3000`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `mailpit` — SMTP `1025`, UI `8025`
+- `storage` — SeaweedFS S3 gateway, port `8333`, bucket `streamtube-videos` (CORS applied by the one-shot `storage-init` service)
+- `video-worker` — second entrypoint (`src/worker.main.ts`) consuming the pg-boss queue; needs a restart after code changes (it does not hot-reload)
 
 All verification and teardown commands run on the **host machine**:
 
@@ -141,6 +144,18 @@ Whenever possible, prefer storing only the bare address in `.env` and composing 
 ## Build Assets
 
 `tsc` (and therefore `nest build`) only emits compiled `.ts` files to `dist/`. Any non-TypeScript runtime asset — Handlebars templates (`.hbs`), JSON fixtures, static config files, etc. — must be declared in `nest-cli.json` under `compilerOptions.assets` (with `watchAssets: true` for dev). Without that, the file exists in `src/` but is missing in `dist/` and runtime fails only after build.
+
+## Videos Module
+
+`src/videos/` (controller, service, entity, DTOs, `public-id.util.ts`, `videos.constants.ts`) is the reference for the upload flow. Supporting modules:
+
+- `src/storage/` — `StorageService`, the S3 adapter (multipart, presigned part/GET URLs, `headObject`, abort). Two S3 clients: internal endpoint for operations, public endpoint for signing.
+- `src/queue/` — `QueueService`, pg-boss wrapper (`enqueue` inside a TypeORM transaction, `work`, `schedule`). Queue names and retry policy in `queue.constants.ts` (`video.process`, `video.upload.reap`). pg-boss is pinned to `10.4.2` (v12 is ESM-only).
+- `src/worker/` + `src/worker.main.ts` — video worker: `VideoProcessingHandler`, `FfmpegService` (ffprobe/ffmpeg via `child_process` on a presigned URL signed for the internal endpoint), `UploadReaperHandler`. `npm run build` emits `dist/main.js` and `dist/worker.main.js`.
+- Migration `1792595000000-CreateVideos.ts`; `Video` belongs to `Channel`.
+- Domain errors: `VIDEO_NOT_FOUND` (404), `VIDEO_FORBIDDEN` (403), `VIDEO_NOT_READY` (409), `UPLOAD_ALREADY_COMPLETED` (409), `UPLOAD_INCOMPLETE` (400), `FILE_TOO_LARGE` (400), `UNSUPPORTED_VIDEO_FORMAT` (415).
+- Env vars: `STORAGE_ENDPOINT`, `STORAGE_PUBLIC_ENDPOINT`, `STORAGE_REGION`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET`, optional `STORAGE_FORCE_PATH_STYLE` (default `true`).
+- Tests: integration specs use the real `db`, `storage` and ffmpeg from Compose; `cleanAllTables` also clears `videos`. The Compose worker shares the DB with e2e runs and drops jobs for videos that no longer exist.
 
 ## Architecture
 

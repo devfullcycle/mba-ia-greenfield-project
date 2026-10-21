@@ -2,6 +2,7 @@ import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
 import { Channel } from '../channels/entities/channel.entity';
+import { Video } from '../videos/entities/video.entity';
 import { ChannelsService } from '../channels/channels.service';
 import {
   cleanAllTables,
@@ -9,9 +10,8 @@ import {
 } from '../test/create-test-data-source';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
-import { TestingModule } from '@nestjs/testing';
 
-const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
+const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
 
 describe('UsersService (integration)', () => {
   let dataSource: DataSource;

@@ -438,6 +438,458 @@
           "auth"
         ]
       }
+    },
+    "/videos": {
+      "post": {
+        "description": "Registers the video as a draft owned by the authenticated channel and opens a multipart upload in the storage.",
+        "operationId": "VideosController_startUpload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "public_id": {
+                      "type": "string",
+                      "example": "V1StGXR8_Z5"
+                    },
+                    "upload_id": {
+                      "type": "string"
+                    },
+                    "part_size_bytes": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "uploading"
+                    },
+                    "visibility": {
+                      "type": "string",
+                      "example": "draft"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or file too large (FILE_TOO_LARGE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported video format (UNSUPPORTED_VIDEO_FORMAT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Start a video upload",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/upload/part-urls": {
+      "post": {
+        "description": "Returns presigned URLs so the client can upload the requested parts directly to the storage. Only the video owner can call it while the upload is open.",
+        "operationId": "VideosController_signParts",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignPartsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Presigned part URLs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "urls": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "part_number": {
+                            "type": "integer"
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the video owner (VIDEO_FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Upload already completed (UPLOAD_ALREADY_COMPLETED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Sign upload part URLs",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/upload/complete": {
+      "post": {
+        "description": "Completes the multipart upload with the uploaded parts and queues the video for processing. Only the video owner can call it.",
+        "operationId": "VideosController_completeUpload",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Upload completed, processing queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "public_id": {
+                      "type": "string",
+                      "example": "V1StGXR8_Z5"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "processing"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or parts refused by the storage (UPLOAD_INCOMPLETE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the video owner (VIDEO_FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Upload already completed (UPLOAD_ALREADY_COMPLETED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Complete a video upload",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}": {
+      "get": {
+        "description": "Returns the processing status and metadata, used for polling. Drafts are visible only to their owner (send the access token); anyone else gets 404.",
+        "operationId": "VideosController_getVideo",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found or not visible (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get video status and metadata",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/stream": {
+      "get": {
+        "description": "Returns a presigned GET URL that supports HTTP Range requests, so the player streams without downloading the whole file. Drafts are visible only to their owner.",
+        "operationId": "VideosController_getStreamUrl",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackUrlResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found or not visible (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Processing not finished (VIDEO_NOT_READY)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the streaming URL",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{publicId}/download": {
+      "get": {
+        "description": "Returns a presigned GET URL that serves the file as an attachment. Drafts are visible only to their owner.",
+        "operationId": "VideosController_getDownloadUrl",
+        "parameters": [
+          {
+            "name": "publicId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackUrlResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found or not visible (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Processing not finished (VIDEO_NOT_READY)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get the download URL",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {
@@ -480,6 +932,80 @@
       "ResetPasswordDto": {
         "type": "object",
         "properties": {}
+      },
+      "StartUploadDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SignPartsDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CompleteUploadDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "VideoResponseDto": {
+        "type": "object",
+        "properties": {
+          "public_id": {
+            "type": "string",
+            "example": "V1StGXR8_Z5"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "uploading",
+              "processing",
+              "ready",
+              "failed"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published"
+            ]
+          },
+          "duration_seconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true
+          },
+          "has_thumbnail": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "public_id",
+          "status",
+          "visibility",
+          "duration_seconds",
+          "metadata",
+          "has_thumbnail"
+        ]
+      },
+      "PlaybackUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Presigned GET URL in the storage"
+          },
+          "expires_in": {
+            "type": "number",
+            "description": "Seconds until the URL expires"
+          }
+        },
+        "required": [
+          "url",
+          "expires_in"
+        ]
       },
       "ApiErrorEnvelope": {
         "type": "object",
