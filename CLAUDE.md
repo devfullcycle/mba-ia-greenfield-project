@@ -12,7 +12,7 @@ This is a monorepo with two main areas:
 
 - `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
 - `docs/` — Project documentation, architecture diagrams, and planning.
-- `nextjs-project/` (Next.js) — not yet initialized
+- `next-frontend/` (Next.js) — not yet initialized
 
 ## Architecture (C4 Container Diagram)
 
@@ -39,11 +39,22 @@ This applies to all environment variables, configuration files, and code that re
 
 ## Working Principles
 
-- **Single Responsibility:** each module, service, and function should have a clear, focused responsibility.
+- **Single Responsibility:** each module, service, and function should have a clear, focused responsibility. Re-evaluate adherence at every step — when a module starts owning logic or entities that are not its own (e.g., a service creating an entity from another domain), extract it immediately into the proper module instead of deferring to a later corrective task.
 - **Type Safety:** Strict TypeScript usage across all layers.
 - **Testing:** Strong emphasis on pyramid testing at all levels to ensure reliability and maintainability.
 - **Code Quality:** Use ESLint and Prettier for consistent code style. Code reviews should focus on readability, maintainability, and adherence to best practices.
 - **Documentation:** Comprehensive docs for architecture, setup, and troubleshooting in `docs/`.
+
+## Definition of Done (Technical)
+
+A change is only considered complete when **all** of the following pass:
+
+1. The relevant test suite passes (unit + integration + e2e affected by the change).
+2. The full test suite passes before finishing the task.
+3. TypeScript compiles cleanly: `npx tsc --noEmit` exits with code 0. Compilation errors must never be left as debt for future tasks.
+4. Lint passes: `npm run lint`.
+
+If any of these fails, the task is not done — fix the underlying issue before declaring completion.
 
 
 ## Git Conventions

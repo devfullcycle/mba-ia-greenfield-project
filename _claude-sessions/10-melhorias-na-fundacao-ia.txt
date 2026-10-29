@@ -1,0 +1,1457 @@
+ ▐▛███▜▌   Claude Code v2.1.128
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/ti/fullcycle-mba-ia/dev-app-ia/green-field-ia-project
+
+❯ dado o arquivo de progress da fase 02, olhando as obsevações de cada SI       
+  implementado, pense em pontos que poderíamos melhorar no CLAUDE.md global e   
+  no CLAUDE.md do nestjs-project e nas .claude/rules                            
+  permitindo que tenhamos execuções mais assertivas                             
+
+● Vou analisar o arquivo de progresso da fase 02 e os arquivos de configuração
+  existentes para identificar melhorias.
+
+  Read 11 files, listed 1 directory (ctrl+o to expand)
+
+● Analisando as observações dos 18 SIs, identifiquei padrões recorrentes que
+  valeriam virar regra explícita. Deixei abaixo as melhorias agrupadas por
+  arquivo e por categoria de problema (com referência ao SI que motivou cada
+  uma).
+
+  CLAUDE.md global
+
+  1. Regra de "definição de pronto" técnica
+  Hoje o CLAUDE.md fala de testes, mas não exige tsc --noEmit limpo antes de
+  declarar uma SI completa. O SI-02.14 inteiro existiu para limpar 6 arquivos
+  com erros de tipo que foram acumulando ao longo dos SIs anteriores.
+  → Adicionar: "Antes de declarar uma SI completa, rodar tsc --noEmit (além da 
+  suíte de testes). Erros de compilação não podem ser deixados como dívida para 
+  SIs futuras."
+
+  2. Reforçar "Scope Limits" com exemplo de extração tardia
+  O SI-02.15 (extração do ChannelsModule, criação do nickname.util no lugar
+  correto) corrigiu uma violação de SRP que veio se arrastando desde o SI-02.3.
+  Falta um sinal de que SRP deve ser avaliado a cada SI, não só no final.
+  → Adicionar à seção "Working Principles": "Avaliar aderência ao SRP a cada SI 
+  — quando um módulo passa a possuir lógica/entidade que não é dele (ex.: 
+  UsersService criando Channel), extrair imediatamente, não em SI corretiva 
+  posterior."
+
+  nestjs-project/CLAUDE.md
+
+  3. Reforçar "tudo no container"
+  O SI-02.2 registrou execução de teste no host. O CLAUDE.md já diz "always use
+  the container", mas é fácil ignorar quando o agente faz npm test direto.
+  → Trocar a seção "Commands" por bloco com aviso negrito explícito, e listar
+  comandos host-only (docker compose ps, curl, pg_isready) separados dos
+  container-only (qualquer npm/npx/tsc).
+
+  4. --runInBand por padrão para integration/e2e
+  SI-02.4 e SI-02.13 dependem disso. Hoje não está documentado em lugar nenhum
+  visível antes do erro acontecer.
+  → Adicionar: "npm run test:e2e e qualquer suíte com *.integration-spec.ts 
+  exigem --runInBand — paralelismo causa violação de FK e contaminação entre 
+  suítes que compartilham o mesmo DB."
+
+  5. Build de assets não-TS
+  SI-02.18 (templates .hbs) precisou descobrir assets do nest-cli.json na marra.
+  → Adicionar nota: "Arquivos não-TS (templates, .json, .hbs) não são copiados 
+  para dist/ automaticamente — registrar em nest-cli.json → 
+  compilerOptions.assets."
+
+  .claude/rules — alterações em arquivos existentes
+
+  6. nestjs-testing.md — várias adições
+  - Naming: a convenção atual diz *.integration.spec.ts no front-matter mas o
+  projeto usa *.integration-spec.ts (SI-02.3 ajustou o testRegex para
+  (spec|integration-spec).ts$). Os paths do front-matter estão divergentes do
+  padrão real — precisam ser corrigidos.
+  - Distinção spec vs integration-spec (observação explícita do SI-02.3): teste
+  que toca DB deve ser .integration-spec.ts, nunca .spec.ts. Adicionar regra
+  dura.
+  - Setup de env: setupFiles: ["dotenv/config"] obrigatório em jest.config e
+  jest-e2e.json (SI-02.3 e SI-02.6).
+  - Módulos com forRootAsync + ConfigType: exigem ConfigModule.forRoot({ 
+  isGlobal: true }) no test module (SI-02.5).
+  - Override de APP_GUARD com useClass: overrideProvider(GuardClass) não
+  intercepta — para isolar (ex.: Throttler), injetar o storage symbol e limpar
+  (SI-02.13). Vale como subseção "Testing global guards".
+  - Transações: padrão de mock para dataSource.transaction (callback recebe
+  manager mock) — vindo do SI-02.15.
+
+  7. typeorm-migrations.md — adições críticas
+  Esse arquivo está fino demais para o que apareceu na fase 02:
+  - Resíduos de synchronize: quando entidades existem sem migration e o DB tem
+  tabelas (SI-02.3 e SI-02.4), a regra é dropar tabelas e gerar migration limpa
+  — não tentar consertar a migration por cima.
+  - Testes de migration limpam DB: undoLastMigration em teste deixa DB
+  inconsistente para suítes seguintes — re-rodar migrations em afterAll
+  (SI-02.17, bug encontrado em SI-02.16).
+  - Imports diretos em testes de migration: ts-jest não resolve glob de
+  migrations confiavelmente — importar as classes (SI-02.16).
+  - null em where: TypeORM ignora silenciosamente — usar IsNull() (SI-02.7).
+  Isso é mais "consulta TypeORM" do que migration; talvez merecesse um rule novo
+   typeorm-queries.md.
+  - PostgreSQL aborta a transação em violação de unique: usar SAVEPOINT/ROLLBACK
+   TO SAVEPOINT para retry dentro de transação (SI-02.6).
+
+  8. nestjs-modules.md — adicionar
+  - Toda entidade nova exige TypeOrmModule.forFeature([Entity]) no módulo dono —
+   autoLoadEntities depende disso e a falta quebra o startup do app sem erro
+  óbvio (SI-02.17, bug introduzido em SI-02.15).
+
+  .claude/rules — novos arquivos sugeridos
+
+  9. typescript-strict.md (paths: nestjs-project/src/**/*.ts)
+  Capturando o que SI-02.14 corrigiu e prevenindo SIs corretivas similares:
+  - import type para tipos puros (JwtPayload, etc.) com
+  verbatimModuleSyntax/isolatedModules.
+  - ConfigType<typeof config> em vez de ReturnType<...>.
+  - StringValue (do ms) para expiresIn.
+
+  10. auth-jwt.md (paths: nestjs-project/src/auth/**)
+  Padrões que apareceram repetidamente:
+  - jti: crypto.randomUUID() obrigatório no payload de tokens — JWTs assinados
+  no mesmo segundo com mesmo sub/family são idênticos sem isso (SI-02.10).
+  - Rotação de refresh token + grace period: validar família revogada antes de
+  retornar token em janela de graça (SI-02.11).
+  - .env não pode conter valores com <...> sem aspas — quebra parse de shell
+  (SI-02.6).
+
+  Sugestão de priorização
+
+  Se for para implementar de forma incremental, eu começaria pelas que tiveram
+  bugs reais introduzidos (não apenas atrito):
+  1. nestjs-modules.md — regra do forFeature (bug SI-02.17 quebrou o app)
+  2. typeorm-migrations.md — resíduos de synchronize + restauração de DB em
+  teste de migration
+  3. nestjs-testing.md — naming .integration-spec, --runInBand, override de
+  APP_GUARD
+  4. CLAUDE.md global — regra do tsc --noEmit (eliminaria SIs como o 02.14)
+
+  Quer que eu já edite os arquivos com essas mudanças, ou prefere
+  revisar/ajustar a lista antes?
+
+✻ Worked for 1m 48s
+
+※ recap: Goal: melhorar CLAUDE.md global, CLAUDE.md do nestjs-project e .claude/rules a partir das observações da fase 02. Entreguei a análise com 10 melhorias priorizadas e aguardo sua decisão de aplicar tudo ou revisar a lista antes. (disable recaps in /config)
+
+❯ quero que edite os arquivos, mas não é para mencionar SI                      
+
+● Vou editar todos os arquivos sem fazer referência a SIs específicas. Começo
+  pelos arquivos existentes em paralelo.
+
+● Update(CLAUDE.md)
+  ⎿  Added 12 lines, removed 1 line
+      39  
+      40  ## Working Principles
+      41  
+      42 -- **Single Responsibility:** each module, service, and function
+         - should have a clear, focused responsibility.                  
+      42 +- **Single Responsibility:** each module, service, and function
+         + should have a clear, focused responsibility. Re-evaluate adher
+         +ence at every step — when a module starts owning logic or entit
+         +ies that are not its own (e.g., a service creating an entity fr
+         +om another domain), extract it immediately into the proper modu
+         +le instead of deferring to a later corrective task.            
+      43  - **Type Safety:** Strict TypeScript usage across all layers.
+      44  - **Testing:** Strong emphasis on pyramid testing at all levels
+           to ensure reliability and maintainability.
+      45  - **Code Quality:** Use ESLint and Prettier for consistent code
+           style. Code reviews should focus on readability, maintainabili
+          ty, and adherence to best practices.
+      46  - **Documentation:** Comprehensive docs for architecture, setup
+          , and troubleshooting in `docs/`.
+      47  
+      48 +## Definition of Done (Technical)                              
+      49  
+      50 +A change is only considered complete when **all** of the follow
+         +ing pass:                                                      
+      51 +                                                               
+      52 +1. The relevant test suite passes (unit + integration + e2e aff
+         +ected by the change).                                          
+      53 +2. The full test suite passes before finishing the task.       
+      54 +3. TypeScript compiles cleanly: `npx tsc --noEmit` exits with c
+         +ode 0. Compilation errors must never be left as debt for future
+         + tasks.                                                        
+      55 +4. Lint passes: `npm run lint`.                                
+      56 +                                                               
+      57 +If any of these fails, the task is not done — fix the underlyin
+         +g issue before declaring completion.                           
+      58 +                                                               
+      59 +                                                               
+      60  ## Git Conventions
+      61  
+      62  - **Main branch:** `main` — never commit directly to it
+
+● Update(nestjs-project/CLAUDE.md)
+  ⎿  Added 27 lines, removed 2 lines
+      52  docker compose down
+      53  ```
+      54  
+      55 -## Commands (run inside the container via `docker compose exec 
+         -nestjs-api <cmd>`)                                             
+      55 +## Commands                                                    
+      56  
+      57 +**Strict rule:** every `npm`, `npx`, `node`, `tsc`, and test co
+         +mmand runs **inside the container**, never on the host. Running
+         + on the host causes env-var divergence (`DB_HOST` resolves to `
+         +localhost` instead of the Compose service), uses a different No
+         +de version, and produces results that do not reflect what runs 
+         +in CI/prod.                                                    
+      58 +                                                               
+      59 +### Container-only commands (always prefix with `docker compose
+         + exec nestjs-api`)                                             
+      60 +                                                               
+      61  ```bash
+      62  npm run start:dev                        # Dev server with hot-
+          reload
+      63  npm run build                            # Compile to dist/
+     ...
+      66  npm test                                 # Unit tests
+      67  npm run test:watch                       # Unit tests in watch 
+          mode
+      68  npm run test:cov                         # Coverage report
+      65 -npm run test:e2e                         # End-to-end tests    
+      69 +npm run test:e2e                         # End-to-end tests (al
+         +ways with --runInBand)                                         
+      70  
+      71 +npx tsc --noEmit                         # Type-check (required
+         + before declaring a task done)                                 
+      72  npm run lint                             # ESLint with auto-fix
+      73  npm run format                           # Prettier formatting
+      74  ```
+      75  
+      76 +### Host-only commands (Docker / connectivity probes)          
+      77 +                                                               
+      78 +```bash                                                        
+      79 +docker compose ps                                              
+      80 +docker compose logs nestjs-api                                 
+      81 +docker compose exec db pg_isready -U streamtube                
+      82 +curl http://localhost:3000                                     
+      83 +```                                                            
+      84 +                                                               
+      85 +### Parallelism in tests                                       
+      86 +                                                               
+      87 +Integration and e2e suites share a single test database. They *
+         +*must** be run with `--runInBand`:                             
+      88 +                                                               
+      89 +```bash                                                        
+      90 +docker compose exec nestjs-api npm test -- --runInBand         
+      91 +docker compose exec nestjs-api npm run test:e2e   # already con
+         +figured                                                        
+      92 +```                                                            
+      93 +                                                               
+      94 +Parallel execution causes FK violations, deadlocks, and cross-s
+         +uite contamination because suites truncate or seed shared table
+         +s concurrently.                                                
+      95 +                                                               
+      96  ## Long-running Processes
+      97  
+      98  Commands that never exit (dev server, watch modes) must be run 
+          in background in the Bash tool — otherwise the agent blocks ind
+          efinitely waiting for the process to return.
+
+● Update(nestjs-project/CLAUDE.md)
+  ⎿  Added 4 lines
+       99  
+      100  This applies to: `start:dev`, `start:prod`, `test:watch`, and 
+           any other persistent process.
+      101  
+      102 +## Build Assets                                               
+      103 +                                                              
+      104 +`tsc` (and therefore `nest build`) only emits compiled `.ts` f
+          +iles to `dist/`. Any non-TypeScript runtime asset — Handlebars
+          + templates (`.hbs`), JSON fixtures, static config files, etc. 
+          +— must be declared in `nest-cli.json` under `compilerOptions.a
+          +ssets` (with `watchAssets: true` for dev). Without that, the f
+          +ile exists in `src/` but is missing in `dist/` and runtime fai
+          +ls only after build.                                          
+      105 +                                                              
+      106  ## Architecture
+      107  
+      108  NestJS with standard module structure. Source lives in `src/`,
+            compiled output in `dist/`.
+
+● Agora reescrevo o nestjs-testing.md (mudanças extensas: front-matter
+  incorreto, naming, env, runInBand, override de guards, mocks de transação) e o
+   typeorm-migrations.md.
+
+● Write(.claude/rules/nestjs-testing.md)
+  ⎿  Added 86 lines, removed 8 lines
+       1  ---
+       2  paths:
+       3    - 'nestjs-project/**/*.spec.ts'
+       4 +  - 'nestjs-project/**/*.integration-spec.ts'                  
+       5    - 'nestjs-project/**/*.e2e-spec.ts'
+       6    - 'nestjs-project/test/**'
+       6 -description: 'Testing conventions for NestJS unit and e2e tests
+         -'                                                              
+       7 +description: 'Testing conventions for NestJS unit, integration,
+         + and e2e tests'                                                
+       8  ---
+       9  
+      10  # Testing Rules
+      11  
+      12 +## Test Type Naming (strict)                                   
+      13 +                                                               
+      14 +The suffix is a **contract** about what the test touches. Choos
+         +e by what the test really does, not by where the code under tes
+         +t lives:                                                       
+      15 +                                                               
+      16 +| Suffix                  | Purpose                            
+         +                                  | DB / external I/O |        
+      17 +|-------------------------|------------------------------------
+         +----------------------------------|-------------------|        
+      18 +| `*.spec.ts`             | **Unit** — pure logic, all collabor
+         +ators mocked                      | Forbidden         |        
+      19 +| `*.integration-spec.ts` | **Integration** — exercises real DB
+         +, real repositories, real modules | Required          |        
+      20 +| `*.e2e-spec.ts`         | **End-to-end** — full HTTP cycle vi
+         +a `supertest`                     | Required          |        
+      21 +                                                               
+      22 +A test that constructs a `TypeOrmModule.forRoot`, opens a conne
+         +ction, or hits the `db` service **must** be `*.integration-spec
+         +.ts`. Naming it `.spec.ts` misleads readers (and the test runne
+         +r config) into believing it is safe to run in parallel with no 
+         +DB.                                                            
+      23 +                                                               
+      24 +The Jest `testRegex` is `(spec|integration-spec)\\.ts$` — keep 
+         +it that way; do not invent new suffixes.                       
+      25 +                                                               
+      26  ## Unit Tests (`*.spec.ts`)
+      27  
+      28  - Use `Test.createTestingModule()` from `@nestjs/testing` to se
+          t up the test module
+      29 +- Mock every external dependency (repositories via `getReposito
+         +ryToken`, services via `useValue`, etc.)                       
+      30  - Follow the naming pattern: `describe('ClassName')` with descr
+          iptive `it('should ...')` blocks
+      15 -- Place unit tests next to the source file they test (e.g., `us
+         -ers.service.ts` -> `users.service.spec.ts`)                    
+      31 +- Place unit tests next to the source file they test (e.g., `us
+         +ers.service.ts` → `users.service.spec.ts`)                     
+      32 +- A unit test that needs to "mock the database" by creating a r
+         +eal DataSource is not a unit test — convert it to `*.integratio
+         +n-spec.ts`                                                     
+      33  
+      34 +## Integration Tests (`*.integration-spec.ts`)                 
+      35  
+      18 -## Integration Tests (`*.integration.spec.ts`)                 
+      19 -                                                               
+      36  - Place integration tests next to the source file they test, sa
+          me directory as unit tests
+      37  - Use a real database — connect to the Docker `db` service (env
+           vars from `.env` are available inside the container)
+      38  - **Table cleanup:** `repository.delete({})` throws `Empty crit
+          eria(s) are not allowed`. Use `dataSource.query('DELETE FROM ta
+          ble_name')` or `repository.clear()` to wipe tables between test
+          s
+     ...
+       46  - Use a real test database — do not mock the database layer in
+            e2e tests
+       47  - **Reproduce `main.ts` global config manually:** `Test.create
+           TestingModule()` does not execute `main.ts`. Global pipes, fil
+           ters, and interceptors must be applied explicitly in `beforeAl
+           l`: `app.useGlobalPipes(new ValidationPipe({ whitelist: true }
+           ))`
+       48  
+       49 +## Jest Configuration Requirements                            
+       50 +                                                              
+       51 +These settings are required for the project's tests to work an
+          +d must remain in `package.json` jest config and `test/jest-e2e
+          +.json`:                                                       
+       52 +                                                              
+       53 +- `setupFiles: ["dotenv/config"]` — without this, `.env` is no
+          +t loaded inside the Jest process and `DB_HOST`, `JWT_SECRET`, 
+          +etc. fall back to undefined (or to the host's `localhost`, bre
+          +aking container-to-container DNS).                            
+       54 +- `testRegex: '.*\\.(spec|integration-spec)\\.ts$'` — covers b
+          +oth unit and integration suffixes.                            
+       55 +                                                              
+       56 +## Running Tests                                              
+       57 +                                                              
+       58 +All test commands run **inside the container** — never on the 
+          +host. Running on the host loads the host's env (where `DB_HOST
+          +=localhost` is wrong for Docker DNS) and a different Node vers
+          +ion.                                                          
+       59 +                                                              
+       60 +```bash                                                       
+       61 +docker compose exec nestjs-api npm test                       
+          +  # unit + integration                                        
+       62 +docker compose exec nestjs-api npm test -- --runInBand        
+          +  # mandatory when integration suites are involved            
+       63 +docker compose exec nestjs-api npm run test:e2e               
+          +  # already runs with --runInBand                             
+       64 +docker compose exec nestjs-api npm test -- path/to/file.spec.t
+          +s # single file during dev                                    
+       65 +```                                                           
+       66 +                                                              
+       67 +`--runInBand` is mandatory for any run that includes `*.integr
+          +ation-spec.ts` or `*.e2e-spec.ts`. Suites share one test datab
+          +ase; parallel execution causes FK violations, deadlocks, and c
+          +ross-suite contamination.                                     
+       68 +                                                              
+       69 +## Modules with `forRootAsync` + `ConfigType`                 
+       70 +                                                              
+       71 +When the module under test (or any of its imports) registers s
+          +omething with `MyModule.forRootAsync({ inject: [someConfig.KEY
+          +], useFactory: ... })`, the test module must include a **globa
+          +l** ConfigModule:                                             
+       72 +                                                              
+       73 +```typescript                                                 
+       74 +ConfigModule.forRoot({ isGlobal: true, load: [someConfig] })  
+       75 +```                                                           
+       76 +                                                              
+       77 +`forRootAsync`'s factory context does not inherit non-global p
+          +roviders, so omitting `isGlobal: true` (or trying to add `impo
+          +rts: [ConfigModule]` inside `forRootAsync`) leads to "Nest can
+          +'t resolve dependencies of the (?)" errors that are easy to mi
+          +sdiagnose.                                                    
+       78 +                                                              
+       79 +## Overriding Global Guards / Filters Registered with `useClas
+          +s`                                                            
+       80 +                                                              
+       81 +`overrideProvider(SomeGuard).useValue(...)` does **not** inter
+          +cept guards registered as:                                    
+       82 +                                                              
+       83 +```typescript                                                 
+       84 +{ provide: APP_GUARD, useClass: SomeGuard }                   
+       85 +```                                                           
+       86 +                                                              
+       87 +because `useClass` instantiates a fresh `SomeGuard`, not the p
+          +rovider token you overrode. Two correct strategies:           
+       88 +                                                              
+       89 +1. **Override the storage / state token** the guard depends on
+          +. Example: for `@nestjs/throttler`, inject `ThrottlerStorage` 
+          +(a `Symbol` token) from the test module and call `storage.clea
+          +r()` in `beforeEach` of every describe block that exercises ra
+          +te-limited endpoints. This isolates state without faking the g
+          +uard.                                                         
+       90 +2. **Register the guard via `useExisting`** in test modules so
+          + `overrideProvider` can target it. Reserve this for cases wher
+          +e strategy 1 is impractical.                                  
+       91 +                                                              
+       92 +## Mocking `dataSource.transaction(callback)`                 
+       93 +                                                              
+       94 +Services that use `dataSource.transaction(async (manager) => {
+          + ... })` should be unit-tested by stubbing `transaction` to in
+          +voke the callback with a mock `EntityManager`:                
+       95 +                                                              
+       96 +```typescript                                                 
+       97 +const mockManager = {                                         
+       98 +  save: jest.fn(),                                            
+       99 +  findOne: jest.fn(),                                         
+      100 +  // ...the methods the service actually calls                
+      101 +};                                                            
+      102 +const mockDataSource = {                                      
+      103 +  transaction: jest.fn((cb) => cb(mockManager)),              
+      104 +};                                                            
+      105 +```                                                           
+      106 +                                                              
+      107 +For integration tests, use the real `DataSource` and assert si
+          +de effects on the actual repository.                          
+      108 +                                                              
+      109 +## Compensation Logic                                         
+      110 +                                                              
+      111 +When a service performs a multi-step operation that has a comp
+          +ensating action on failure (e.g., delete the saved user if the
+          + follow-up channel creation fails), the integration test for t
+          +he compensation path should `jest.spyOn` the failing collabora
+          +tor to throw, and then assert that the compensating delete rea
+          +lly ran against the DB.                                       
+      112 +                                                              
+      113  ## General
+      114  
+       35 -- Run only related tests during development; run the full suit
+          -e before finishing                                            
+       36 -- All test commands run inside the container: `docker compose 
+          --f nestjs-project/compose.yaml exec nestjs-api npm test`      
+      115 +- Run only related tests during development; run the full suit
+          +e (with `--runInBand`) before finishing                       
+      116 +- All test commands run inside the container: `docker compose 
+          +exec nestjs-api npm test`                                     
+      117  
+      118  ## Test Data
+      119  
+     ...
+      133  - Group related tests together using `describe()` blocks for b
+           etter organization and readability
+      134  - Avoid testing multiple behaviors in a single test case; each
+            test should focus on one specific aspect
+      135  - Use `beforeAll` and `afterAll` for setup and teardown that a
+           pplies to all tests in a suite, and `beforeEach` and `afterEac
+           h` for setup and teardown that applies to individual tests
+       56 -                                                              
+       57 -                                                              
+
+● Write(.claude/rules/typeorm-migrations.md)
+  ⎿  Added 80 lines, removed 1 line
+      1  ---
+      2  paths:
+      3    - 'nestjs-project/**/migrations/**'
+      4 +  - 'nestjs-project/**/data-source.ts'                          
+      5  description: 'Database migration safety rules'
+      6  ---
+      7  
+     ...
+       19  
+       20  ## Safety
+       21  
+       21 -- Never use `synchronize: true` in production — migrations are
+          - the only way to change the schema                            
+       22 +- Never use `synchronize: true` in any environment — migration
+          +s are the only sanctioned way to change the schema            
+       23  - Test migrations against a fresh database before considering 
+           them done
+       24  - Migrations must be idempotent where possible — use `IF EXIST
+           S` / `IF NOT EXISTS` guards for DDL
+       25 +                                                              
+       26 +## Recovering from `synchronize` Residue                      
+       27 +                                                              
+       28 +If you find entities in `src/` whose tables already exist in t
+          +he database but have **no corresponding migration file on disk
+          +**, the database was previously populated by `synchronize: tru
+          +e` (or by a deleted migration). Do **not** try to "patch" the 
+          +schema with a new migration on top — the generated diff will b
+          +e empty and TypeORM will think everything is fine while the mi
+          +gration table is wrong.                                       
+       29 +                                                              
+       30 +Correct recovery:                                             
+       31 +                                                              
+       32 +1. Drop the orphan tables in the dev database (`DROP TABLE ...
+          + CASCADE`).                                                   
+       33 +2. Clear the `migrations` table if it has stale rows.         
+       34 +3. Run `typeorm migration:generate` against the empty database
+          + — it will now produce a complete `CREATE TABLE` migration tha
+          +t matches the entities.                                       
+       35 +4. Run the new migration to recreate the tables cleanly.      
+       36 +                                                              
+       37 +## Migration Tests Must Restore DB State                      
+       38 +                                                              
+       39 +Any test that exercises the migration runner (`runMigrations` 
+          +/ `undoLastMigration`) leaves the database in a non-default st
+          +ate. Other suites in the same Jest run will see missing tables
+          + and fail mysteriously.                                       
+       40 +                                                              
+       41 +Always restore the schema in `afterAll`:                      
+       42 +                                                              
+       43 +```typescript                                                 
+       44 +afterAll(async () => {                                        
+       45 +  await dataSource.runMigrations(); // re-apply everything tha
+          +t was undone                                                  
+       46 +  await dataSource.destroy();                                 
+       47 +});                                                           
+       48 +```                                                           
+       49 +                                                              
+       50 +## Importing Migrations in Tests                              
+       51 +                                                              
+       52 +`ts-jest` does not reliably resolve TypeORM's glob patterns (`
+          +migrations: ['dist/migrations/*.js']`) inside the Jest sandbox
+          +. For a test `DataSource`, **import the migration classes dire
+          +ctly** and pass them as an array:                             
+       53 +                                                              
+       54 +```typescript                                                 
+       55 +import { CreateUsersAndChannels1775687773260 } from '../src/da
+          +tabase/migrations/1775687773260-CreateUsersAndChannels';      
+       56 +                                                              
+       57 +new DataSource({                                              
+       58 +  // ...                                                      
+       59 +  migrations: [CreateUsersAndChannels1775687773260, CreateAuth
+          +Tokens1777579850478],                                         
+       60 +});                                                           
+       61 +```                                                           
+       62 +                                                              
+       63 +The runtime `data-source.ts` can keep the glob — only test dat
+          +a sources need explicit imports.                              
+       64 +                                                              
+       65 +## TypeORM Query Pitfalls                                     
+       66 +                                                              
+       67 +These bite silently — TypeORM does not error, it just returns 
+          +the wrong result.                                             
+       68 +                                                              
+       69 +### `null` in `where`                                         
+       70 +                                                              
+       71 +`where: { someField: null }` is **silently dropped** from the 
+          +generated SQL. Use the `IsNull()` helper:                     
+       72 +                                                              
+       73 +```typescript                                                 
+       74 +import { IsNull } from 'typeorm';                             
+       75 +                                                              
+       76 +repo.findOne({ where: { confirmedAt: IsNull() } });           
+       77 +```                                                           
+       78 +                                                              
+       79 +The same applies to `Not(IsNull())` for `IS NOT NULL`.        
+       80 +                                                              
+       81 +### PostgreSQL aborts the transaction on constraint violation 
+       82 +                                                              
+       83 +When a query inside a `dataSource.transaction(...)` violates a
+          + unique constraint (or any error), PostgreSQL puts the transac
+          +tion in an **aborted** state and refuses every subsequent stat
+          +ement until rollback. A naive retry loop inside the same trans
+          +action will fail with `current transaction is aborted, command
+          +s ignored until end of transaction block`.                    
+       84 +                                                              
+       85 +For retry-on-collision patterns (e.g., generating a unique han
+          +dle), wrap each attempt in a SAVEPOINT:                       
+       86 +                                                              
+       87 +```typescript                                                 
+       88 +await dataSource.transaction(async (manager) => {             
+       89 +  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {  
+       90 +    await manager.query(`SAVEPOINT attempt_${attempt}`);      
+       91 +    try {                                                     
+       92 +      await manager.save(entity);                             
+       93 +      await manager.query(`RELEASE SAVEPOINT attempt_${attempt
+          +}`);                                                          
+       94 +      return;                                                 
+       95 +    } catch (err) {                                           
+       96 +      await manager.query(`ROLLBACK TO SAVEPOINT attempt_${att
+          +empt}`);                                                      
+       97 +      if (!isUniqueViolation(err) || attempt === MAX_ATTEMPTS 
+          +- 1) throw err;                                               
+       98 +      // mutate the colliding field and retry                 
+       99 +    }                                                         
+      100 +  }                                                           
+      101 +});                                                           
+      102 +```                                                           
+
+● Update(.claude/rules/nestjs-modules.md)
+  ⎿  Added 2 lines
+       8  
+       9  - `@Module()` property order: `imports` → `controllers` → `prov
+          iders` → `exports`
+      10  - `TypeOrmModule.forFeature([...])` goes in domain module `impo
+          rts`, never in `AppModule`
+      11 +- **Every entity must be registered in `TypeOrmModule.forFeatur
+         +e([Entity])` of its owning module.** Even with `autoLoadEntitie
+         +s: true`, the entity is only discovered if some module imports 
+         +it via `forFeature`. Forgetting this does not cause a clear err
+         +or: the app starts, but any repository injection or query again
+         +st the missing entity fails at runtime (or, worse, the entity i
+         +s silently absent from migrations). When you create or move an 
+         +entity, immediately update the owning module's imports.        
+      12  - `AppModule` only contains global infrastructure (ConfigModule
+          , TypeOrmModule) and domain modules — no business providers
+      13  - `exports` only for dependencies other modules need; don't exp
+          ort by default
+      14 +- When a module exposes shared infrastructure (e.g., `JwtModule
+         +.registerAsync`, repository providers), it must `exports` them 
+         +— and consumer test modules must include the same registration.
+         + Test modules are NestJS modules: missing imports here cause "N
+         +est can't resolve dependencies" errors that look like productio
+         +n bugs but are test-setup bugs.                                
+
+● Agora crio os dois novos arquivos de regra: typescript-strict.md e
+  auth-jwt.md.
+
+● Write(.claude/rules/typescript-strict.md)
+  ⎿  Wrote 77 lines to .claude/rules/typescript-strict.md
+       2 paths:
+       3   - 'nestjs-project/src/**/*.ts'
+       5 description: 'TypeScript strictness rules — keep tsc --noEmit cl
+         ean at all times'
+       6 ---
+       8 # TypeScript Rules
+       9 
+          etc.). `npx tsc --noEmit` must exit with code 0 before any task
+          is considered done — never leave compilation errors as debt for
+          a future cleanup task.
+     … +88 lines (ctrl+o to expand)
+
+● Write(.claude/rules/auth-jwt.md)
+  ⎿  Wrote 73 lines to .claude/rules/auth-jwt.md
+      1 ---
+      2 paths:
+      3   - 'nestjs-project/src/auth/**'
+      4 description: 'JWT and refresh-token rotation rules'
+      5 ---
+      6 
+      7 # Auth / JWT Rules
+      8 
+      9 ## `jti` is mandatory in every signed token
+     … +99 lines (ctrl+o to expand)
+
+● Resumo das alterações:
+
+  Arquivos editados
+  - CLAUDE.md — SRP avaliado a cada passo + nova seção "Definition of Done
+  (Technical)" exigindo tsc --noEmit, suíte completa e lint antes de declarar
+  pronto.
+  - nestjs-project/CLAUDE.md — bloco "Commands" reescrito separando
+  container-only de host-only, com aviso explícito sobre --runInBand e nova
+  seção "Build Assets" cobrindo nest-cli.json.
+  - .claude/rules/nestjs-testing.md — reescrito: front-matter corrigido para
+  *.integration-spec.ts, tabela de naming (unit/integration/e2e), seção de
+  configuração obrigatória do Jest (setupFiles, testRegex), execução só dentro
+  do container, módulos com forRootAsync + ConfigType, override de APP_GUARD
+  registrado via useClass, mock de dataSource.transaction e teste de lógica de
+  compensação.
+  - .claude/rules/typeorm-migrations.md — recuperação de resíduos de
+  synchronize, restauração de schema em testes de migration, import direto de
+  classes em testes (ts-jest + glob), pitfalls de null em where (IsNull()) e
+  padrão de SAVEPOINT para retry dentro de transação abortada pelo Postgres.
+  - .claude/rules/nestjs-modules.md — toda entidade exige
+  TypeOrmModule.forFeature no módulo dono mesmo com autoLoadEntities; módulos
+  compartilhados precisam ser registrados também nos test modules.
+
+  Arquivos novos
+  - .claude/rules/typescript-strict.md — import type, ConfigType em vez de
+  ReturnType, StringValue para expiresIn, narrowing de envs, arrays explícitos
+  de entities em test data sources.
+  - .claude/rules/auth-jwt.md — jti obrigatório em todo token, regras de rotação
+   de refresh + grace window com edge case de família revogada, logout, password
+   reset reaproveitando logout, quoting de MAIL_FROM no .env e convenção do
+  @Public() com guard global.
+
+✻ Churned for 2m 57s
+
+❯ acho que tem trechos que estão nas .claude/rules que poderiam ficar no        
+  claude.md do nestjs e talvez tenha trechos de .claude/rules que confrontando  
+  pelo frontmatter talvez não fazem sentido ou nem seja acionados, talvez       
+  poderiam estar em outra rule nova ou já existente                             
+
+● Boa pegada. Revisando os arquivos, encontrei 5 desalinhamentos onde o conteúdo
+   está num arquivo cujo paths não vai disparar no contexto certo, ou onde a
+  informação caberia melhor no CLAUDE.md (sempre carregado).
+
+  Problemas identificados
+
+  1. nestjs-testing.md → "Jest Configuration Requirements"
+  Fala de package.json e test/jest-e2e.json, mas o frontmatter só casa com
+  *.spec.ts / *.integration-spec.ts / *.e2e-spec.ts. Quando editar a config do
+  Jest, a regra não dispara. Deveria estar no nestjs-project/CLAUDE.md (setup do
+   projeto, sempre relevante).
+  2. nestjs-testing.md → "Running Tests" (lista de comandos)
+  Duplica o que já está em nestjs-project/CLAUDE.md. Manter só o essencial
+  específico de testes (regra do --runInBand).
+  3. typeorm-migrations.md → "TypeORM Query Pitfalls" (IsNull, SAVEPOINT)
+  Esses padrões aplicam-se a código de service, não a migrations. O frontmatter
+  (migrations/**, data-source.ts) não dispara ao editar *.service.ts. Deve virar
+   uma regra nova typeorm-queries.md com paths apropriados.
+  4. auth-jwt.md → ".env Quoting / MAIL_FROM"
+  Não é específico de auth — é sobre o .env do projeto e o módulo mail. Quando
+  editar .env ou mail.service.ts, o paths: auth/** não dispara. Move para o
+  nestjs-project/CLAUDE.md.
+  5. typescript-strict.md → "Entity Arrays in DataSource" e "ms / StringValue"
+  - "Entity Arrays" é sobre data-source.ts — encaixe natural em
+  typeorm-migrations.md (que já lista data-source.ts).
+  - StringValue do ms só aparece em assinatura de JWT — encaixe natural em
+  auth-jwt.md.
+
+  Vou aplicar todas as correções agora.
+
+● Update(nestjs-project/CLAUDE.md)
+  ⎿  Added 23 lines
+       99  
+      100  This applies to: `start:dev`, `start:prod`, `test:watch`, and 
+           any other persistent process.
+      101  
+      102 +## Jest Configuration                                         
+      103 +                                                              
+      104 +These settings are required in `package.json` (jest config) an
+          +d `test/jest-e2e.json` for the project's tests to work correct
+          +ly:                                                           
+      105 +                                                              
+      106 +- `setupFiles: ["dotenv/config"]` — without this, `.env` is no
+          +t loaded inside the Jest process. `DB_HOST`, `JWT_SECRET`, etc
+          +. fall back to undefined or to the host's `localhost`, breakin
+          +g container-to-container DNS.                                 
+      107 +- `testRegex: '.*\\.(spec|integration-spec)\\.ts$'` — covers b
+          +oth unit (`*.spec.ts`) and integration (`*.integration-spec.ts
+          +`) suffixes.                                                  
+      108 +                                                              
+      109 +Do not add new test-file suffixes; if a new test type is neede
+          +d, update the regex deliberately.                             
+      110 +                                                              
+      111 +## Environment File Conventions                               
+      112 +                                                              
+      113 +`.env` is parsed by both Docker Compose and `dotenv` — values 
+          +containing shell-special characters (`<`, `>`, `|`, `&`, space
+          +s) **must be quoted** or rewritten:                           
+      114 +                                                              
+      115 +```dotenv                                                     
+      116 +# Wrong — the unquoted angle brackets are shell redirection sy
+          +ntax and break parsing                                        
+      117 +MAIL_FROM=StreamTube <noreply@streamtube.local>               
+      118 +                                                              
+      119 +# Right — quote the value                                     
+      120 +MAIL_FROM="StreamTube <noreply@streamtube.local>"             
+      121 +```                                                           
+      122 +                                                              
+      123 +Whenever possible, prefer storing only the bare address in `.e
+          +nv` and composing display names in code (e.g., in `mail.config
+          +.ts`) so the file stays shell-safe.                           
+      124 +                                                              
+      125  ## Build Assets
+      126  
+      127  `tsc` (and therefore `nest build`) only emits compiled `.ts` f
+           iles to `dist/`. Any non-TypeScript runtime asset — Handlebars
+            templates (`.hbs`), JSON fixtures, static config files, etc. 
+           — must be declared in `nest-cli.json` under `compilerOptions.a
+           ssets` (with `watchAssets: true` for dev). Without that, the f
+           ile exists in `src/` but is missing in `dist/` and runtime fai
+           ls only after build.
+
+● Update(.claude/rules/nestjs-testing.md)
+  ⎿  Added 3 lines, removed 17 lines
+      46  - Use a real test database — do not mock the database layer in 
+          e2e tests
+      47  - **Reproduce `main.ts` global config manually:** `Test.createT
+          estingModule()` does not execute `main.ts`. Global pipes, filte
+          rs, and interceptors must be applied explicitly in `beforeAll`:
+           `app.useGlobalPipes(new ValidationPipe({ whitelist: true }))`
+      48  
+      49 -## Jest Configuration Requirements                             
+      49 +## Running Tests — Parallelism                                 
+      50  
+      51 -These settings are required for the project's tests to work and
+         - must remain in `package.json` jest config and `test/jest-e2e.j
+         -son`:                                                          
+      51 +`--runInBand` is mandatory for any Jest run that includes `*.in
+         +tegration-spec.ts` or `*.e2e-spec.ts`. Suites share one test da
+         +tabase; parallel execution causes FK violations, deadlocks, and
+         + cross-suite contamination. The e2e script in `package.json` is
+         + already configured with `--runInBand`; for ad-hoc unit + integ
+         +ration runs add it explicitly.                                 
+      52  
+      53 -- `setupFiles: ["dotenv/config"]` — without this, `.env` is not
+         - loaded inside the Jest process and `DB_HOST`, `JWT_SECRET`, et
+         -c. fall back to undefined (or to the host's `localhost`, breaki
+         -ng container-to-container DNS).                                
+      54 -- `testRegex: '.*\\.(spec|integration-spec)\\.ts$'` — covers bo
+         -th unit and integration suffixes.                              
+      53 +All test commands must run inside the container (`docker compos
+         +e exec nestjs-api ...`). See `nestjs-project/CLAUDE.md` for the
+         + full command reference and Jest configuration requirements (`s
+         +etupFiles`, `testRegex`).                                      
+      54  
+      56 -## Running Tests                                               
+      57 -                                                               
+      58 -All test commands run **inside the container** — never on the h
+         -ost. Running on the host loads the host's env (where `DB_HOST=l
+         -ocalhost` is wrong for Docker DNS) and a different Node version
+         -.                                                              
+      59 -                                                               
+      60 -```bash                                                        
+      61 -docker compose exec nestjs-api npm test                        
+         - # unit + integration                                          
+      62 -docker compose exec nestjs-api npm test -- --runInBand         
+         - # mandatory when integration suites are involved              
+      63 -docker compose exec nestjs-api npm run test:e2e                
+         - # already runs with --runInBand                               
+      64 -docker compose exec nestjs-api npm test -- path/to/file.spec.ts
+         - # single file during dev                                      
+      65 -```                                                            
+      66 -                                                               
+      67 -`--runInBand` is mandatory for any run that includes `*.integra
+         -tion-spec.ts` or `*.e2e-spec.ts`. Suites share one test databas
+         -e; parallel execution causes FK violations, deadlocks, and cros
+         -s-suite contamination.                                         
+      68 -                                                               
+      55  ## Modules with `forRootAsync` + `ConfigType`
+      56  
+      57  When the module under test (or any of its imports) registers so
+          mething with `MyModule.forRootAsync({ inject: [someConfig.KEY],
+           useFactory: ... })`, the test module must include a **global**
+           ConfigModule:
+
+● Update(.claude/rules/typeorm-migrations.md)
+  ⎿  Added 8 lines, removed 32 lines
+       62  
+       63  The runtime `data-source.ts` can keep the glob — only test dat
+           a sources need explicit imports.
+       64  
+       65 -## TypeORM Query Pitfalls                                     
+       65 +## Test DataSource Entity Arrays                              
+       66  
+       67 -These bite silently — TypeORM does not error, it just returns 
+          -the wrong result.                                             
+       67 +When constructing a `DataSource` for tests, pass entity classe
+          +s explicitly — do **not** use glob strings:                   
+       68  
+       69 -### `null` in `where`                                         
+       70 -                                                              
+       71 -`where: { someField: null }` is **silently dropped** from the 
+          -generated SQL. Use the `IsNull()` helper:                     
+       72 -                                                              
+       69  ```typescript
+       74 -import { IsNull } from 'typeorm';                             
+       75 -                                                              
+       76 -repo.findOne({ where: { confirmedAt: IsNull() } });           
+       70 +new DataSource({                                              
+       71 +  // ...                                                      
+       72 +  entities: [User, Channel, RefreshToken, VerificationToken], 
+       73 +});                                                           
+       74  ```
+       75  
+       79 -The same applies to `Not(IsNull())` for `IS NOT NULL`.        
+       76 +Glob entries (`'src/**/*.entity.ts'`) work in production via `
+          +ts-node` but break in `ts-jest` — explicit class arrays are th
+          +e only reliable form in test data sources. The runtime `data-s
+          +ource.ts` can keep the glob.                                  
+       77  
+       81 -### PostgreSQL aborts the transaction on constraint violation 
+       82 -                                                              
+       83 -When a query inside a `dataSource.transaction(...)` violates a
+          - unique constraint (or any error), PostgreSQL puts the transac
+          -tion in an **aborted** state and refuses every subsequent stat
+          -ement until rollback. A naive retry loop inside the same trans
+          -action will fail with `current transaction is aborted, command
+          -s ignored until end of transaction block`.                    
+       84 -                                                              
+       85 -For retry-on-collision patterns (e.g., generating a unique han
+          -dle), wrap each attempt in a SAVEPOINT:                       
+       86 -                                                              
+       87 -```typescript                                                 
+       88 -await dataSource.transaction(async (manager) => {             
+       89 -  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {  
+       90 -    await manager.query(`SAVEPOINT attempt_${attempt}`);      
+       91 -    try {                                                     
+       92 -      await manager.save(entity);                             
+       93 -      await manager.query(`RELEASE SAVEPOINT attempt_${attempt
+          -}`);                                                          
+       94 -      return;                                                 
+       95 -    } catch (err) {                                           
+       96 -      await manager.query(`ROLLBACK TO SAVEPOINT attempt_${att
+          -empt}`);                                                      
+       97 -      if (!isUniqueViolation(err) || attempt === MAX_ATTEMPTS 
+          -- 1) throw err;                                               
+       98 -      // mutate the colliding field and retry                 
+       99 -    }                                                         
+      100 -  }                                                           
+      101 -});                                                           
+      102 -```                                                           
+       78 +For TypeORM **query** pitfalls (`IsNull`, transactions, SAVEPO
+          +INT) that apply in service code, see `typeorm-queries.md`.    
+● Agora crio o typeorm-queries.md com os pitfalls de query, removo o MAIL_FROM
+  do auth-jwt.md, movo StringValue para o auth-jwt.md, e enxugo
+  typescript-strict.md.
+
+● Write(.claude/rules/typeorm-queries.md)
+  ⎿  Wrote 66 lines to .claude/rules/typeorm-queries.md
+       2 paths:
+       3   - 'nestjs-project/src/**/*.service.ts'
+       4   - 'nestjs-project/src/**/*.repository.ts'
+         ing/writing through repositories'lls — silent footguns when read
+       6 ---
+       7 
+       9 # TypeORM Query Rules
+      10 These pitfalls do not raise errors. TypeORM (and PostgreSQL) acc
+         ept the bad code and return wrong results, which makes the bug v
+         isible only at runtime in a downstream check.
+     … +79 lines (ctrl+o to expand)
+
+● Update(.claude/rules/auth-jwt.md)
+  ⎿  Added 12 lines, removed 8 lines
+      41  - Password reset on success must revoke every active refresh to
+          ken for the user (re-use the logout flow).
+      42  - Reset tokens use the same `createVerificationToken(userId, ty
+          pe, expirationHours)` helper as email confirmation — do not dup
+          licate the helper per flow; pass the `type` argument.
+      43  
+      44 -## `.env` Quoting                                              
+      44 +## Token TTL Types (`StringValue`)                             
+      45  
+      46 -Mail / auth env values that contain shell-special characters mu
+         -st be quoted or avoided. In particular, **`MAIL_FROM` with angl
+         -e-bracket address syntax** (`Name <user@host>`) breaks shell pa
+         -rsing of the file:                                             
+      46 +`@nestjs/jwt`'s `signOptions.expiresIn` accepts either a number
+         + (seconds) or a `StringValue` from the `ms` package. A plain `s
+         +tring` from a config value will not type-check. Cast at the bou
+         +ndary where the value enters the JWT API:                      
+      47  
+      48 -```dotenv                                                      
+      49 -# Wrong — shell sees redirection                               
+      50 -MAIL_FROM=StreamTube <noreply@streamtube.local>                
+      48 +```typescript                                                  
+      49 +import type { StringValue } from 'ms';                         
+      50  
+      52 -# Right — quote, or set only the address and let the mail confi
+         -g compose the display name                                     
+      53 -MAIL_FROM="StreamTube <noreply@streamtube.local>"              
+      51 +JwtModule.registerAsync({                                      
+      52 +  inject: [authConfig.KEY],                                    
+      53 +  useFactory: (config: ConfigType<typeof authConfig>) => ({    
+      54 +    secret: config.accessTokenSecret,                          
+      55 +    signOptions: { expiresIn: config.accessTokenTtl as StringVa
+         +lue },                                                         
+      56 +  }),                                                          
+      57 +});                                                            
+      58  ```
+      59  
+      56 -Prefer letting `mail.config.ts` compose the `From` header from 
+         -a plain address + a separate display name, so the env value is 
+         -shell-safe.                                                    
+      60 +Do **not** widen the config field type to `string` — keep the c
+         +ast localized to the JWT call site.                            
+      61  
+      62  ## Global JWT Guard + `@Public()`
+      63  
+
+● Update(.claude/rules/typescript-strict.md)
+  ⎿  Added 3 lines, removed 21 lines
+      42  
+      43  `ConfigType` resolves promises returned by async factories; `Re
+          turnType` does not.
+      44  
+      45 -## `ms` / `StringValue` for Durations                          
+      46 -                                                               
+      47 -`@nestjs/jwt`'s `expiresIn` and similar duration fields accept 
+         -either a number (seconds) or a `StringValue` from the `ms` pack
+         -age. A plain `string` from a config value will not type-check: 
+      48 -                                                               
+      49 -```typescript                                                  
+      50 -import type { StringValue } from 'ms';                         
+      51 -                                                               
+      52 -signOptions: {                                                 
+      53 -  expiresIn: this.config.accessTokenTtl as StringValue,        
+      54 -}                                                              
+      55 -```                                                            
+      56 -                                                               
+      57 -Cast at the boundary where the value enters the JWT API. Do **n
+         -ot** widen the config type to `string` — keep the cast localize
+         -d.                                                             
+      58 -                                                               
+      45  ## Strict Null Defaults
+      46  
+      47  When reading optional env vars with `process.env.X` directly, n
+          arrow before use:
+     ...
+      52  
+      53  Never rely on `parseInt(undefined)` or pass possibly-undefined 
+          values into APIs that require a defined argument.
+      54  
+      69 -## Entity Arrays in DataSource                                 
+      55 +## Library-Specific Type Casts                                 
+      56  
+      71 -When constructing a `DataSource` (production or test), the `ent
+         -ities` field must be typed as `(string | Function | EntitySchem
+         -a<any>)[]` if mixed. For test data sources that pass class refe
+         -rences directly, prefer:                                       
+      57 +Some libraries use branded string types (`StringValue` from `ms
+         +`, etc.) that a plain `string` does not satisfy. Cast at the bo
+         +undary where the value enters the library API rather than widen
+         +ing the source type. See `auth-jwt.md` for the JWT `expiresIn` 
+         +example; the same principle applies to any branded-string libra
+         +ry you integrate.                                              
+      58  
+      73 -```typescript                                                  
+      74 -entities: [User, Channel, RefreshToken, VerificationToken],    
+      75 -```                                                            
+      76 -                                                               
+      77 -Glob-string entries (`'src/**/*.entity.ts'`) work in production
+         - via `ts-node` but break in `ts-jest` — use explicit class arra
+         -ys in test data sources.                                       
+      59 +For typed config providers built with `registerAs`, see also th
+         +e `typeorm-migrations.md` note on test `DataSource` entity arra
+         +ys.                                                            
+
+● Resumo das reorganizações:
+
+  Movido para nestjs-project/CLAUDE.md (sempre carregado)
+  - "Jest Configuration" — setupFiles/testRegex (antes em nestjs-testing.md, mas
+   o paths da regra não disparava ao editar package.json/jest-e2e.json).
+  - "Environment File Conventions" — quoting do .env/MAIL_FROM (antes em
+  auth-jwt.md, sem relação com auth).
+
+  Enxugado em nestjs-testing.md
+  - Lista de comandos removida (já está no CLAUDE.md). Mantida só a regra do
+  --runInBand com referência cruzada.
+
+  Movido para regra correta
+  - Pitfalls de query TypeORM (IsNull, SAVEPOINT) → novo arquivo
+  typeorm-queries.md com paths: *.service.ts, *.repository.ts (antes em
+  typeorm-migrations.md, que não disparava em services).
+  - "Entity Arrays in DataSource" → typeorm-migrations.md (que já tinha
+  data-source.ts no path); removido de typescript-strict.md.
+  - StringValue do ms → auth-jwt.md (uso real é só JWT); deixei nota genérica em
+   typescript-strict.md apontando para o exemplo.
+
+  Cross-references adicionadas
+  - typeorm-migrations.md → aponta para typeorm-queries.md.
+  - nestjs-testing.md → aponta para o CLAUDE.md.
+  - typescript-strict.md → aponta para auth-jwt.md e typeorm-migrations.md.
+
+  Resultado: cada bloco de conteúdo agora está num arquivo cujo paths realmente
+  dispara no contexto onde a regra deve ser lembrada.
+
+✻ Brewed for 2m 21s
+
+❯ um trecho como este não faz sentido estar neste arquivo, já que só é          
+  disparado de acordo com o frontmatter quando já está manipulando os testes.   
+  corrija isto e renalise outros casos semelhantes                              
+  ⎿  ⧉ Selected 9 lines from .claude/rules/nestjs-testing.md in Visual Studio Code - Insiders
+  ⎿  Found 2 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Boa observação. Revisei tudo de novo com essa lente: "será que o agente
+  precisa saber disso antes de editar o arquivo que o paths casa?". Encontrei
+  mais 3 casos do mesmo tipo.
+
+  Casos identificados
+
+  1. nestjs-testing.md → "Test Type Naming" (o trecho que você selecionou)
+  A decisão de qual sufixo usar acontece antes do arquivo existir. Quando o
+  paths finalmente dispara, a escolha já foi feita. → Mover para
+  nestjs-project/CLAUDE.md (sempre carregado).
+  2. nestjs-testing.md → "Place X next to source / in test/"
+  Mesma lógica: localização do arquivo é decidida na criação. → Mover para o
+  CLAUDE.md.
+  3. auth-jwt.md → "Global JWT Guard + @Public()"
+  A convenção "todo endpoint é protegido por padrão, marque com @Public() os
+  públicos" é necessária ao criar qualquer controller novo (videos, comments,
+  etc.) — não só dentro de auth/. O paths: auth/** não dispara. → Mover para
+  nestjs-controllers.md (que dispara em todo *.controller.ts).
+  4. typeorm-migrations.md → "Test DataSource Entity Arrays"
+  O paths lista **/data-source.ts, que não casa com create-test-data-source.ts
+  (o arquivo onde o padrão é realmente aplicado). → Ampliar o glob para
+  **/*data-source.ts.
+
+  Aplicando as correções.
+
+● Update(nestjs-project/CLAUDE.md)
+  ⎿  Added 14 lines
+       99  
+      100  This applies to: `start:dev`, `start:prod`, `test:watch`, and 
+           any other persistent process.
+      101  
+      102 +## Test Type Selection                                        
+      103 +                                                              
+      104 +Choose the suffix by what the test really does, not by where t
+          +he code under test lives. The suffix is a contract that drives
+          + Jest config (`testRegex`, parallelism), CI steps, and reader 
+          +expectations.                                                 
+      105 +                                                              
+      106 +| Suffix                  | Purpose                           
+          +                                   | DB / external I/O | Locat
+          +ion                     |                                     
+      107 +|-------------------------|-----------------------------------
+          +-----------------------------------|-------------------|------
+          +------------------------|                                     
+      108 +| `*.spec.ts`             | **Unit** — pure logic, all collabo
+          +rators mocked                      | Forbidden         | Next 
+          +to the source file      |                                     
+      109 +| `*.integration-spec.ts` | **Integration** — exercises real D
+          +B, real repositories, real modules | Required          | Next 
+          +to the source file      |                                     
+      110 +| `*.e2e-spec.ts`         | **End-to-end** — full HTTP cycle v
+          +ia `supertest`                     | Required          | `nest
+          +js-project/test/`       |                                     
+      111 +                                                              
+      112 +A test that constructs a `TypeOrmModule.forRoot`, opens a conn
+          +ection, or hits the `db` service **must** be `*.integration-sp
+          +ec.ts`, never `*.spec.ts`. A test that boots the full Nest app
+          +lication and makes HTTP calls **must** be `*.e2e-spec.ts`.    
+      113 +                                                              
+      114 +Conventions for **how to write** each kind of test (mocking pa
+          +tterns, AAA structure, override strategies for global guards, 
+          +etc.) live in `.claude/rules/nestjs-testing.md` and load when 
+          +you edit a test file.                                         
+      115 +                                                              
+      116  ## Jest Configuration
+      117  
+      118  These settings are required in `package.json` (jest config) an
+           d `test/jest-e2e.json` for the project's tests to work correct
+           ly:
+
+● Update(.claude/rules/nestjs-testing.md)
+  ⎿  Added 1 line, removed 16 lines
+       9  
+      10  # Testing Rules
+      11  
+      12 -## Test Type Naming (strict)                                   
+      12 +> Suffix selection (`*.spec.ts` vs `*.integration-spec.ts` vs `
+         +*.e2e-spec.ts`) and test file location are pre-creation decisio
+         +ns covered in `nestjs-project/CLAUDE.md` → "Test Type Selection
+         +". The rules below assume you are already inside a test file of
+         + the correct kind.                                             
+      13  
+      14 -The suffix is a **contract** about what the test touches. Choos
+         -e by what the test really does, not by where the code under tes
+         -t lives:                                                       
+      15 -                                                               
+      16 -| Suffix                  | Purpose                            
+         -                                  | DB / external I/O |        
+      17 -|-------------------------|------------------------------------
+         -----------------------------------|-------------------|        
+      18 -| `*.spec.ts`             | **Unit** — pure logic, all collabor
+         -ators mocked                      | Forbidden         |        
+      19 -| `*.integration-spec.ts` | **Integration** — exercises real DB
+         -, real repositories, real modules | Required          |        
+      20 -| `*.e2e-spec.ts`         | **End-to-end** — full HTTP cycle vi
+         -a `supertest`                     | Required          |        
+      21 -                                                               
+      22 -A test that constructs a `TypeOrmModule.forRoot`, opens a conne
+         -ction, or hits the `db` service **must** be `*.integration-spec
+         -.ts`. Naming it `.spec.ts` misleads readers (and the test runne
+         -r config) into believing it is safe to run in parallel with no 
+         -DB.                                                            
+      23 -                                                               
+      24 -The Jest `testRegex` is `(spec|integration-spec)\\.ts$` — keep 
+         -it that way; do not invent new suffixes.                       
+      25 -                                                               
+      14  ## Unit Tests (`*.spec.ts`)
+      15  
+      16  - Use `Test.createTestingModule()` from `@nestjs/testing` to se
+          t up the test module
+      17  - Mock every external dependency (repositories via `getReposito
+          ryToken`, services via `useValue`, etc.)
+      18  - Follow the naming pattern: `describe('ClassName')` with descr
+          iptive `it('should ...')` blocks
+      31 -- Place unit tests next to the source file they test (e.g., `us
+         -ers.service.ts` → `users.service.spec.ts`)                     
+      19  - A unit test that needs to "mock the database" by creating a r
+          eal DataSource is not a unit test — convert it to `*.integratio
+          n-spec.ts`
+      20  
+      21  ## Integration Tests (`*.integration-spec.ts`)
+      22  
+      36 -- Place integration tests next to the source file they test, sa
+         -me directory as unit tests                                     
+      23  - Use a real database — connect to the Docker `db` service (env
+           vars from `.env` are available inside the container)
+      24  - **Table cleanup:** `repository.delete({})` throws `Empty crit
+          eria(s) are not allowed`. Use `dataSource.query('DELETE FROM ta
+          ble_name')` or `repository.clear()` to wipe tables between test
+          s
+      25  
+      26  ## E2E Tests (`*.e2e-spec.ts`)
+      27  
+      42 -- Place e2e tests in the `test/` directory                     
+      28  - Use `supertest` to make HTTP requests against the running app
+      29  - Test complete request/response cycles including status codes,
+           response shape, and error cases
+      30  - Test authentication and authorization flows (valid token, inv
+          alid token, missing token)
+
+● Update(.claude/rules/nestjs-controllers.md)
+  ⎿  Added 18 lines
+       6  
+       7  # Controller Rules
+       8  
+       9 +## Authentication: Default-Protected Endpoints                 
+      10 +                                                               
+      11 +The application registers a JWT guard globally via `APP_GUARD`.
+         + **Every endpoint is protected by default.** Public endpoints m
+         +ust opt out explicitly with the `@Public()` decorator:         
+      12 +                                                               
+      13 +```typescript                                                  
+      14 +import { Public } from '../auth/decorators/public.decorator';  
+      15 +                                                               
+      16 +@Public()                                                      
+      17 +@Get()                                                         
+      18 +list() { ... }                                                 
+      19 +```                                                            
+      20 +                                                               
+      21 +When you add a new controller anywhere in the project (videos, 
+         +comments, channels, etc.), decide per-method which routes shoul
+         +d be public and annotate them. Forgetting `@Public()` on what s
+         +hould be a public route causes a 401 on calls that should succe
+         +ed; forgetting it on what should be authenticated is far worse 
+         +— it leaks a protected endpoint.                               
+      22 +                                                               
+      23 +Do not invert the convention by trying to apply the JWT guard l
+         +ocally — the guard is global and stays global.                 
+      24 +                                                               
+      25 +For auth-domain rules (token rotation, `jti`, password reset fl
+         +ow, etc.) see `auth-jwt.md`.                                   
+      26 +                                                               
+      27  ## REST Compliance
+      28  
+      29  Controllers are the HTTP layer — they must follow the REST. Whe
+          n editing a controller, enforce:
+
+● Update(.claude/rules/auth-jwt.md)
+  ⎿  Added 2 lines, removed 10 lines
+      59  
+      60  Do **not** widen the config field type to `string` — keep the c
+          ast localized to the JWT call site.
+      61  
+      62 -## Global JWT Guard + `@Public()`                              
+      62 +## Global JWT Guard Registration                               
+      63  
+      64 -The JWT guard is registered globally via `APP_GUARD`. Every end
+         -point is protected by default. Mark explicitly public endpoints
+         - with `@Public()`:                                             
+      64 +This module is responsible for registering `JwtAuthGuard` as `A
+         +PP_GUARD`. The decision that *every* endpoint is protected by d
+         +efault — and the `@Public()` opt-out convention used by all oth
+         +er controllers — is documented in `nestjs-controllers.md`. Keep
+         + the registration here in sync: if the global guard is ever rem
+         +oved or replaced, update `nestjs-controllers.md` accordingly.  
+      65  
+      66 -```typescript                                                  
+      67 -@Public()                                                      
+      68 -@Post('login')                                                 
+      69 -login(@Body() dto: LoginDto) { ... }                           
+      70 -```                                                            
+      71 -                                                               
+      72 -Forgetting `@Public()` on registration / login / health endpoin
+         -ts causes 401 on unauthenticated calls that should succeed. Whe
+         -never you add a new controller, decide per-method which routes 
+         -are public and annotate them — do not invert the convention by 
+         -trying to add the guard locally.                               
+      73 -                                                               
+      66  ## Rate Limiting
+      67  
+      68  - Rate limits on auth endpoints are enforced by the global `Thr
+          ottlerGuard`.
+
+● Update(.claude/rules/typeorm-migrations.md)
+  ⎿  Added 1 line, removed 1 line
+      1  ---
+      2  paths:
+      3    - 'nestjs-project/**/migrations/**'
+      4 -  - 'nestjs-project/**/data-source.ts'                          
+      4 +  - 'nestjs-project/**/*data-source.ts'                         
+      5  description: 'Database migration safety rules'
+      6  ---
+      7  
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+● Resumo das correções de "regra carregada tarde demais":
+
+  1. "Test Type Selection" → nestjs-project/CLAUDE.md
+  Tabela de sufixo + localização do arquivo. Decidir antes de criar o arquivo. A
+   regra nestjs-testing.md agora abre com nota de remissão e foca só no "como
+  escrever" (que aplica quando você já está dentro do arquivo).
+  2. @Public() global guard → nestjs-controllers.md
+  Convenção que precisa ser conhecida ao criar qualquer controller, não só
+  dentro de auth/. O auth-jwt.md agora só documenta a responsabilidade de
+  registrar o guard, com pointer para a regra de controllers.
+  3. typeorm-migrations.md → glob ampliado
+  **/data-source.ts → **/*data-source.ts para casar create-test-data-source.ts
+  (onde o padrão "entities como array de classes" é realmente aplicado).
+
+✻ Churned for 1m 47s
+
+❯ esta parte selecionada é outro exemplo, é execução dos testes                 
+  ⎿  ⧉ Selected 5 lines from .claude/rules/nestjs-testing.md in Visual Studio Code - Insiders
+
+● Correto — execução de testes é atividade de CLI que acontece após o edit.
+  Quando o agente roda os testes, o paths da regra de testing não está garantido
+   a estar carregado. E o nestjs-project/CLAUDE.md já tem uma seção "Parallelism
+   in tests" — está duplicado.
+
+  Removo a seção do nestjs-testing.md.
+
+● Update(.claude/rules/nestjs-testing.md)
+  ⎿  Removed 6 lines
+      31  - Use a real test database — do not mock the database layer in 
+          e2e tests
+      32  - **Reproduce `main.ts` global config manually:** `Test.createT
+          estingModule()` does not execute `main.ts`. Global pipes, filte
+          rs, and interceptors must be applied explicitly in `beforeAll`:
+           `app.useGlobalPipes(new ValidationPipe({ whitelist: true }))`
+      33  
+      34 -## Running Tests — Parallelism                                 
+      35 -                                                               
+      36 -`--runInBand` is mandatory for any Jest run that includes `*.in
+         -tegration-spec.ts` or `*.e2e-spec.ts`. Suites share one test da
+         -tabase; parallel execution causes FK violations, deadlocks, and
+         - cross-suite contamination. The e2e script in `package.json` is
+         - already configured with `--runInBand`; for ad-hoc unit + integ
+         -ration runs add it explicitly.                                 
+      37 -                                                               
+      38 -All test commands must run inside the container (`docker compos
+         -e exec nestjs-api ...`). See `nestjs-project/CLAUDE.md` for the
+         - full command reference and Jest configuration requirements (`s
+         -etupFiles`, `testRegex`).                                      
+      39 -                                                               
+      34  ## Modules with `forRootAsync` + `ConfigType`
+      35  
+      36  When the module under test (or any of its imports) registers so
+          mething with `MyModule.forRootAsync({ inject: [someConfig.KEY],
+           useFactory: ... })`, the test module must include a **global**
+           ConfigModule:
+
+● Vou verificar se sobrou conteúdo de execução em outros pontos do arquivo.
+
+  Read 1 file (ctrl+o to expand)
+
+● A seção "General" também é sobre execução. Removo. E vou garantir que a
+  "Definition of Done" do CLAUDE.md global cobre o "rodar a suíte completa antes
+   de terminar" (já cobre) e que o nestjs CLAUDE.md menciona "rodar só os
+  relacionados durante dev" (vou reforçar lá).
+
+● Update(.claude/rules/nestjs-testing.md)
+  ⎿  Removed 5 lines
+      75  
+      76  When a service performs a multi-step operation that has a compe
+          nsating action on failure (e.g., delete the saved user if the f
+          ollow-up channel creation fails), the integration test for the 
+          compensation path should `jest.spyOn` the failing collaborator 
+          to throw, and then assert that the compensating delete really r
+          an against the DB.
+      77  
+      78 -## General                                                     
+      79 -                                                               
+      80 -- Run only related tests during development; run the full suite
+         - (with `--runInBand`) before finishing                         
+      81 -- All test commands run inside the container: `docker compose e
+         -xec nestjs-api npm test`                                       
+      82 -                                                               
+      78  ## Test Data
+      79  
+      80  - Use factories or builders to create test data objects
+
+● Update(nestjs-project/CLAUDE.md)  ⎿  Added 3 lines, removed 1 line
+      82  curl http://localhost:3000
+      83  ```
+      84  
+      85 -### Parallelism in tests                                       
+      85 +### Test execution                                             
+      86  
+      87  Integration and e2e suites share a single test database. They *
+          *must** be run with `--runInBand`:
+      88  
+     ...
+       93  
+       94  Parallel execution causes FK violations, deadlocks, and cross-
+           suite contamination because suites truncate or seed shared tab
+           les concurrently.
+       95  
+       96 +During active development, run only the tests related to the f
+          +ile being changed (`npm test -- path/to/file.spec.ts`). Before
+          + declaring a task done, run the full suite — see the global `C
+          +LAUDE.md` → "Definition of Done (Technical)".                 
+       97 +                                                              
+       98  ## Long-running Processes
+       99  
+      100  Commands that never exit (dev server, watch modes) must be run
+            in background in the Bash tool — otherwise the agent blocks i
+           ndefinitely waiting for the process to return.
+
+● Pronto. Toda informação sobre executar testes (parallelism, container, escopo
+  durante dev vs. suíte completa antes do done) agora vive no
+  nestjs-project/CLAUDE.md (sempre carregado). A regra nestjs-testing.md ficou
+  só com o que aplica enquanto você está editando um arquivo de teste: como
+  construir o módulo, mocks, override de guards globais, padrões de transação,
+  AAA, test data.
+
+✻ Cogitated for 40s
+
+※ recap: Refining CLAUDE.md and .claude/rules so future phases run more assertively, based on phase-02 observations. Just finished moving test-execution guidance out of the testing rule into the always-loaded nestjs CLAUDE.md. Next: confirm with you whether any other rule sections still feel misplaced. (disable recaps in /config)
+
+❯ liste todos os arquivos modificados nesta sessão                              
+
+● Arquivos modificados nesta sessão:
+
+  Editados
+  1. CLAUDE.md (raiz)
+  2. nestjs-project/CLAUDE.md
+  3. .claude/rules/nestjs-testing.md
+  4. .claude/rules/typeorm-migrations.md
+  5. .claude/rules/nestjs-modules.md
+  6. .claude/rules/nestjs-controllers.md
+  7. .claude/rules/auth-jwt.md
+  8. .claude/rules/typescript-strict.md
+
+  Criados
+  9. .claude/rules/typescript-strict.md
+  10. .claude/rules/auth-jwt.md
+  11. .claude/rules/typeorm-queries.md
+
+  (Os itens 7–8 aparecem nas duas listas porque foram criados nesta sessão e
+  depois editados na mesma sessão.)
+
+✻ Churned for 6s

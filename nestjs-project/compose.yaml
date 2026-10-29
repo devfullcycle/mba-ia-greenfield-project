@@ -3,12 +3,34 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile.dev
+      target: api
     ports:
       - 3000:3000
     volumes:
       - .:/home/node/app
     depends_on:
       db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: worker
+    volumes:
+      - .:/home/node/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
         condition: service_healthy
 
   db:
@@ -25,4 +47,63 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    ports:
+      - "8333:8333"
+    environment:
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '{"identities":[{"name":"streamtube","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","List","Tagging","Write"]}]}' "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY" > /tmp/s3.json
+        exec weed server -dir=/data -s3 -s3.config=/tmp/s3.json
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://$$(hostname -i):9333/cluster/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  storage-init:
+    image: amazon/aws-cli
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${S3_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-streamtube}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        EP=http://seaweedfs:8333
+        aws --endpoint-url $$EP s3api create-bucket --bucket $$S3_BUCKET || true
+        aws --endpoint-url $$EP s3api put-bucket-cors --bucket $$S3_BUCKET --cors-configuration '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]}'
+        aws --endpoint-url $$EP s3api put-bucket-lifecycle-configuration --bucket $$S3_BUCKET --lifecycle-configuration '{"Rules":[{"ID":"abort-incomplete-multipart","Status":"Enabled","Filter":{},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":2}}]}'
+
+volumes:
+  redis-data:
+  seaweedfs-data:

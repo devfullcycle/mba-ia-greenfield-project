@@ -1,4 +1,4 @@
-FROM node:25.6.0-slim
+FROM node:25.6.0-slim AS base
 
 RUN apt update && apt install -y procps curl
 
@@ -6,4 +6,14 @@ WORKDIR /home/node/app
 
 USER node
 
-CMD [ "tail", "-f", "/dev/null" ] 
+CMD [ "tail", "-f", "/dev/null" ]
+
+# Worker image: FFmpeg lives only here, the API image stays lean
+FROM base AS worker
+
+USER root
+RUN apt update && apt install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+USER node
+
+# Default target (last stage): API
+FROM base AS api
