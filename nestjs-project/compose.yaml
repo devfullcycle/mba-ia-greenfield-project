@@ -7,11 +7,20 @@ services:
       - 3000:3000
     volumes:
       - .:/home/node/app
+    environment:
+      DB_HOST: db
+      MAIL_HOST: mailpit
+      STORAGE_ENDPOINT: minio
+      REDIS_HOST: redis
     depends_on:
       db:
         condition: service_healthy
       mailpit:
         condition: service_started
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   db:
     image: postgres:17
@@ -33,4 +42,34 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  minio:
+    # Official MinIO images were removed from Docker Hub/Quay in 2026.
+    # This community mirror keeps the same upstream server + mc binaries.
+    image: pgsty/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  minio_data:

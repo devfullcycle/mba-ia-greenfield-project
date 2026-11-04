@@ -1,4 +1,4 @@
-import { DataSource, EntitySchema, MigrationInterface } from 'typeorm';
+import { DataSource, DataSourceOptions, MigrationInterface } from 'typeorm';
 
 interface TestDataSourceOptions {
   synchronize?: boolean;
@@ -6,7 +6,7 @@ interface TestDataSourceOptions {
 }
 
 export function createTestDataSource(
-  entities: (Function | string | EntitySchema<any>)[],
+  entities: NonNullable<DataSourceOptions['entities']>,
   options: TestDataSourceOptions = {},
 ): DataSource {
   const { synchronize = true, migrations } = options;
@@ -26,6 +26,12 @@ export function createTestDataSource(
 export async function cleanAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query('DELETE FROM "refresh_tokens"');
   await dataSource.query('DELETE FROM "verification_tokens"');
+  const videosTable = await dataSource.query<{ table: string | null }[]>(
+    `SELECT to_regclass('public.videos') AS "table"`,
+  );
+  if (videosTable[0]?.table) {
+    await dataSource.query('DELETE FROM "videos"');
+  }
   await dataSource.query('DELETE FROM "channels"');
   await dataSource.query('DELETE FROM "users"');
 }

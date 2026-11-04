@@ -32,4 +32,17 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // Tests freely use untyped Jest mocks and supertest responses; the
+    // type-aware safety rules add noise without catching real defects here.
+    files: ['**/*.spec.ts', '**/*.integration-spec.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
 );

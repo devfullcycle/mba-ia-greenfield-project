@@ -24,7 +24,11 @@ function makeChannel(nickname: string): Channel {
 }
 
 function makeUniqueError(): QueryFailedError {
-  const err = new QueryFailedError('INSERT', [], new Error()) as any;
+  const driverError = Object.assign(new Error(), {
+    code: '23505',
+    detail: 'Key (nickname)=(abc) already exists.',
+  });
+  const err = new QueryFailedError('INSERT', [], driverError) as any;
   err.code = '23505';
   err.detail = 'Key (nickname)=(abc) already exists.';
   return err;

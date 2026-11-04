@@ -1,4 +1,4 @@
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import appConfig from '../config/app.config';
 import mailConfig from '../config/mail.config';
@@ -13,9 +13,10 @@ import { MailService } from './mail.service';
 
 describe('MailService (integration)', () => {
   let mailService: MailService;
+  let module: TestingModule;
 
   beforeAll(async () => {
-    const module = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, load: [appConfig, mailConfig] }),
         MailModule,
@@ -23,6 +24,10 @@ describe('MailService (integration)', () => {
     }).compile();
 
     mailService = module.get(MailService);
+  });
+
+  afterAll(async () => {
+    await module.close();
   });
 
   beforeEach(async () => {

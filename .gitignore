@@ -1,2 +1,5 @@
 .history/
 settings.local.json
+
+.idea/
+.env.local

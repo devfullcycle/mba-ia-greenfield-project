@@ -438,6 +438,216 @@
           "auth"
         ]
       }
+    },
+    "/videos/upload": {
+      "post": {
+        "description": "Streams the uploaded file to object storage and queues it for processing.",
+        "operationId": "VideosController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Video uploaded and queued for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "summary": "Upload a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{id}/stream": {
+      "get": {
+        "description": "Streams a ready video, honoring HTTP Range requests (206 Partial Content).",
+        "operationId": "VideosController_stream",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full video stream"
+          },
+          "206": {
+            "description": "Partial video stream"
+          },
+          "404": {
+            "description": "Video not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Video is not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{id}/download": {
+      "get": {
+        "description": "Downloads a ready video as an attachment.",
+        "operationId": "VideosController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Video file",
+            "headers": {
+              "Content-Disposition": {
+                "description": "Attachment filename",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Video is not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Download a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{id}": {
+      "get": {
+        "description": "Returns video metadata and processing status.",
+        "operationId": "VideosController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Video found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get video status",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {
@@ -478,6 +688,10 @@
         "properties": {}
       },
       "ResetPasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "VideoResponseDto": {
         "type": "object",
         "properties": {}
       },

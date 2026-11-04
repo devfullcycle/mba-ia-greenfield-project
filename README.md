@@ -1,217 +1,277 @@
 # StreamTube — Plataforma de Compartilhamento de Vídeos
 
-Projeto da disciplina **Desenvolvimento de Aplicações de IA** do MBA de Engenharia de Software com IA da [Full Cycle](https://fullcycle.com.br).
+O **StreamTube** é uma plataforma de compartilhamento e streaming de vídeos no estilo YouTube, desenvolvida como projeto de referência do módulo de **Desenvolvimento de Software e Aplicações com IA** do MBA de Engenharia de Software com IA da [Full Cycle](https://fullcycle.com.br).
 
-Este é um projeto greenfield desenvolvido para demonstrar como construir uma aplicação do zero utilizando IA de forma adequada no processo de desenvolvimento.
-
-## Professor
-
-<a href="https://github.com/argentinaluiz">
-    <img src="https://avatars.githubusercontent.com/u/4926329?v=4?s=100" width="100px;" alt=""/>
-    <br />
-    <sub>
-        <b>Luiz Carlos</b>
-    </sub>
-</a>
+O projeto é construído em modelo *greenfield* orientado por agentes de IA, aplicando as melhores práticas de engenharia de software: arquitetura limpa, responsabilidade única, tipagem estrita com TypeScript, cobertura piramidal de testes (unitários, integração e ponta a ponta), filas assíncronas para processamento pesado e infraestrutura conteinerizada com Docker.
 
 ---
 
-## Quadro Branco
+## ⚙️ Como o Projeto Funciona
 
-- [Quadro Branco](./whiteboard.png)
+O StreamTube opera como uma arquitetura distribuída e conteinerizada, projetada para desacoplar tarefas síncronas de alta concorrência das tarefas pesadas de processamento multimídia.
+
+### 🏛️ Arquitetura dos Serviços
+
+```mermaid
+flowchart TD
+    subgraph Clients["Clientes"]
+        Browser["Navegador Web (HTML5 Video / SPA)"]
+        Swagger["Swagger UI / REST Client"]
+    end
+
+    subgraph AppLayer["Camada de Aplicação"]
+        Frontend["Next.js Frontend (BFF Proxy)"]
+        API["NestJS API (Auth, Vídeos, Streaming)"]
+        Worker["Video Worker (FFmpeg / Thumbnails)"]
+    end
+
+    subgraph AsyncLayer["Fila de Mensageria"]
+        Redis[("Redis / BullMQ (Fila de Processamento)")]
+    end
+
+    subgraph DataLayer["Armazenamento & Infraestrutura"]
+        DB[("PostgreSQL 17 (Usuários, Canais, Vídeos)")]
+        MinIO[("MinIO S3 (Vídeos Brutos e Thumbnails)")]
+        Mailpit["Mailpit (Servidor SMTP Local)"]
+    end
+
+    Browser -->|HTTP / BFF| Frontend
+    Frontend -->|Proxy REST| API
+    Swagger -->|REST / Multipart Upload| API
+    Browser -->|HTTP 206 Range Stream| API
+
+    API -->|Persistência / Consultas| DB
+    API -->|Publica Job de Vídeo| Redis
+    API -->|Upload de Vídeo Bruto| MinIO
+    API -->|Leitura p/ Stream e Download| MinIO
+    API -->|E-mails Transacionais| Mailpit
+
+    Redis -->|Consome Job de Processamento| Worker
+    Worker -->|Download do Vídeo Original| MinIO
+    Worker -->|Upload da Thumbnail Gerada| MinIO
+    Worker -->|Atualiza Metadados e Status| DB
+```
+
+1. **API NestJS (11.x)**: Núcleo das regras de negócio, autenticação (JWT com rotação de refresh tokens), gerenciamento de usuários, canais, upload via streaming e entrega de mídia.
+2. **PostgreSQL 17**: Banco de dados relacional com TypeORM para persistência de entidades, migrações versionadas e integridade referencial.
+3. **MinIO (S3-Compatible Object Storage)**: Armazenamento distribuído para arquivos grandes, separando vídeos originais (`streamtube-videos`) e imagens de miniatura (`streamtube-thumbnails`).
+4. **Redis + BullMQ**: Fila de mensagens em memória para gerenciamento e despacho de jobs assíncronos de vídeo.
+5. **Video Worker (FFmpeg)**: Consumidor de jobs em segundo plano responsável pela extração de metadados técnicos (duração, dimensões, codecs) e geração automatizada de thumbnails.
+6. **Mailpit**: Servidor SMTP local para captura de e-mails transacionais (confirmação de conta e recuperação de senhas).
+7. **Next.js Frontend (16.x)**: Aplicação web em React 19 utilizando o padrão BFF (Backend For Frontend).
 
 ---
 
-## 🎨 Design System (Figma)
+### 🎬 Fluxo de Upload, Processamento e Streaming (Fase 03)
 
-- [FC Tube.fig](./FC%20Tube.fig) — arquivo-fonte do **design system** do projeto no Figma.
-- [FC Tube sem padrão.fig](./FC%20Tube%20sem%20padrao.fig) — arquivo-fonte puro, sem tokens, cores, tipografia e espaçamento.
+O ciclo de vida de um vídeo no StreamTube segue as etapas abaixo:
 
-Contém os fundamentos visuais do StreamTube — tokens (cores, tipografia, espaçamento, raios), componentes e as telas da plataforma. É a referência de design para a implementação do frontend: os componentes em `next-frontend/components/ui` (shadcn) e os tokens em `next-frontend/app/globals.css` derivam deste arquivo. Abra-o no Figma (`Arquivo → Importar`) para consultar especificações e estados visuais.
+1. **Upload via Streaming**:
+   - O cliente autenticado envia o arquivo via `POST /videos/upload` (multipart/form-data).
+   - O payload de bytes é transmitido por streaming diretamente para o MinIO, sem carregar o vídeo inteiro na memória RAM da API.
+   - O registro é inserido no banco de dados com status `pending_upload` e um job de processamento é disparado na fila BullMQ.
+
+2. **Processamento Assíncrono**:
+   - O processador consome o job da fila e atualiza o status do vídeo para `processing`.
+   - O FFmpeg analisa os metadados do arquivo (tempo de duração exato, resolução e formato) e gera uma imagem de thumbnail no frame de 1 segundo.
+   - A thumbnail gerada é enviada para o bucket do MinIO.
+   - Ao concluir com sucesso, o registro no banco tem seus metadados persistidos e o status é alterado para `ready`. Em caso de falha, o status vai para `error` com a mensagem diagnóstica.
+
+3. **Streaming com HTTP Range (206 Partial Content)**:
+   - A rota pública `GET /videos/:id/stream` atende requisições de players HTML5.
+   - A API suporta o cabeçalho `Range: bytes=inicio-fim`, permitindo ao reprodutor buscar pedaços específicos (seek) instantaneamente sem precisar baixar o arquivo inteiro.
+
+4. **Download**:
+   - A rota `GET /videos/:id/download` permite baixar o arquivo original com o cabeçalho `Content-Disposition: attachment`.
 
 ---
 
-## 📋 Pré-requisitos
+## 📸 Demonstração de Funcionamento (Swagger & Streaming)
 
-- Docker e Docker Compose
-- Node.js v25+ (para rodar os testes E2E do Playwright no host)
-- npm
+Os prints abaixo comprovam o funcionamento real dos endpoints integrados da API e do streaming de vídeo:
 
-## 🏗️ Arquitetura
+### 1. Consulta de Metadados do Vídeo Processado (`GET /videos/{id}`)
+O vídeo é consultado via Swagger UI após o processamento assíncrono. Retorna status `ready`, duração calculada via FFmpeg (~30.5 segundos) e a chave da thumbnail gerada no MinIO:
 
-O projeto é um monorepo baseado em containers Docker. Cada subprojeto sobe sua própria stack via `docker compose`.
+![Consulta de Metadados do Vídeo via Swagger](docs/prints/img.png)
 
-- **Frontend** (Next.js 16, App Router + React Server Components) — interface da plataforma. Segue o **modelo BFF**: o navegador nunca chama a API NestJS diretamente; todo tráfego passa por Route Handlers same-origin em `app/api/**`, que fazem proxy server-side para a API.
-- **API** (NestJS 11) — regras de negócio, autenticação (JWT + refresh token rotation), envio de e-mails e acesso ao banco.
-- **Database** (PostgreSQL 17) — usuários, canais e tokens de autenticação.
-- **Email Service** (Mailpit) — captura os e-mails transacionais (confirmação de conta e recuperação de senha) em uma UI local.
-- **Video Worker** (FFmpeg) — processamento de vídeos *(planejado — Fase 03)*.
-- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails *(planejado — Fase 03)*.
-- **Message Queue** — fila de processamento de vídeos *(planejado — Fase 03)*.
+---
 
-O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.mermaid`.
+### 2. Download do Vídeo Original (`GET /videos/{id}/download`)
+Requisição de download através do Swagger UI, retornando status `200 OK`, `content-type: application/octet-stream` e cabeçalho `content-disposition` com o nome do arquivo original anexado:
 
-## 🚀 Como rodar
+![Download do Vídeo via Swagger](docs/prints/img_1.png)
 
-Os dois subprojetos têm stacks Docker **separadas**. Suba primeiro o backend, rode as migrations e depois o frontend.
+---
 
-### 1. Backend (NestJS + PostgreSQL + Mailpit)
+### 3. Streaming do Vídeo em Tempo Real (`GET /videos/{id}/stream`)
+O endpoint de stream acessado diretamente no navegador web. O player HTML5 nativo consome o vídeo através de requisições parciais (`206 Partial Content`), permitindo reprodução com barra de progresso, áudio e controles de reprodução:
+
+![Streaming do Vídeo no Navegador](docs/prints/img_2.png)
+
+---
+
+## 🧠 Desenvolvimento Orientado por IA (Workflow & Skills)
+
+O StreamTube adota uma abordagem pioneira de **Engenharia de Software Orientada por IA**. A inteligência artificial não atua apenas como autocompletar de código, mas como co-autora e ferramenta de produção guiada pelo desenvolvedor, que atua como **maestro do processo**: conduzindo o fluxo, refinando decisões, consultando documentação oficial de bibliotecas e garantindo a coerência dos artefatos.
+
+### 🔄 Pipeline do Workflow de Engenharia
+
+O ciclo de entrega de cada fase do projeto segue um pipeline estrito e iterativo:
+
+```
+┌───────────┐      ┌────────────┐      ┌──────────────┐      ┌─────────────────┐      ┌────────────────────┐
+│  Research │ ───> │   Decide   │ ───> │  Plan-Phase  │ ───> │ Implement-Phase │ ───> │ Definition of Done │
+│ (Pesquisa)│      │ (Decisões) │      │ (Plano e SIs)│      │  (Execução SI)  │      │  (Testes/Lint/TS)  │
+└───────────┘      └────────────┘      └──────────────┘      └─────────────────┘      └────────────────────┘
+```
+
+1. **`research` (Pesquisa Técnica):** Levantamento das capacidades e versões das bibliotecas no manifesto (`package.json`), investigando documentações oficiais (ex: MinIO S3 Client, BullMQ, Fluent-FFmpeg) antes de qualquer implementação.
+2. **`decide` (Decisões Técnicas Formais):** Análise crítica de alternativas de arquitetura, registrando prós, contras e motivações em documentos versionados (ex: `docs/decisions/technical-decisions-upload-processing.md`).
+3. **`plan-phase` (Planejamento da Fase):** Decomposição da fase em **Step Implementations (SIs)** atômicos e incrementais, especificando arquivos afetados, testes exigidos e critérios de conclusão (ex: `docs/phases/phase-03-upload/phase-03-upload.md`).
+4. **`implement-phase` (Implementação Iterativa):** Execução metódica SI por SI, aplicando testes contínuos e registrando o progresso em tempo real (`.progress.md`).
+5. **`Definition of Done`:** Nenhuma entrega é finalizada sem validação quádrupla: suíte completa de testes (unitários, integração e E2E), tipagem TypeScript estrita sem erros (`tsc --noEmit`), aprovação no linter (`eslint`) e build de produção.
+
+### 🧰 Catálogo de Skills e Sub-Agents
+
+A governança do projeto é suportada por um conjunto de **skills modulares** localizadas em `.claude/skills/` (com diretrizes adaptadas para Antigravity/Gemini em `GEMINI.md`):
+
+| Categoria | Skill | Finalidade |
+|-----------|-------|------------|
+| **Processo** | `research` | Conduz investigação técnica aprofundada de requisitos e bibliotecas de terceiros |
+| **Processo** | `decide` | Estrutura triagens arquiteturais e gera Technical Decisions (TDs) |
+| **Processo** | `plan-phase` | Gera planos de fase atômicos com especificação detalhada de cada Step Implementation |
+| **Processo** | `implement-phase` | Guia a execução dos SIs mantendo testes e arquivos de progresso atualizados |
+| **Domínio** | `nestjs-best-practices` | Garante padrões de injeção de dependência, módulos coesos e separação de responsabilidades |
+| **Domínio** | `typeorm` | Padroniza entidades, relacionamentos, migrações seguras e queries performáticas |
+| **Domínio** | `testing-guide-nestjs-project` | Governa a pirâmide de testes (Jest, mocks adequados, isolamento e E2E com Supertest) |
+
+### 🧭 Guia Prático: Como Usar as Skills na Ordem Correta
+
+O desenvolvedor sabe exatamente quando e como acionar cada skill seguindo a regra fundamental: **cada etapa consome os artefatos da etapa anterior e produz o artefato exigido pela próxima**. Nunca se implementa sem plano, e nunca se planeja sem decisões técnicas tomadas.
+
+| Ordem | Etapa / Ação | Entrada | Como Acionar a IA | Artefato Gerado (Saída) |
+|:-----:|--------------|---------|-------------------|--------------------------|
+| **1º** | **Pesquisa Técnica** | `docs/project-plan.md` (requisitos da fase) | *"Leia `.claude/skills/research/SKILL.md` e faça o research da fase X..."* (ou `/research <fase>`) | `docs/phases/<fase>/research.md` com APIs investigadas e dependências |
+| **2º** | **Tomada de Decisões** | Dúvidas arquiteturais levantadas no research | *"Leia `.claude/skills/decide/SKILL.md` e trie as decisões para os pontos X, Y e Z..."* (ou `/decide "..."`) | `docs/decisions/technical-decisions-<tema>.md` com todas as opções decididas |
+| **3º** | **Planejamento da Fase** | Technical Decisions decididas + plano do projeto | *"Leia `.claude/skills/plan-phase/SKILL.md` e crie o plano de implementação da fase X..."* (ou `/plan-phase <fase>`) | `docs/phases/<fase>/<fase>.md` e `<fase>.progress.md` com os SIs decompostos |
+| **4º** | **Implementação Iterativa** | Plano da fase com SIs atômicos | *"Leia `.claude/skills/implement-phase/SKILL.md` e execute o próximo SI pendente..."* (ou `/implement-phase`) | Código implementado, testes do SI passando e `.progress.md` atualizado |
+| **5º** | **Skills de Domínio** *(sob demanda)* | Contexto específico de desenvolvimento | A IA carrega automaticamente ou sob instrução (`nestjs-best-practices`, `typeorm`, `testing-guide`) | Código aderente aos padrões de NestJS, TypeORM e pirâmide de testes |
+| **6º** | **Validação Final (DoD)** | Todos os SIs marcados como concluídos | *"Execute a validação completa de testes, tsc, lint e build..."* | Suíte de testes 100% verde, `tsc` code 0, linter sem warnings |
+
+> [!TIP]
+> **Compatibilidade de Ferramentas de IA:** No **Claude Code**, as skills podem ser chamadas como slash commands nativos (`/research`, `/plan-phase`). Em outras ferramentas agênticas (como **Antigravity / Gemini CLI**), o fluxo é guiado pelo arquivo `GEMINI.md`, onde o desenvolvedor instrui a IA a ler o `SKILL.md` correspondente e executar seu protocolo.
+
+### 📂 Rastreabilidade e Transparência
+
+Toda a evolução do projeto e a atuação da IA permanecem auditáveis no repositório:
+- `docs/decisions/` — Registro histórico das decisões de engenharia tomadas.
+- `docs/phases/` — Planos de trabalho, requisitos e rastreamento de progresso de cada fase.
+- `GEMINI.md` / `CLAUDE.md` — Instruções, regras de arquitetura e convenções fornecidas aos agentes de IA.
+
+---
+
+## 🤝 Como Contribuir
+
+Contribuições são muito bem-vindas! Siga os passos abaixo para configurar o ambiente de desenvolvimento local, executar a suíte de testes e enviar alterações.
+
+### 📋 Pré-requisitos
+
+- [Docker](https://www.docker.com/) e Docker Compose instalados e em execução.
+- [Node.js](https://nodejs.org/) versão 20+ ou 22+ (caso queira executar ferramentas no host).
+- [Git](https://git-scm.com/).
+
+---
+
+### 🚀 Configurando o Ambiente Local
+
+1. **Clonar o Repositório:**
+   ```bash
+   git clone <URL_DO_REPOSITORIO>
+   cd mba-ia-greenfield-project
+   ```
+
+2. **Iniciar a Infraestrutura do Backend:**
+   A infraestrutura completa roda isolada em containers Docker Compose (PostgreSQL, Redis, MinIO, Mailpit e NestJS API):
+   ```bash
+   cd nestjs-project
+   docker compose up -d
+   ```
+
+3. **Instalar Dependências (dentro do container):**
+   ```bash
+   docker compose exec nestjs-api npm install
+   ```
+
+4. **Executar as Migrations do Banco de Dados:**
+   ```bash
+   docker compose exec nestjs-api npm run migration:run
+   ```
+
+5. **Iniciar o Servidor em Modo de Desenvolvimento (com Swagger):**
+   ```bash
+   docker compose exec -d -e SWAGGER_ENABLED=true nestjs-api npm run start:dev
+   ```
+
+Após a inicialização, os serviços estarão disponíveis nos seguintes endereços:
+- **Swagger UI:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+- **MinIO Console:** [http://localhost:9001](http://localhost:9001) *(login: `minioadmin` / `minioadmin`)*
+- **Mailpit Web UI:** [http://localhost:8025](http://localhost:8025)
+- **PostgreSQL:** `localhost:5432` *(db: `streamtube`, user: `streamtube`)*
+
+---
+
+### 🧪 Executando os Testes
+
+O projeto adota a pirâmide de testes e exige que todas as suítes estejam passando antes de aceitar qualquer alteração:
 
 ```bash
-cd nestjs-project
+# Testes Unitários e de Integração
+docker compose exec nestjs-api npm test
 
-# Sobe API, banco e Mailpit
-docker compose up -d
+# Testes de Integração específicos
+docker compose exec nestjs-api npm run test:integration
 
-# Instala dependências (apenas na primeira vez)
-docker compose exec nestjs-api npm install
+# Testes Ponta a Ponta (E2E)
+docker compose exec nestjs-api npm run test:e2e
 
-# Cria o schema do banco (obrigatório — synchronize está desabilitado)
-docker compose exec nestjs-api npm run migration:run
-
-# Sobe o servidor de desenvolvimento em watch mode
-docker compose exec -d nestjs-api npm run start:dev
+# Cobertura de Testes
+docker compose exec nestjs-api npm run test:cov
 ```
 
-Serviços disponíveis:
+---
 
-| Serviço | URL / Porta |
-|---------|-------------|
-| API NestJS | http://localhost:3000 |
-| PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
-| Mailpit (UI de e-mails) | http://localhost:8025 |
-| Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+### 🛡️ Definition of Done (Critérios de Qualidade)
 
-### 2. Frontend (Next.js)
+Antes de abrir qualquer Pull Request, certifique-se de que sua alteração atende integralmente aos 4 pilares da **Definition of Done**:
 
-```bash
-cd next-frontend
+1. **Testes Verificados:** A suíte relevante e todos os testes da aplicação passam sem falhas:
+   ```bash
+   docker compose exec nestjs-api npm test
+   docker compose exec nestjs-api npm run test:e2e
+   ```
+2. **Compilação TypeScript Limpa:** Zero erros de tipo:
+   ```bash
+   docker compose exec nestjs-api npx tsc --noEmit
+   ```
+3. **Linter e Formatação:** Código aprovado nas regras do ESLint:
+   ```bash
+   docker compose exec nestjs-api npm run lint
+   ```
+4. **Build de Produção:**
+   ```bash
+   docker compose exec nestjs-api npm run build
+   ```
 
-# Garanta que o .env.local existe (veja .env.example)
-# API_URL aponta para o backend; SESSION_PASSWORD protege a sessão (iron-session)
+---
 
-docker compose up -d
-docker compose exec next-frontend npm install        # apenas na primeira vez
-docker compose exec -d next-frontend npm run dev
-```
+### 🌿 Fluxo Git & Convenções de Branches
 
-A aplicação ficará disponível em **http://localhost:3001**.
-
-> As stacks são separadas, então o frontend acessa o backend via `host.docker.internal:3000` (configurado em `next-frontend/.env.local` e no `extra_hosts` do compose).
-
-## 🧪 Testes
-
-### Backend (Jest)
-
-```bash
-cd nestjs-project
-docker compose exec nestjs-api npm test               # unitários + integração
-docker compose exec nestjs-api npm run test:e2e       # end-to-end (HTTP via supertest)
-docker compose exec nestjs-api npm run test:cov       # cobertura
-```
-
-Sufixos: `*.spec.ts` (unitário), `*.integration-spec.ts` (integração com banco real), `*.e2e-spec.ts` (end-to-end). Testes de integração/e2e rodam com `--runInBand`.
-
-### Frontend (Vitest + Playwright)
-
-```bash
-cd next-frontend
-docker compose exec next-frontend npm test            # unitários + integração (Vitest + MSW)
-npx playwright test                                   # end-to-end (no host, com dev server em MSW_ENABLED=true)
-```
-
-Sufixos: `*.test.ts(x)` (unitário), `*.integration.test.ts(x)` (Route Handlers com MSW), `*.e2e-spec.ts` (Playwright). MSW intercepta as chamadas à API NestJS — os testes nunca batem no backend real.
-
-## ✅ Funcionalidades implementadas
-
-**Fase 01 — Configuração base** e **Fase 02 — Autenticação** estão concluídas (backend + frontend).
-
-### Autenticação (Fase 02)
-
-Fluxo completo de **cadastro → confirmação por e-mail → login → recuperação de senha**, com canal criado automaticamente para cada usuário (a partir do prefixo do e-mail).
-
-Endpoints da API (`nestjs-project`):
-
-| Método & Rota | Descrição |
-|---------------|-----------|
-| `POST /auth/register` | Cadastro de usuário (cria usuário + canal) |
-| `GET /auth/confirm-email?token=` | Confirmação de conta via link do e-mail |
-| `POST /auth/resend-confirmation` | Reenvio do e-mail de confirmação |
-| `POST /auth/login` | Login (retorna access + refresh token) |
-| `POST /auth/refresh` | Rotação de refresh token (com family + grace period) |
-| `POST /auth/logout` | Revoga os refresh tokens da sessão |
-| `POST /auth/forgot-password` | Solicita e-mail de recuperação de senha |
-| `POST /auth/reset-password` | Redefine a senha via token |
-| `GET /auth/me` | Dados do usuário autenticado (protegido por JWT) |
-
-Telas e Route Handlers BFF (`next-frontend`):
-
-- `/(auth)/signup`, `/(auth)/login`, `/(auth)/forgot-password` — formulários com React Hook Form + Zod e validação inline.
-- `app/api/auth/{signup,login,logout,forgot-password}` — proxy same-origin para a API.
-
-Segurança: senhas com **Argon2**, **JWT** com `JwtAuthGuard` global (opt-out via `@Public()`), **rotação de refresh token** com detecção de reuso, **rate limiting** (`ThrottlerGuard`) nos endpoints de auth, e sessão no navegador via **iron-session** (cookies HTTP-only).
-
-## 🛠️ Estrutura do Projeto
-
-```
-green-field-ia-project/
-├── docs/
-│   ├── project-plan.md                  # Planejamento geral do projeto
-│   ├── phases/                          # Planos e implementação por fase
-│   │   ├── phase-01-configuracao-base/
-│   │   ├── phase-02-auth/               # Auth (backend)
-│   │   └── phase-02-auth-frontend/      # Auth (frontend)
-│   └── diagrams/
-│       └── software-arch.mermaid        # Diagrama de arquitetura (C4)
-├── nestjs-project/                      # Backend API (NestJS 11)
-│   ├── src/
-│   │   ├── auth/                        # Cadastro, login, JWT, refresh, reset de senha
-│   │   ├── users/                       # Entidade e serviço de usuários
-│   │   ├── channels/                    # Canal 1:1 por usuário (nickname do e-mail)
-│   │   ├── mail/                        # Envio de e-mails (templates Handlebars)
-│   │   ├── common/                      # Filtros, pipes e exceptions de domínio
-│   │   ├── config/                      # Configs namespaced (Joi)
-│   │   └── database/                    # data-source, migrations e seeds
-│   ├── test/                            # Testes e2e
-│   ├── compose.yaml                     # Docker Compose (API + PostgreSQL + Mailpit)
-│   └── Dockerfile.dev
-├── next-frontend/                       # Frontend (Next.js 16, App Router)
-│   ├── app/                             # Rotas, layouts, páginas e Route Handlers BFF
-│   ├── components/                      # Componentes de auth, UI (shadcn) e ícones
-│   ├── lib/                             # env, api (openapi-fetch), auth/session
-│   ├── mocks/                           # MSW (handlers + server)
-│   ├── tests/                           # E2E (Playwright)
-│   ├── compose.yaml                     # Docker Compose (dev server)
-│   └── Dockerfile.dev
-├── CLAUDE.md                            # Instruções para IA
-├── FC Tube.fig                          # Design system do projeto (Figma)
-├── whiteboard.png                       # Quadro branco do projeto
-└── README.md
-```
-
-## 📚 Fases do Projeto
-
-| Fase | Descrição | Status |
-|------|-----------|--------|
-| **01** | Configuração Base do Projeto | ✅ Concluída |
-| **02** | Cadastro, Login e Gerenciamento de Conta | ✅ Concluída |
-| **03** | Upload e Processamento de Vídeos | ⏳ Planejada |
-| **04** | Gerenciamento de Vídeos e Canal | ⏳ Planejada |
-| **05** | Página de Visualização do Vídeo | ⏳ Planejada |
-| **06** | Interações Sociais (Likes, Comentários, Inscrições) | ⏳ Planejada |
-| **07** | Página Inicial, Busca e Finalização | ⏳ Planejada |
-
-Detalhes completos em `docs/project-plan.md`.
-
-## 📖 Stack Tecnológica
-
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, React Hook Form + Zod, iron-session, openapi-fetch |
-| Backend | NestJS 11, TypeScript, TypeORM, JWT, Argon2, Mailer (Handlebars) |
-| Banco de Dados | PostgreSQL 17 |
-| E-mail (dev) | Mailpit |
-| Containerização | Docker, Docker Compose |
-| Testes | Jest, Supertest (backend); Vitest, MSW, Playwright (frontend) |
-| Qualidade | ESLint, Prettier |
-</content>
+- **Branch principal estável:** `main` (nunca commitar diretamente nela).
+- **Branch de integração:** `dev` (todas as features e correções partem de `dev` e retornam para `dev`).
+- **Padrão de nomenclatura de branches:**
+  - `feature/<nome-da-funcionalidade>`
+  - `bugfix/<descricao-do-ajuste>`
+  - `hotfix/<correcao-critica>`
+  - `docs/<atualizacao-de-documentacao>`
+- **Commits:** Mensagens curtas, em modo imperativo, focadas no *porquê* da alteração (ex: `feat(videos): add http 206 range streaming support`).

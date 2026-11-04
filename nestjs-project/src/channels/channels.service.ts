@@ -9,11 +9,14 @@ const MAX_RETRIES = 5;
 
 function isPgUniqueViolationOnColumn(err: unknown, column: string): boolean {
   if (!(err instanceof QueryFailedError)) return false;
-  const e = err as any;
+  const driverError = err.driverError as unknown as {
+    code?: string;
+    detail?: string;
+  };
   return (
-    e.code === PG_UNIQUE_VIOLATION &&
-    typeof e.detail === 'string' &&
-    e.detail.includes(column)
+    driverError.code === PG_UNIQUE_VIOLATION &&
+    typeof driverError.detail === 'string' &&
+    driverError.detail.includes(column)
   );
 }
 
@@ -57,6 +60,12 @@ export class ChannelsService {
       throw new Error(
         'Nickname conflict could not be resolved after max retries',
       );
+    });
+  }
+
+  async findByUserId(userId: string): Promise<Channel | null> {
+    return this.dataSource.getRepository(Channel).findOne({
+      where: { user_id: userId },
     });
   }
 }

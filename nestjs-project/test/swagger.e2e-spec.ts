@@ -7,11 +7,15 @@ import { AppModule } from '../src/app.module';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { buildSwaggerConfig } from '../src/swagger/swagger-document';
+import { VideoProcessingProcessor } from '../src/video-worker/video-processing.processor';
 
 async function createApp(withSwagger: boolean): Promise<INestApplication<App>> {
   const moduleFixture = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    .overrideProvider(VideoProcessingProcessor)
+    .useValue({})
+    .compile();
 
   const app = moduleFixture.createNestApplication<INestApplication<App>>();
   app.useGlobalPipes(
