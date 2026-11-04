@@ -9,7 +9,6 @@ import {
 } from '../test/create-test-data-source';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
-import { TestingModule } from '@nestjs/testing';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken];
 

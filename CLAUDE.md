@@ -8,32 +8,43 @@ More info in the project overview: [docs/project-plan.md](docs/project-plan.md)
 
 ## Repository Structure
 
-This is a monorepo with two main areas:
+This is a monorepo with three main areas:
 
-- `nestjs-project/` — Backend API (NestJS 11, TypeScript, Express). Contains modules for users, channels, videos, comments, etc.
-- `docs/` — Project documentation, architecture diagrams, and planning.
-- `next-frontend/` (Next.js) — not yet initialized
+- `nestjs-project/` — Backend API and Background Worker (NestJS 11, TypeScript, Express, TypeORM, BullMQ). Contains modules for `auth/`, `users/`, `channels/`, `videos/`, `storage/`, `mail/`, `common/`, `config/`, `database/`, and `swagger/`.
+- `next-frontend/` — Frontend application (Next.js 16, App Router, BFF Route Handlers).
+- `docs/` — Project documentation, architecture diagrams (`docs/diagrams/`), technical decisions (`docs/decisions/`), and phase artifacts (`docs/phases/`).
 
 ## Architecture (C4 Container Diagram)
 
 See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 
-- **Frontend** (Next.js) → calls API via REST, streams from Object Storage
-- **API** (Nest.js) → business rules, auth, reads/writes DB, uploads to storage, publishes jobs to queue, sends emails
-- **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
-- **Database** (PostgreSQL) → users, channels, videos, comments, likes
-- **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
-- **Email Service** (SMTP) → account confirmation and password recovery
+- **Frontend** (Next.js) → calls API via REST, streams from API / Object Storage
+- **API** (`nestjs-api` — NestJS 11) → business rules, auth, reads/writes DB, orchestrates S3 multipart uploads, publishes jobs to BullMQ queue, streams byte ranges, sends emails
+- **Video Worker** (`video-worker` — NestJS headless context + FFmpeg/ffprobe) → consumes `process-video` jobs from BullMQ queue, probes video duration/dimensions/codec via `ffprobe`, extracts JPEG frame thumbnail via `ffmpeg`, uploads thumbnail to S3/MinIO, and updates video status in PostgreSQL
+- **Database** (`db` — PostgreSQL 17) → `users`, `channels`, `refresh_tokens`, `verification_tokens`, `videos`
+- **Object Storage** (`minio` — S3-compatible / MinIO) → bucket `streamtube-videos` storing raw videos (`videos/<videoId>/original.<ext>`) and thumbnails (`thumbnails/<videoId>/thumb.jpg`)
+- **Message Queue** (`redis` — Redis 7 + BullMQ) → `video-processing` job queue with exponential backoff retries
+- **Email Service** (`mailpit` — SMTP) → account confirmation and password recovery
+
+## Phase 03 — Video Upload, Processing & Streaming (`VideosModule`)
+
+- **Upload up to 10GB (Non-blocking):** Uses S3 Multipart Upload + presigned part URLs (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`). File bytes transfer directly between client and S3/MinIO without passing through the NestJS API process.
+- **Automatic Draft Pre-Registration:** `POST /videos/uploads/init` atomically creates a `Video` row with `status = 'draft'` linked to the authenticated user's `Channel`, assigns a conflict-free 11-character Base64URL `slug` (`[A-Za-z0-9_-]{11}`), initiates the S3 multipart upload, and returns presigned part URLs.
+- **Background Processing (`video-processing` queue):** `POST /videos/:id/uploads/complete` finalizes the S3 multipart object, transitions the video to `status = 'processing'`, and enqueues a `process-video` job in BullMQ (`attempts: 3`, exponential backoff). `VideoProcessor` (`src/videos/processing/video.processor.ts`) streams the file to scratch storage, runs `ffprobe` for `duration_seconds`, `width`, `height`, and `codec`, runs `ffmpeg` to extract a JPEG thumbnail frame uploaded to `thumbnails/<videoId>/thumb.jpg`, and transitions the video to `ready` (or `failed` with `processing_error` after retry exhaustion).
+- **Streaming & Download:**
+  - `GET /videos/:slug` — public video metadata, status, and URLs
+  - `GET /videos/:slug/stream` — RFC 9110 byte-range streaming (`206 Partial Content`, `Accept-Ranges: bytes`, `Content-Range`) without full file download
+  - `GET /videos/:slug/download` — full video download (`Content-Disposition: attachment`)
+  - `GET /videos/:slug/thumbnail` — JPEG thumbnail stream
 
 ## Docker Networking
 
-This project runs entirely in Docker containers. When configuring connections between services (database, cache, queue, etc.), **always use the Docker Compose service name** as the host — never `localhost` or `127.0.0.1`.
+This project runs entirely in Docker containers. When configuring connections between services (database, cache, queue, object storage, etc.), **always use the Docker Compose service name** as the host — never `localhost` or `127.0.0.1`.
 
-Inside a container, `localhost` refers to the container itself, not the host machine or other containers. Services communicate through the Docker Compose network using their service names (e.g., `db`, `nestjs-api`).
+Inside a container, `localhost` refers to the container itself, not the host machine or other containers. Services communicate through the Docker Compose network using their service names (`db`, `redis`, `minio`, `mailpit`, `nestjs-api`, `video-worker`).
 
-- **Correct:** `DB_HOST=db` (the Compose service name)
-- **Wrong:** `DB_HOST=localhost`
+- **Correct:** `DB_HOST=db`, `REDIS_HOST=redis`, `S3_ENDPOINT=http://minio:9000`
+- **Wrong:** `DB_HOST=localhost`, `REDIS_HOST=localhost`, `S3_ENDPOINT=http://localhost:9000`
 
 This applies to all environment variables, configuration files, and code that references service hosts.
 
@@ -56,14 +67,13 @@ A change is only considered complete when **all** of the following pass:
 
 If any of these fails, the task is not done — fix the underlying issue before declaring completion.
 
-
 ## Git Conventions
 
 - **Main branch:** `main` — never commit directly to it
 - Branches: `feature/*`, `bugfix/*`, `hotfix/*`, `docs/*`
 - **Commits:** short, descriptive messages focused on the "why" of the change
 - **Workflow:** Git Flow conventions. Two long-lived branches:
-  - `main` — stable, production-ready code 
+  - `main` — stable, production-ready code
   - `dev` — integration branch; all feature/bugfix/hotfix branches start from `dev` and merge back into `dev`
   - When `dev` is stable, it is merged into `main`
 
@@ -81,9 +91,9 @@ Every change must be tested. During development, run only the tests related to t
 
 ## Agent Skill Usage
 
-When working on any task (planning, implementing, debugging, refactoring, 
-reviewing, etc.), decompose the request into its underlying subtasks and 
-concerns, then identify which available skills match any of them and activate 
+When working on any task (planning, implementing, debugging, refactoring,
+reviewing, etc.), decompose the request into its underlying subtasks and
+concerns, then identify which available skills match any of them and activate
 those skills.
 
 ## Library Documentation Lookup

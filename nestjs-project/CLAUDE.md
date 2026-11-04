@@ -2,7 +2,7 @@
 
 ## Environment Startup Verification
 
-**Default behavior:** starting the environment means starting **only infrastructure services** (database, mail, etc.) — **never** start the NestJS application server unless the user explicitly asks to run/serve the project (e.g., "rode o projeto", "suba o servidor", "run the app").
+**Default behavior:** starting the environment means starting **only infrastructure services** (database, mail, redis, minio, worker, etc.) — **never** start the NestJS application server unless the user explicitly asks to run/serve the project (e.g., "rode o projeto", "suba o servidor", "run the app").
 
 After starting infrastructure, always confirm the containers are up before proceeding:
 
@@ -13,6 +13,9 @@ docker compose ps   # all services must show status "running"
 Then verify each infrastructure service is actually ready to accept connections — not just running:
 
 - **PostgreSQL:** `docker compose exec db pg_isready -U streamtube` — expect `accepting connections`
+- **Redis:** `docker compose exec redis redis-cli ping` — expect `PONG`
+- **MinIO:** `docker compose exec minio mc ready local` — expect exit code 0
+- **FFmpeg (inside API/Worker):** `docker compose exec nestjs-api ffmpeg -version` — expect exit code 0
 
 Only start the NestJS dev server (`npm run start:dev`) when the user **explicitly** asks to run the application — never as part of "start the environment".
 
@@ -27,13 +30,20 @@ docker compose up -d
 # Install dependencies (first time only)
 docker compose exec nestjs-api npm install
 
+# Run database migrations
+docker compose exec nestjs-api npm run migration:run
+
 # Run the dev server (watch mode)
 docker compose exec nestjs-api npm run start:dev
 ```
 
 Services:
 - `nestjs-api` — NestJS API, port `3000`
+- `video-worker` — Headless NestJS BullMQ worker (`src/worker.ts`) with FFmpeg/ffprobe
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `redis` — Redis 7 (`redis:7-alpine`), port `6379`, backing the `video-processing` BullMQ queue
+- `minio` — MinIO S3-compatible object storage, API port `9000`, Console port `9001`, credentials `minioadmin`/`minioadmin`, bucket `streamtube-videos`
+- `mailpit` — Mailpit SMTP (`1025`) and Web UI (`8025`)
 
 All verification and teardown commands run on the **host machine**:
 
@@ -44,8 +54,12 @@ curl http://localhost:3000
 # Verify PostgreSQL is ready (runs inside the db container)
 docker compose exec db pg_isready -U streamtube
 
+# Verify Redis is ready
+docker compose exec redis redis-cli ping
+
 # Check container logs
 docker compose logs nestjs-api
+docker compose logs video-worker
 docker compose logs db
 
 # Tear down the entire environment
@@ -54,19 +68,22 @@ docker compose down
 
 ## Commands
 
-**Strict rule:** every `npm`, `npx`, `node`, `tsc`, and test command runs **inside the container**, never on the host. Running on the host causes env-var divergence (`DB_HOST` resolves to `localhost` instead of the Compose service), uses a different Node version, and produces results that do not reflect what runs in CI/prod.
+**Strict rule:** every `npm`, `npx`, `node`, `tsc`, and test command runs **inside the container**, never on the host. Running on the host causes env-var divergence (`DB_HOST`, `REDIS_HOST`, `S3_ENDPOINT` resolve to `localhost` instead of Compose services), uses a different Node version, and produces results that do not reflect what runs in CI/prod.
 
 ### Container-only commands (always prefix with `docker compose exec nestjs-api`)
 
 ```bash
 npm run start:dev                        # Dev server with hot-reload
+npm run start:worker:dev                 # Video worker in watch mode
 npm run build                            # Compile to dist/
-npm run start:prod                       # Run compiled build
+npm run start:prod                       # Run compiled API build
+npm run start:worker                     # Run compiled worker build
+npm run openapi:export                   # Export OpenAPI spec to openapi.json
 
-npm test                                 # Unit tests
-npm run test:watch                       # Unit tests in watch mode
+npm test -- --runInBand                  # Unit + integration tests
+npm run test:watch                       # Tests in watch mode
 npm run test:cov                         # Coverage report
-npm run test:e2e                         # End-to-end tests (always with --runInBand)
+npm run test:e2e                         # End-to-end tests
 
 npx tsc --noEmit                         # Type-check (required before declaring a task done)
 npm run lint                             # ESLint with auto-fix
@@ -78,28 +95,30 @@ npm run format                           # Prettier formatting
 ```bash
 docker compose ps
 docker compose logs nestjs-api
+docker compose logs video-worker
 docker compose exec db pg_isready -U streamtube
+docker compose exec redis redis-cli ping
 curl http://localhost:3000
 ```
 
 ### Test execution
 
-Integration and e2e suites share a single test database. They **must** be run with `--runInBand`:
+Integration and e2e suites share a single test database, Redis instance, and MinIO bucket. They **must** be run with `--runInBand`:
 
 ```bash
 docker compose exec nestjs-api npm test -- --runInBand
 docker compose exec nestjs-api npm run test:e2e   # already configured
 ```
 
-Parallel execution causes FK violations, deadlocks, and cross-suite contamination because suites truncate or seed shared tables concurrently.
+Parallel execution causes FK violations, deadlocks, and cross-suite contamination because suites truncate or seed shared tables concurrently. Note that `queue.config.ts` automatically namespaces the BullMQ prefix to `bull-test` when `NODE_ENV=test` so the background `video-worker` container (`prefix: 'bull'`) never races with test suites.
 
 During active development, run only the tests related to the file being changed (`npm test -- path/to/file.spec.ts`). Before declaring a task done, run the full suite — see the global `CLAUDE.md` → "Definition of Done (Technical)".
 
 ## Long-running Processes
 
-Commands that never exit (dev server, watch modes) must be run in background in the Bash tool — otherwise the agent blocks indefinitely waiting for the process to return.
+Commands that never exit (dev server, worker watch mode, test watch mode) must be run in background — otherwise the agent blocks indefinitely waiting for the process to return.
 
-This applies to: `start:dev`, `start:prod`, `test:watch`, and any other persistent process.
+This applies to: `start:dev`, `start:prod`, `start:worker:dev`, `start:worker`, `test:watch`, and any other persistent process.
 
 ## Test Type Selection
 
@@ -108,10 +127,10 @@ Choose the suffix by what the test really does, not by where the code under test
 | Suffix                  | Purpose                                                              | DB / external I/O | Location                     |
 |-------------------------|----------------------------------------------------------------------|-------------------|------------------------------|
 | `*.spec.ts`             | **Unit** — pure logic, all collaborators mocked                      | Forbidden         | Next to the source file      |
-| `*.integration-spec.ts` | **Integration** — exercises real DB, real repositories, real modules | Required          | Next to the source file      |
+| `*.integration-spec.ts` | **Integration** — exercises real DB, Redis, MinIO, FFmpeg, modules   | Required          | Next to the source file      |
 | `*.e2e-spec.ts`         | **End-to-end** — full HTTP cycle via `supertest`                     | Required          | `nestjs-project/test/`       |
 
-A test that constructs a `TypeOrmModule.forRoot`, opens a connection, or hits the `db` service **must** be `*.integration-spec.ts`, never `*.spec.ts`. A test that boots the full Nest application and makes HTTP calls **must** be `*.e2e-spec.ts`.
+A test that constructs a `TypeOrmModule.forRoot`, opens a connection, or hits `db`, `redis`, or `minio` **must** be `*.integration-spec.ts`, never `*.spec.ts`. A test that boots the full Nest application and makes HTTP calls **must** be `*.e2e-spec.ts`.
 
 Conventions for **how to write** each kind of test (mocking patterns, AAA structure, override strategies for global guards, etc.) live in `.claude/rules/nestjs-testing.md` and load when you edit a test file.
 
@@ -119,8 +138,9 @@ Conventions for **how to write** each kind of test (mocking patterns, AAA struct
 
 These settings are required in `package.json` (jest config) and `test/jest-e2e.json` for the project's tests to work correctly:
 
-- `setupFiles: ["dotenv/config"]` — without this, `.env` is not loaded inside the Jest process. `DB_HOST`, `JWT_SECRET`, etc. fall back to undefined or to the host's `localhost`, breaking container-to-container DNS.
+- `setupFiles: ["dotenv/config"]` — without this, `.env` is not loaded inside the Jest process. `DB_HOST`, `REDIS_HOST`, `S3_ENDPOINT`, `JWT_SECRET`, etc. fall back to undefined or to the host's `localhost`, breaking container-to-container DNS.
 - `testRegex: '.*\\.(spec|integration-spec)\\.ts$'` — covers both unit (`*.spec.ts`) and integration (`*.integration-spec.ts`) suffixes.
+- `testTimeout: 30000` — accommodates TypeORM schema sync, MinIO multipart uploads, and FFmpeg child processes in integration/E2E tests.
 
 Do not add new test-file suffixes; if a new test type is needed, update the regex deliberately.
 
@@ -146,8 +166,12 @@ Whenever possible, prefer storing only the bare address in `.env` and composing 
 
 NestJS with standard module structure. Source lives in `src/`, compiled output in `dist/`.
 
-- Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
-- Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
+- `src/auth/` — Registration, email confirmation, login, JWT access/refresh rotation, logout, password reset (`JwtAuthGuard` global via `APP_GUARD`, `@Public()` opt-out)
+- `src/users/` — `User` entity and `UsersService`
+- `src/channels/` — `Channel` entity (1:1 per user) and `ChannelsService` (`createChannel`, `findByUserId`)
+- `src/storage/` — `StorageService` wrapping `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` (auto bucket provisioning, multipart upload lifecycle, presigned part URLs, byte-range streaming)
+- `src/videos/` — `Video` entity (`draft | processing | ready | failed`), 11-char Base64URL `slug` generator, `VideosService`, `VideosController`, `MediaProbeService` (`ffprobe`/`ffmpeg`), and `VideoProcessor` (`@Processor('video-processing')`)
+- `src/worker.ts` & `src/worker.module.ts` — Standalone worker entrypoint (`NestFactory.createApplicationContext(WorkerModule)`) executed by the `video-worker` container
 
 ## Code Conventions
 

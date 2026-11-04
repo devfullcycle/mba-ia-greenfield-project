@@ -1,217 +1,85 @@
-# StreamTube — Plataforma de Compartilhamento de Vídeos
+# StreamTube
 
-Projeto da disciplina **Desenvolvimento de Aplicações de IA** do MBA de Engenharia de Software com IA da [Full Cycle](https://fullcycle.com.br).
+Plataforma de compartilhamento de videos desenvolvida no MBA de Engenharia de Software com IA da Full Cycle.
 
-Este é um projeto greenfield desenvolvido para demonstrar como construir uma aplicação do zero utilizando IA de forma adequada no processo de desenvolvimento.
+## Arquitetura
 
-## Professor
+Monorepo rodando em containers Docker:
 
-<a href="https://github.com/argentinaluiz">
-    <img src="https://avatars.githubusercontent.com/u/4926329?v=4?s=100" width="100px;" alt=""/>
-    <br />
-    <sub>
-        <b>Luiz Carlos</b>
-    </sub>
-</a>
+- `nestjs-project/` — Backend em NestJS 11, TypeORM, PostgreSQL 17, Redis 7 (BullMQ), MinIO (S3) e worker dedicado com FFmpeg.
+- `next-frontend/` — Frontend em Next.js 16 (App Router + BFF) para as telas de autenticacao.
+- `docs/` — Decisoes tecnicas (`docs/decisions/`), diagramas e artefatos de planejamento por fase (`docs/phases/`).
 
----
-
-## Quadro Branco
-
-- [Quadro Branco](./whiteboard.png)
-
----
-
-## 🎨 Design System (Figma)
-
-- [FC Tube.fig](./FC%20Tube.fig) — arquivo-fonte do **design system** do projeto no Figma.
-- [FC Tube sem padrão.fig](./FC%20Tube%20sem%20padrao.fig) — arquivo-fonte puro, sem tokens, cores, tipografia e espaçamento.
-
-Contém os fundamentos visuais do StreamTube — tokens (cores, tipografia, espaçamento, raios), componentes e as telas da plataforma. É a referência de design para a implementação do frontend: os componentes em `next-frontend/components/ui` (shadcn) e os tokens em `next-frontend/app/globals.css` derivam deste arquivo. Abra-o no Figma (`Arquivo → Importar`) para consultar especificações e estados visuais.
-
----
-
-## 📋 Pré-requisitos
-
-- Docker e Docker Compose
-- Node.js v25+ (para rodar os testes E2E do Playwright no host)
-- npm
-
-## 🏗️ Arquitetura
-
-O projeto é um monorepo baseado em containers Docker. Cada subprojeto sobe sua própria stack via `docker compose`.
-
-- **Frontend** (Next.js 16, App Router + React Server Components) — interface da plataforma. Segue o **modelo BFF**: o navegador nunca chama a API NestJS diretamente; todo tráfego passa por Route Handlers same-origin em `app/api/**`, que fazem proxy server-side para a API.
-- **API** (NestJS 11) — regras de negócio, autenticação (JWT + refresh token rotation), envio de e-mails e acesso ao banco.
-- **Database** (PostgreSQL 17) — usuários, canais e tokens de autenticação.
-- **Email Service** (Mailpit) — captura os e-mails transacionais (confirmação de conta e recuperação de senha) em uma UI local.
-- **Video Worker** (FFmpeg) — processamento de vídeos *(planejado — Fase 03)*.
-- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails *(planejado — Fase 03)*.
-- **Message Queue** — fila de processamento de vídeos *(planejado — Fase 03)*.
-
-O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.mermaid`.
-
-## 🚀 Como rodar
-
-Os dois subprojetos têm stacks Docker **separadas**. Suba primeiro o backend, rode as migrations e depois o frontend.
-
-### 1. Backend (NestJS + PostgreSQL + Mailpit)
+## Como rodar o Backend
 
 ```bash
 cd nestjs-project
 
-# Sobe API, banco e Mailpit
+# Sobe os containers (API, worker, Postgres, Redis, MinIO e Mailpit)
 docker compose up -d
 
-# Instala dependências (apenas na primeira vez)
+# Instala as dependencias
 docker compose exec nestjs-api npm install
 
-# Cria o schema do banco (obrigatório — synchronize está desabilitado)
+# Executa as migrations no banco
 docker compose exec nestjs-api npm run migration:run
 
-# Sobe o servidor de desenvolvimento em watch mode
+# Inicia a API em modo dev
 docker compose exec -d nestjs-api npm run start:dev
 ```
 
-Serviços disponíveis:
+Servicos disponiveis:
+- API NestJS: `http://localhost:3000`
+- Swagger (com `SWAGGER_ENABLED=true`): `http://localhost:3000/api/docs`
+- MinIO Console: `http://localhost:9001` (`minioadmin` / `minioadmin`)
+- Mailpit UI: `http://localhost:8025`
+- PostgreSQL: `localhost:5432` (`streamtube` / `streamtube`)
+- Redis: `localhost:6379`
 
-| Serviço | URL / Porta |
-|---------|-------------|
-| API NestJS | http://localhost:3000 |
-| PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
-| Mailpit (UI de e-mails) | http://localhost:8025 |
-| Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+## Testes e Qualidade
 
-### 2. Frontend (Next.js)
-
-```bash
-cd next-frontend
-
-# Garanta que o .env.local existe (veja .env.example)
-# API_URL aponta para o backend; SESSION_PASSWORD protege a sessão (iron-session)
-
-docker compose up -d
-docker compose exec next-frontend npm install        # apenas na primeira vez
-docker compose exec -d next-frontend npm run dev
-```
-
-A aplicação ficará disponível em **http://localhost:3001**.
-
-> As stacks são separadas, então o frontend acessa o backend via `host.docker.internal:3000` (configurado em `next-frontend/.env.local` e no `extra_hosts` do compose).
-
-## 🧪 Testes
-
-### Backend (Jest)
+Todos os comandos rodam dentro do container `nestjs-api`:
 
 ```bash
 cd nestjs-project
-docker compose exec nestjs-api npm test               # unitários + integração
-docker compose exec nestjs-api npm run test:e2e       # end-to-end (HTTP via supertest)
-docker compose exec nestjs-api npm run test:cov       # cobertura
+
+# Testes unitarios e de integracao
+docker compose exec nestjs-api npm test -- --runInBand
+
+# Testes E2E
+docker compose exec nestjs-api npm run test:e2e
+
+# Typecheck e Lint
+docker compose exec nestjs-api npx tsc --noEmit
+docker compose exec nestjs-api npm run lint
 ```
 
-Sufixos: `*.spec.ts` (unitário), `*.integration-spec.ts` (integração com banco real), `*.e2e-spec.ts` (end-to-end). Testes de integração/e2e rodam com `--runInBand`.
+## Funcionalidades entregues
 
-### Frontend (Vitest + Playwright)
+### Fase 01 e Fase 02 — Configuracao Base, Autenticacao e Canais
+- Cadastro de usuario com criacao automatica de canal (nickname gerado pelo prefixo do e-mail)
+- Confirmacao de conta e recuperacao de senha por e-mail (Mailpit + Handlebars)
+- Login com JWT e rotacao de refresh token
+- Rate limiting e padronizacao de erros de dominio
 
-```bash
-cd next-frontend
-docker compose exec next-frontend npm test            # unitários + integração (Vitest + MSW)
-npx playwright test                                   # end-to-end (no host, com dev server em MSW_ENABLED=true)
-```
+### Fase 03 — Upload e Processamento de Videos
+- Armazenamento de videos e thumbnails no MinIO/S3 (`StorageModule`)
+- Upload multipart via URLs pre-assinadas suportando arquivos de ate 10GB sem travar a API
+- Pre-cadastro automatico do video como rascunho (`draft`) ao iniciar o upload e geracao de URL unica (`slug`) sem conflito
+- Fila de processamento assincrono com BullMQ e Redis (`video-processing`)
+- Worker dedicado (`video-worker`) com `ffprobe` e `ffmpeg` para extrair duracao, resolucao, codec e gerar thumbnail JPEG automatica a partir de um frame
+- Reproducao via streaming com suporte a HTTP Range (`206 Partial Content`) sem precisar baixar o arquivo inteiro
+- Download do video completo (`Content-Disposition: attachment`)
 
-Sufixos: `*.test.ts(x)` (unitário), `*.integration.test.ts(x)` (Route Handlers com MSW), `*.e2e-spec.ts` (Playwright). MSW intercepta as chamadas à API NestJS — os testes nunca batem no backend real.
+### Endpoints de Videos (`nestjs-project`)
 
-## ✅ Funcionalidades implementadas
-
-**Fase 01 — Configuração base** e **Fase 02 — Autenticação** estão concluídas (backend + frontend).
-
-### Autenticação (Fase 02)
-
-Fluxo completo de **cadastro → confirmação por e-mail → login → recuperação de senha**, com canal criado automaticamente para cada usuário (a partir do prefixo do e-mail).
-
-Endpoints da API (`nestjs-project`):
-
-| Método & Rota | Descrição |
+| Metodo & Rota | Descricao |
 |---------------|-----------|
-| `POST /auth/register` | Cadastro de usuário (cria usuário + canal) |
-| `GET /auth/confirm-email?token=` | Confirmação de conta via link do e-mail |
-| `POST /auth/resend-confirmation` | Reenvio do e-mail de confirmação |
-| `POST /auth/login` | Login (retorna access + refresh token) |
-| `POST /auth/refresh` | Rotação de refresh token (com family + grace period) |
-| `POST /auth/logout` | Revoga os refresh tokens da sessão |
-| `POST /auth/forgot-password` | Solicita e-mail de recuperação de senha |
-| `POST /auth/reset-password` | Redefine a senha via token |
-| `GET /auth/me` | Dados do usuário autenticado (protegido por JWT) |
-
-Telas e Route Handlers BFF (`next-frontend`):
-
-- `/(auth)/signup`, `/(auth)/login`, `/(auth)/forgot-password` — formulários com React Hook Form + Zod e validação inline.
-- `app/api/auth/{signup,login,logout,forgot-password}` — proxy same-origin para a API.
-
-Segurança: senhas com **Argon2**, **JWT** com `JwtAuthGuard` global (opt-out via `@Public()`), **rotação de refresh token** com detecção de reuso, **rate limiting** (`ThrottlerGuard`) nos endpoints de auth, e sessão no navegador via **iron-session** (cookies HTTP-only).
-
-## 🛠️ Estrutura do Projeto
-
-```
-green-field-ia-project/
-├── docs/
-│   ├── project-plan.md                  # Planejamento geral do projeto
-│   ├── phases/                          # Planos e implementação por fase
-│   │   ├── phase-01-configuracao-base/
-│   │   ├── phase-02-auth/               # Auth (backend)
-│   │   └── phase-02-auth-frontend/      # Auth (frontend)
-│   └── diagrams/
-│       └── software-arch.mermaid        # Diagrama de arquitetura (C4)
-├── nestjs-project/                      # Backend API (NestJS 11)
-│   ├── src/
-│   │   ├── auth/                        # Cadastro, login, JWT, refresh, reset de senha
-│   │   ├── users/                       # Entidade e serviço de usuários
-│   │   ├── channels/                    # Canal 1:1 por usuário (nickname do e-mail)
-│   │   ├── mail/                        # Envio de e-mails (templates Handlebars)
-│   │   ├── common/                      # Filtros, pipes e exceptions de domínio
-│   │   ├── config/                      # Configs namespaced (Joi)
-│   │   └── database/                    # data-source, migrations e seeds
-│   ├── test/                            # Testes e2e
-│   ├── compose.yaml                     # Docker Compose (API + PostgreSQL + Mailpit)
-│   └── Dockerfile.dev
-├── next-frontend/                       # Frontend (Next.js 16, App Router)
-│   ├── app/                             # Rotas, layouts, páginas e Route Handlers BFF
-│   ├── components/                      # Componentes de auth, UI (shadcn) e ícones
-│   ├── lib/                             # env, api (openapi-fetch), auth/session
-│   ├── mocks/                           # MSW (handlers + server)
-│   ├── tests/                           # E2E (Playwright)
-│   ├── compose.yaml                     # Docker Compose (dev server)
-│   └── Dockerfile.dev
-├── CLAUDE.md                            # Instruções para IA
-├── FC Tube.fig                          # Design system do projeto (Figma)
-├── whiteboard.png                       # Quadro branco do projeto
-└── README.md
-```
-
-## 📚 Fases do Projeto
-
-| Fase | Descrição | Status |
-|------|-----------|--------|
-| **01** | Configuração Base do Projeto | ✅ Concluída |
-| **02** | Cadastro, Login e Gerenciamento de Conta | ✅ Concluída |
-| **03** | Upload e Processamento de Vídeos | ⏳ Planejada |
-| **04** | Gerenciamento de Vídeos e Canal | ⏳ Planejada |
-| **05** | Página de Visualização do Vídeo | ⏳ Planejada |
-| **06** | Interações Sociais (Likes, Comentários, Inscrições) | ⏳ Planejada |
-| **07** | Página Inicial, Busca e Finalização | ⏳ Planejada |
-
-Detalhes completos em `docs/project-plan.md`.
-
-## 📖 Stack Tecnológica
-
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, React Hook Form + Zod, iron-session, openapi-fetch |
-| Backend | NestJS 11, TypeScript, TypeORM, JWT, Argon2, Mailer (Handlebars) |
-| Banco de Dados | PostgreSQL 17 |
-| E-mail (dev) | Mailpit |
-| Containerização | Docker, Docker Compose |
-| Testes | Jest, Supertest (backend); Vitest, MSW, Playwright (frontend) |
-| Qualidade | ESLint, Prettier |
-</content>
+| `POST /videos/uploads/init` | Inicia upload multipart (ate 10GB), cria rascunho e retorna URLs pre-assinadas |
+| `POST /videos/:id/uploads/parts` | Assina URL para envio de uma parte especifica do upload |
+| `POST /videos/:id/uploads/complete` | Finaliza o upload no S3 e enfileira o processamento no BullMQ |
+| `DELETE /videos/:id/uploads/abort` | Cancela o upload em rascunho |
+| `GET /videos/:slug` | Consulta metadados, status e URLs do video pela URL unica |
+| `GET /videos/:slug/stream` | Streaming do video com suporte a `Range` (`206 Partial Content`) |
+| `GET /videos/:slug/download` | Download do arquivo de video pelo usuario |
+| `GET /videos/:slug/thumbnail` | Retorna a thumbnail JPEG gerada pelo worker |

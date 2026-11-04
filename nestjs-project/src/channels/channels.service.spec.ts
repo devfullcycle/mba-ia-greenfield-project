@@ -1,8 +1,10 @@
-import { QueryFailedError } from 'typeorm';
+import { DataSource, QueryFailedError } from 'typeorm';
 import { ChannelsService } from './channels.service';
 import { Channel } from './entities/channel.entity';
 
-function makeManager(overrides: Record<string, jest.Mock> = {}): any {
+type MockManager = Record<string, jest.Mock>;
+
+function makeManager(overrides: MockManager = {}): MockManager {
   return {
     findOne: jest.fn(),
     create: jest.fn(),
@@ -24,19 +26,50 @@ function makeChannel(nickname: string): Channel {
 }
 
 function makeUniqueError(): QueryFailedError {
-  const err = new QueryFailedError('INSERT', [], new Error()) as any;
-  err.code = '23505';
-  err.detail = 'Key (nickname)=(abc) already exists.';
-  return err;
+  return Object.assign(new QueryFailedError('INSERT', [], new Error()), {
+    code: '23505',
+    detail: 'Key (nickname)=(abc) already exists.',
+  });
 }
 
-function makeDataSource(manager: any): any {
+function makeDataSource(manager: MockManager): DataSource {
   return {
-    transaction: jest.fn((cb: (manager: any) => Promise<any>) => cb(manager)),
-  };
+    transaction: jest.fn((cb: (manager: MockManager) => Promise<unknown>) =>
+      cb(manager),
+    ),
+    getRepository: jest.fn().mockReturnValue(manager),
+  } as unknown as DataSource;
 }
 
 describe('ChannelsService', () => {
+  describe('findByUserId', () => {
+    it('returns the channel when found for userId', async () => {
+      const channel = makeChannel('mychannel');
+      const manager = makeManager({
+        findOne: jest.fn().mockResolvedValue(channel),
+      });
+      const service = new ChannelsService(makeDataSource(manager));
+
+      const result = await service.findByUserId('user-id');
+
+      expect(manager.findOne).toHaveBeenCalledWith({
+        where: { user_id: 'user-id' },
+      });
+      expect(result).toBe(channel);
+    });
+
+    it('returns null when no channel exists for userId', async () => {
+      const manager = makeManager({
+        findOne: jest.fn().mockResolvedValue(null),
+      });
+      const service = new ChannelsService(makeDataSource(manager));
+
+      const result = await service.findByUserId('missing-user');
+
+      expect(result).toBeNull();
+    });
+  });
+
   describe('createChannel', () => {
     it('derives nickname from email prefix and saves when no collision', async () => {
       const channel = makeChannel('test');
