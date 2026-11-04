@@ -32,12 +32,16 @@ describe('StorageService (unit)', () => {
   };
 
   let service: StorageService;
-  let sendSpy: jest.SpyInstance;
+  let sendSpy: jest.SpyInstance<Promise<unknown>, [command: unknown]>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     service = new StorageService(mockConfig);
-    sendSpy = jest.spyOn((service as any).s3Client as S3Client, 'send');
+    const internals = service as unknown as { s3Client: S3Client };
+    sendSpy = jest.spyOn(
+      internals.s3Client,
+      'send',
+    ) as unknown as typeof sendSpy;
   });
 
   describe('ensureBucketExists', () => {
@@ -68,7 +72,7 @@ describe('StorageService (unit)', () => {
 
   describe('multipart upload lifecycle', () => {
     beforeEach(() => {
-      (service as any).bucketVerified = true;
+      (service as unknown as { bucketVerified: boolean }).bucketVerified = true;
     });
 
     it('createMultipartUpload sends CreateMultipartUploadCommand and returns UploadId', async () => {
@@ -141,7 +145,7 @@ describe('StorageService (unit)', () => {
 
   describe('object operations', () => {
     beforeEach(() => {
-      (service as any).bucketVerified = true;
+      (service as unknown as { bucketVerified: boolean }).bucketVerified = true;
     });
 
     it('putObject sends PutObjectCommand', async () => {

@@ -1,3 +1,4 @@
+import type { ValidationError } from 'joi';
 import { envValidationSchema } from './env.validation';
 
 const requiredEnv = {
@@ -8,7 +9,9 @@ const requiredEnv = {
   JWT_REFRESH_SECRET: 'refresh-secret',
 };
 
-const validate = (env: Record<string, string>) =>
+const validate = (
+  env: Record<string, string>,
+): { value: Record<string, unknown>; error?: ValidationError } =>
   envValidationSchema.validate(
     { ...requiredEnv, ...env },
     { allowUnknown: true, abortEarly: false },

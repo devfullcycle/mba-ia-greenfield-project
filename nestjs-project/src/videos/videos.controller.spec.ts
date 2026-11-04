@@ -1,4 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
+import type { Response } from 'express';
 import { PassThrough, Readable } from 'node:stream';
 import { VideoStatus } from './entities/video.entity';
 import { VideosController } from './videos.controller';
@@ -114,7 +115,10 @@ describe('VideosController (unit)', () => {
 
     const headers: Record<string, string> = {};
     let statusCode = 0;
-    const resStream = new PassThrough() as any;
+    const resStream = new PassThrough() as PassThrough & {
+      setHeader: jest.Mock;
+      status: jest.Mock;
+    };
     resStream.setHeader = jest.fn((k: string, v: string) => {
       headers[k] = v;
     });
@@ -123,7 +127,11 @@ describe('VideosController (unit)', () => {
       return resStream;
     });
 
-    await controller.streamVideo('Slug1234567', 'bytes=0-9', resStream);
+    await controller.streamVideo(
+      'Slug1234567',
+      'bytes=0-9',
+      resStream as unknown as Response,
+    );
 
     expect(statusCode).toBe(HttpStatus.PARTIAL_CONTENT);
     expect(headers['Accept-Ranges']).toBe('bytes');
@@ -143,7 +151,10 @@ describe('VideosController (unit)', () => {
 
     const headers: Record<string, string> = {};
     let statusCode = 0;
-    const resStream = new PassThrough() as any;
+    const resStream = new PassThrough() as PassThrough & {
+      setHeader: jest.Mock;
+      status: jest.Mock;
+    };
     resStream.setHeader = jest.fn((k: string, v: string) => {
       headers[k] = v;
     });
@@ -152,7 +163,10 @@ describe('VideosController (unit)', () => {
       return resStream;
     });
 
-    await controller.downloadVideo('Slug1234567', resStream);
+    await controller.downloadVideo(
+      'Slug1234567',
+      resStream as unknown as Response,
+    );
 
     expect(statusCode).toBe(HttpStatus.OK);
     expect(headers['Content-Disposition']).toBe(

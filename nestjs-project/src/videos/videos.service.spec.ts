@@ -51,12 +51,12 @@ describe('VideosService (unit)', () => {
   beforeEach(() => {
     videoRepository = {
       findOne: jest.fn().mockResolvedValue(null),
-      create: jest.fn((data) => ({
+      create: jest.fn((data: Record<string, unknown>) => ({
         ...data,
         created_at: new Date(),
         updated_at: new Date(),
       })),
-      save: jest.fn(async (entity) => entity),
+      save: jest.fn((entity: unknown) => Promise.resolve(entity)),
       delete: jest.fn().mockResolvedValue({ affected: 1 }),
     };
     channelsService = {
@@ -70,9 +70,8 @@ describe('VideosService (unit)', () => {
       createMultipartUpload: jest.fn().mockResolvedValue('s3-upload-id-1'),
       getPresignedUploadPartUrl: jest
         .fn()
-        .mockImplementation(
-          async (_k: string, _u: string, part: number) =>
-            `http://minio:9000/signed-part-${part}`,
+        .mockImplementation((_k: string, _u: string, part: number) =>
+          Promise.resolve(`http://minio:9000/signed-part-${part}`),
         ),
       completeMultipartUpload: jest.fn().mockResolvedValue(undefined),
       abortMultipartUpload: jest.fn().mockResolvedValue(undefined),

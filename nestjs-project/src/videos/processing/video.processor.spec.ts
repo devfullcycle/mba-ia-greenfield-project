@@ -22,7 +22,7 @@ describe('VideoProcessor (unit)', () => {
   beforeEach(() => {
     videoRepository = {
       findOne: jest.fn(),
-      save: jest.fn(async (v) => v),
+      save: jest.fn((v: unknown) => Promise.resolve(v)),
     };
     storageService = {
       getObjectStream: jest.fn().mockResolvedValue({

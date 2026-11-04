@@ -1,17 +1,18 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ThrottlerStorage } from '@nestjs/throttler';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { execFile } from 'node:child_process';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import request from 'supertest';
+import request, { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { AuthService } from '../src/auth/auth.service';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
+import { MailService } from '../src/mail/mail.service';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { TEN_GIGABYTES_IN_BYTES } from '../src/config/storage.config';
 import { StorageService } from '../src/storage/storage.service';
@@ -21,9 +22,29 @@ import { VideoStatus } from '../src/videos/entities/video.entity';
 
 const execFileAsync = promisify(execFile);
 
+interface InitUploadBody {
+  id: string;
+  slug: string;
+  status: string;
+  storage_key: string;
+  total_parts: number;
+  presigned_urls: { upload_url: string }[];
+}
+
+interface VideoBody {
+  status: string;
+  duration_seconds: number;
+  width: number;
+  height: number;
+  codec: string;
+  stream_url: string;
+  download_url: string;
+  thumbnail_url: string;
+}
+
 function binaryParser(
-  res: any,
-  callback: (err: Error | null, body: any) => void,
+  res: Response,
+  callback: (err: Error | null, body: Buffer) => void,
 ): void {
   const chunks: Buffer[] = [];
   res.on('data', (chunk: Buffer | string) => {
@@ -42,7 +63,7 @@ describe('Videos (e2e)', () => {
   let dataSource: DataSource;
   let authService: AuthService;
   let storageService: StorageService;
-  let throttlerStorage: Record<string, unknown>;
+  let throttlerStorage: ThrottlerStorageService;
   let sampleMp4Buffer: Buffer;
 
   beforeAll(async () => {
@@ -82,9 +103,7 @@ describe('Videos (e2e)', () => {
     dataSource = app.get(DataSource);
     authService = app.get(AuthService);
     storageService = app.get(StorageService);
-    throttlerStorage = app.get<{ storage: Record<string, unknown> }>(
-      ThrottlerStorage,
-    ).storage;
+    throttlerStorage = app.get<ThrottlerStorageService>(ThrottlerStorage);
   });
 
   afterAll(async () => {
@@ -94,12 +113,7 @@ describe('Videos (e2e)', () => {
   beforeEach(async () => {
     await cleanAllTables(dataSource);
     await clearMailpitMessages();
-    if (
-      throttlerStorage &&
-      typeof (throttlerStorage as any).clear === 'function'
-    ) {
-      (throttlerStorage as any).clear();
-    }
+    throttlerStorage.storage.clear();
   });
 
   async function registerConfirmAndGetAccessToken(
@@ -107,11 +121,14 @@ describe('Videos (e2e)', () => {
     password = 'Password123!',
   ): Promise<string> {
     let confirmToken = '';
-    const mailServiceInstance = (authService as any).mailService;
+    const mailServiceInstance = (
+      authService as unknown as { mailService: MailService }
+    ).mailService;
     jest
       .spyOn(mailServiceInstance, 'sendConfirmationEmail')
-      .mockImplementationOnce(async (_e: string, _n: string, t: string) => {
+      .mockImplementationOnce((_e: string, _n: string, t: string) => {
         confirmToken = t;
+        return Promise.resolve();
       });
 
     await request(app.getHttpServer())
@@ -135,17 +152,18 @@ describe('Videos (e2e)', () => {
   async function waitForVideoReady(
     slug: string,
     timeoutMs = 15_000,
-  ): Promise<Record<string, any>> {
+  ): Promise<VideoBody> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const res = await request(app.getHttpServer())
         .get(`/videos/${slug}`)
         .expect(200);
+      const body = res.body as VideoBody;
       if (
-        res.body.status === VideoStatus.READY ||
-        res.body.status === VideoStatus.FAILED
+        body.status === (VideoStatus.READY as string) ||
+        body.status === (VideoStatus.FAILED as string)
       ) {
-        return res.body;
+        return body;
       }
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -181,9 +199,13 @@ describe('Videos (e2e)', () => {
       })
       .expect(201);
 
-    expect(init10GbRes.body.status).toBe('draft');
-    expect(init10GbRes.body.slug).toMatch(/^[A-Za-z0-9_-]{11}$/);
-    expect(init10GbRes.body.total_parts).toBeLessThanOrEqual(10000);
+    expect((init10GbRes.body as InitUploadBody).status).toBe('draft');
+    expect((init10GbRes.body as InitUploadBody).slug).toMatch(
+      /^[A-Za-z0-9_-]{11}$/,
+    );
+    expect(
+      (init10GbRes.body as InitUploadBody).total_parts,
+    ).toBeLessThanOrEqual(10000);
 
     // >10GB is rejected with 413 VIDEO_FILE_TOO_LARGE
     const tooLargeRes = await request(app.getHttpServer())
@@ -221,11 +243,12 @@ describe('Videos (e2e)', () => {
       })
       .expect(201);
 
-    const videoId = initRes.body.id as string;
-    const slug = initRes.body.slug as string;
-    const partUploadUrl = initRes.body.presigned_urls[0].upload_url as string;
+    const videoId = (initRes.body as InitUploadBody).id;
+    const slug = (initRes.body as InitUploadBody).slug;
+    const partUploadUrl = (initRes.body as InitUploadBody).presigned_urls[0]
+      .upload_url;
 
-    expect(initRes.body.status).toBe('draft');
+    expect((initRes.body as InitUploadBody).status).toBe('draft');
     expect(slug).toMatch(/^[A-Za-z0-9_-]{11}$/);
 
     // Streaming a draft video before processing returns 409 VIDEO_NOT_READY
@@ -250,7 +273,7 @@ describe('Videos (e2e)', () => {
       })
       .expect(202);
 
-    expect(completeRes.body.status).toBe('processing');
+    expect((completeRes.body as VideoBody).status).toBe('processing');
 
     // 4. Wait for background worker (VideoProcessor) to extract metadata and generate thumbnail
     const readyVideo = await waitForVideoReady(slug);
@@ -326,7 +349,9 @@ describe('Videos (e2e)', () => {
     expect(thumbBody[2]).toBe(0xff);
 
     // Cleanup MinIO test artifacts
-    await storageService.deleteObject(initRes.body.storage_key as string);
+    await storageService.deleteObject(
+      (initRes.body as InitUploadBody).storage_key,
+    );
     await storageService.deleteObject(`thumbnails/${videoId}/thumb.jpg`);
   });
 
@@ -349,7 +374,7 @@ describe('Videos (e2e)', () => {
       })
       .expect(201);
 
-    const videoId = initRes.body.id as string;
+    const videoId = (initRes.body as InitUploadBody).id;
 
     await request(app.getHttpServer())
       .post(`/videos/${videoId}/uploads/complete`)
