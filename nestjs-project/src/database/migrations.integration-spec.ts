@@ -14,6 +14,9 @@ const MANAGED_TABLES = [
   'verification_tokens',
 ];
 
+// Enum types created by the migrations (see 1777579850478-CreateAuthTokens).
+const MANAGED_ENUM_TYPES = ['verification_tokens_type_enum'];
+
 describe('Database migrations (integration)', () => {
   let dataSource: DataSource;
 
@@ -37,6 +40,14 @@ describe('Database migrations (integration)', () => {
       ),
       dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
     ]);
+
+    // Enum types outlive DROP TABLE; drop them after the tables so re-running
+    // the migrations does not fail with "type ... already exists".
+    await Promise.all(
+      MANAGED_ENUM_TYPES.map((type) =>
+        dataSource.query(`DROP TYPE IF EXISTS "public"."${type}" CASCADE`),
+      ),
+    );
   });
 
   afterAll(async () => {
