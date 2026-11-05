@@ -40,6 +40,31 @@ Fechadas em entrevista em 05/11. A skill `research` deve registrá-las no docume
 - limpeza no banco dos rascunhos abandonados
 - descarte da alteração em `next-frontend/package-lock.json`
 
+## Modelo de execução: orquestrador e subagentes
+
+A sessão principal do Claude Code é o **orquestrador**. Ela não implementa nem valida nada diretamente: delega cada passo a subagentes com contexto isolado e cuida de toda a comunicação entre eles.
+
+**Regras**
+- **Um subagente por passo**, sempre iniciado do zero (sem fork de contexto). O orquestrador monta o briefing com o mínimo necessário: os artefatos de entrada (caminhos), as decisões que se aplicam, o escopo da SI e o critério de pronto.
+- **Subagentes não falam entre si.** Toda saída volta para o orquestrador, que resume, decide e repassa ao próximo. Os artefatos em disco (`docs/decisions`, `docs/phases/phase-03-videos/*`, `progress.md`) são a memória compartilhada; o histórico de conversa não é.
+- **Quem implementa nunca valida.** Toda produção tem um validador independente, iniciado em outro subagente, que recebe só os artefatos e o diff, nunca o raciocínio do autor.
+- **Perguntas ao usuário** (por exemplo, do `plan-resolve`) passam pelo orquestrador, que repassa a pergunta e devolve a resposta ao subagente seguinte.
+- **Git é do orquestrador:** os subagentes não fazem commit nem push. O orquestrador commita depois da validação aprovada; o push fica para o fechamento.
+- **Reprovação:** o validador devolve achados objetivos (arquivo, linha, critério). O orquestrador abre um **novo** subagente de correção com esses achados e, depois, um **novo** validador. Até 3 ciclos; se não fechar, o orquestrador para e leva o problema ao usuário.
+
+**Pares produtor → validador por etapa**
+
+| Etapa | Produtor (subagente A) | Validador independente (subagente B) |
+| --- | --- | --- |
+| Research | skill `research` gera o documento de decisões | confere se as 13 decisões fechadas estão registradas com opções e trade-offs, e se as versões batem com o manifesto/context7 |
+| Contexto | skill `plan-context` | revisor confere a cobertura de capacidades da Fase 03 no `project-plan.md` |
+| Validação do plano | `plan-validate` e `plan-resolve` em subagentes diferentes, alternando até `clean` | o próprio `plan-validate` é o validador; o orquestrador só aceita `validation.md` em `clean` |
+| Build do plano | skill `plan-build` gera `phase-03-videos.md` | revisor confere SIs, Technical Specs, Dependency Map e aderência às decisões |
+| Cada SI | skill `implement` (um subagente por SI) | revisor de código (`/code-review` ou subagente revisor) mais verificação da DoD: testes da SI, `tsc --noEmit`, lint; para SIs de infra, sobe o Compose de fato |
+| Fechamento | subagente atualiza `CLAUDE.md` e README | auditor confere cada arquivo, endpoint e serviço citados no `CLAUDE.md` contra o código e roda a suíte completa |
+
+**Paralelismo:** SIs sem dependência entre si (por exemplo, 03.2 e 03.3; 03.5, 03.6 e 03.8) podem rodar em subagentes paralelos, cada um num worktree isolado. O orquestrador integra na branch da feature e roda a validação depois da integração.
+
 ## Plano de execução
 
 1. **Setup (cerca de meio dia).** Usar o fork existente, `docker compose up -d`, instalar dependências, rodar migrations e confirmar a suíte atual verde. Conferir se existe a branch `dev` (se não, criar a partir da `main`). Todo trabalho em `feature/*`, nada direto na `main`.
@@ -81,6 +106,7 @@ Fechadas em entrevista em 05/11. A skill `research` deve registrá-las no docume
 - [ ] Upload multipart direto ao storage, rascunho no início, processamento e thumbnail automáticos
 - [ ] URL única, streaming (Range e 206) e download
 - [ ] `npm test`, `npm run test:e2e`, `npx tsc --noEmit` e `npm run lint` verdes
+- [ ] Cada etapa produzida e validada por subagentes diferentes, com o veredito do validador registrado no `progress.md`
 - [ ] Git Flow respeitado e `CLAUDE.md` atualizado
 - [ ] URL do fork enviada na plataforma
 
