@@ -40,36 +40,51 @@ Fechadas em entrevista em 05/11. A skill `research` deve registrá-las no docume
 - limpeza no banco dos rascunhos abandonados
 - descarte da alteração em `next-frontend/package-lock.json`
 
-## Modelo de execução: orquestrador e subagentes
+## Modelo de execução: orquestrador, sessões isoladas e validadores independentes
 
-A sessão principal do Claude Code é o **orquestrador**. Ela não implementa nem valida nada diretamente: delega cada passo a subagentes com contexto isolado e cuida de toda a comunicação entre eles.
+Fechado em 05/11 depois de revisar o enunciado e as skills de `.claude/skills/`. A sessão principal é o **orquestrador**, e a regra central é: **quem produz nunca valida**.
+
+**Por que híbrido.** As skills do workflow (`research`, `plan-context`, `plan-validate`, `plan-resolve`, `plan-test-specs`) usam `AskUserQuestion` e chamam os agentes de leitura de `.claude/agents/`. `plan-build` exige rodar na sessão principal, e `implement` já delega a exploração e os testes a subagentes próprios. No Claude Code, um subagente não pode perguntar ao usuário nem chamar outro subagente. Rodar essas skills dentro de subagentes quebraria o workflow, o que é motivo de reprovação. O enunciado também diz que os agentes de `.claude/agents/` são usados pelas skills e não devem ser chamados diretamente.
 
 **Regras**
-- **Um subagente por passo**, sempre iniciado do zero (sem fork de contexto). O orquestrador monta o briefing com o mínimo necessário: os artefatos de entrada (caminhos), as decisões que se aplicam, o escopo da SI e o critério de pronto.
-- **Subagentes não falam entre si.** Toda saída volta para o orquestrador, que resume, decide e repassa ao próximo. Os artefatos em disco (`docs/decisions`, `docs/phases/phase-03-videos/*`, `progress.md`) são a memória compartilhada; o histórico de conversa não é.
-- **Quem implementa nunca valida.** Toda produção tem um validador independente, iniciado em outro subagente, que recebe só os artefatos e o diff, nunca o raciocínio do autor.
-- **Perguntas ao usuário** (por exemplo, do `plan-resolve`) passam pelo orquestrador, que repassa a pergunta e devolve a resposta ao subagente seguinte.
-- **Git é do orquestrador:** os subagentes não fazem commit nem push. O orquestrador commita depois da validação aprovada; o push fica para o fechamento.
-- **Reprovação:** o validador devolve achados objetivos (arquivo, linha, critério). O orquestrador abre um **novo** subagente de correção com esses achados e, depois, um **novo** validador. Até 3 ciclos; se não fechar, o orquestrador para e leva o problema ao usuário.
+1. **Produção = skill na sessão principal, uma sessão limpa por etapa.** Cada etapa (e cada SI no `implement`) começa depois de um `/clear`. O orquestrador abre a etapa com um briefing curto (artefatos de entrada, decisões que se aplicam, escopo e critério de pronto) e invoca a skill do projeto como ela foi projetada. Entre etapas, só passam os artefatos em disco.
+2. **Validação = subagente novo e independente**, iniciado do zero. Ele recebe só os artefatos e o diff (nunca o raciocínio de quem produziu), segue um checklist da etapa e devolve `APROVADO` ou `REPROVADO`, com achados objetivos (arquivo, linha, critério violado).
+3. **Correção = nova sessão limpa** com os achados, seguida de um **novo** validador. São até 3 ciclos; se não fechar, o orquestrador para e leva o problema ao usuário.
+4. **Perguntas ao usuário** acontecem dentro das próprias skills, que rodam na sessão principal. Validadores não perguntam nada.
+5. **Git é do orquestrador.** Um commit por etapa ou SI, feito só depois do `APROVADO`, nas branches `docs/*` e `feature/*` a partir da `dev`. Nunca na `main` nem na `dev` diretamente. O push fica para o fechamento.
+6. **Evidência:** o veredito de cada validador (data, etapa, resultado, ciclos) é registrado no `progress.md`. Para as etapas de planejamento, numa seção "Validações do planejamento".
+7. **Rastreabilidade:** nenhum artefato inventa requisito. Cada decisão aponta para a origem: `project-plan.md`, o enunciado ou a decisão do responsável no grill de 05/11.
 
-**Pares produtor → validador por etapa**
+**Etapas, produtor e validador**
 
-| Etapa | Produtor (subagente A) | Validador independente (subagente B) |
-| --- | --- | --- |
-| Research | skill `research` gera o documento de decisões | confere se as 13 decisões fechadas estão registradas com opções e trade-offs, e se as versões batem com o manifesto/context7 |
-| Contexto | skill `plan-context` | revisor confere a cobertura de capacidades da Fase 03 no `project-plan.md` |
-| Validação do plano | `plan-validate` e `plan-resolve` em subagentes diferentes, alternando até `clean` | o próprio `plan-validate` é o validador; o orquestrador só aceita `validation.md` em `clean` |
-| Build do plano | skill `plan-build` gera `phase-03-videos.md` | revisor confere SIs, Technical Specs, Dependency Map e aderência às decisões |
-| Cada SI | skill `implement` (um subagente por SI) | revisor de código (`/code-review` ou subagente revisor) mais verificação da DoD: testes da SI, `tsc --noEmit`, lint; para SIs de infra, sobe o Compose de fato |
-| Fechamento | subagente atualiza `CLAUDE.md` e README | auditor confere cada arquivo, endpoint e serviço citados no `CLAUDE.md` contra o código e roda a suíte completa |
+| # | Etapa | Produtor (sessão principal) | Artefato | Validador independente (subagente) confere |
+| --- | --- | --- | --- | --- |
+| 0 | Setup | orquestrador | `dev` criada, Compose no ar, suíte atual verde | — (registrado no `progress.md` quando ele for criado) |
+| 1 | Research | `research` | `docs/decisions/technical-decisions-phase-03-videos.md` | formato igual ao dos documentos existentes; as 5 decisões exigidas (fila, upload, worker/processamento, URL única/streaming, ciclo de status/falha) com opções, trade-offs e recomendação; as 13 decisões do grill presentes e rastreáveis |
+| 2 | Contexto | `plan-context` | `phase-03-videos/context.md` | cobre todas as capacidades da Fase 03 do `project-plan.md`; sem requisito inventado |
+| 3 | Validar ↔ resolver | `plan-validate` e `plan-resolve`, alternando em sessões limpas | `validation.md`, `library-refs.md` | `validation.md` termina em `status: clean`; libs novas (BullMQ, `@nestjs/bullmq`, AWS SDK v3, Sqids) fixadas com versão via context7 |
+| 4 | Build | `plan-build` (parte A, pausa, parte B) | `phase-03-videos.md` | SIs `SI-03.x`; Technical Specs completas (Data Model, API Contracts, Authorization Matrix, Error Catalog, Events/Messages); Dependency Map; Deliverables; aderência às decisões |
+| 5 | Test specs (opcional, **vamos rodar**) | `plan-test-specs` | `nestjs-project/specs/*.plan.md` | cada critério de aceite tem cenário; batem com o plano |
+| 6 | Implementação, por SI | `implement` (uma sessão limpa por SI, numa `feature/*`) | código, testes e `progress.md` | revisão de código (`/code-review`) e DoD da SI: testes da SI verdes, `tsc --noEmit` com código 0, lint; aderência a `.claude/rules/` e ao plano; nas SIs de infra, sobe o Compose de fato |
+| 7 | Fechamento | sessão limpa atualiza os dois `CLAUDE.md` e o README | docs | auditor confere cada arquivo, endpoint e serviço citados contra o código e roda a suíte completa (`npm test`, `npm run test:e2e`, `npm run test:integration`, `tsc`, lint) |
+| 8 | Auditoria final | — | — | subagente revisa os critérios de aceite do enunciado item a item, incluindo os 8 motivos de reprovação |
 
-**Paralelismo:** SIs sem dependência entre si (por exemplo, 03.2 e 03.3; 03.5, 03.6 e 03.8) podem rodar em subagentes paralelos, cada um num worktree isolado. O orquestrador integra na branch da feature e roda a validação depois da integração.
+**Paralelismo:** opcional e só na implementação, para SIs sem dependência entre si (por exemplo, 03.2 e 03.3), em worktrees isolados. Depois de juntar tudo, a validação roda de novo. O padrão é sequencial, por simplicidade.
+
+### Convenções obrigatórias (do enunciado e do repositório)
+
+- seguir `.claude/rules/` (`nestjs-*`, `typeorm-*`, `typescript-strict`) e usar o módulo `auth/` como referência de forma (camadas, repository pattern, transações, filtro de exceções de domínio)
+- migration `nestjs-project/src/database/migrations/<timestamp>-CreateVideos.ts`
+- a infraestrutura nova vai em `nestjs-project/compose.yaml`
+- atualizar **os dois** `CLAUDE.md` (raiz: fila = BullMQ no lugar de "TBD"; `nestjs-project/`: seção de vídeos)
+- consultar o context7 antes de cada lib; usar `docs/phases/phase-02-auth/` como referência de formato da pasta da fase
+- o `implement` se recusa a rodar na `main` ou na `dev`: abrir a `feature/*` antes
 
 ## Plano de execução
 
 1. **Setup (cerca de meio dia).** Usar o fork existente, `docker compose up -d`, instalar dependências, rodar migrations e confirmar a suíte atual verde. Conferir se existe a branch `dev` (se não, criar a partir da `main`). Todo trabalho em `feature/*`, nada direto na `main`.
 2. **Research.** Skill `research` gera `docs/decisions/technical-decisions-phase-03-videos.md` no formato dos documentos de decisão existentes (opções, trade-offs, recomendação por decisão). Aqui valem a pena duas horas extras, porque é o que alimenta o resto.
-3. **Planejamento.** `plan-context` → `plan-validate` ↔ `plan-resolve` (repetir até `clean`, com `library-refs.md` via context7) → `plan-build`, que gera `phase-03-videos.md` com SIs (SI-03.x), Technical Specs (Data Model, API Contracts, Authorization Matrix, Error Catalog, Events/Messages), Dependency Map e Deliverables. Referência de formato: `docs/phases/phase-02-auth/`.
+3. **Planejamento.** `plan-context` → `plan-validate` ↔ `plan-resolve` (repetir até `clean`, com `library-refs.md` via context7) → `plan-build` → `plan-test-specs`; o `plan-build` gera `phase-03-videos.md` com SIs (SI-03.x), Technical Specs (Data Model, API Contracts, Authorization Matrix, Error Catalog, Events/Messages), Dependency Map e Deliverables. Referência de formato: `docs/phases/phase-02-auth/`.
 4. **Implementação com `implement`, SI a SI**, cada uma só avança com a suíte do passo verde e atualiza o `progress.md`. Fatiamento acordado em 05/11:
    - SI-03.1: infra (`minio`, `minio-init`, `redis`, `video-worker`, `Dockerfile.worker`, config validado)
    - SI-03.2: entidade `Video` e migration (sequence, `public_id`, enum, FK com cascade, transformer), util Sqids (depende de 03.1)
@@ -106,7 +121,9 @@ A sessão principal do Claude Code é o **orquestrador**. Ela não implementa ne
 - [ ] Upload multipart direto ao storage, rascunho no início, processamento e thumbnail automáticos
 - [ ] URL única, streaming (Range e 206) e download
 - [ ] `npm test`, `npm run test:e2e`, `npx tsc --noEmit` e `npm run lint` verdes
-- [ ] Cada etapa produzida e validada por subagentes diferentes, com o veredito do validador registrado no `progress.md`
+- [ ] Cada etapa produzida numa sessão limpa e validada por um subagente independente, com o veredito registrado no `progress.md`
+- [ ] Os dois `CLAUDE.md` (raiz e `nestjs-project/`) atualizados e conferidos contra o código
+- [ ] Auditoria final dos critérios de aceite feita por subagente
 - [ ] Git Flow respeitado e `CLAUDE.md` atualizado
 - [ ] URL do fork enviada na plataforma
 
