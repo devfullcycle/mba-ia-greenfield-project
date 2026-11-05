@@ -4,7 +4,7 @@ import { ConfigModule, ConfigType } from '@nestjs/config';
 import type { StringValue } from 'ms';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DataSource, Repository, type FindOptionsWhere } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import appConfig from '../config/app.config';
 import authConfig from '../config/auth.config';
 import mailConfig from '../config/mail.config';
@@ -467,9 +467,10 @@ describe('AuthService — refresh (integration)', () => {
 
     const activeTokens = await refreshTokenRepository.findBy({
       family,
-      revoked_at: null,
-    } as unknown as FindOptionsWhere<RefreshToken>);
+      revoked_at: IsNull(),
+    });
     expect(activeTokens.length).toBeGreaterThan(0);
+    expect(activeTokens.every((t) => t.revoked_at === null)).toBe(true);
   });
 
   it('revokes entire family and throws when reuse is detected beyond grace period', async () => {
