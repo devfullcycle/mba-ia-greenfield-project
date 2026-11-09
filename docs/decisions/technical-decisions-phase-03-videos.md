@@ -1,7 +1,7 @@
 ---
 scope_type: phase
 related_phases: [3]
-status: pending
+status: decided
 date: 2026-11-05
 scope_description: "Backend foundation for video upload and processing: object storage, background queue and worker, 10GB presigned multipart upload, draft pre-registration and status lifecycle, FFmpeg metadata/thumbnail extraction, failure policy, collision-free public IDs, range-based streaming/download, authorization and test isolation."
 ---
@@ -45,7 +45,8 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — the only option that runs fully in Compose while supporting presigned multipart upload; the dual-endpoint split is the minimal fix for host-bound signatures without breaking the Docker networking rule.
 
-**Decision:** _[pending]_
+**Decision:** A (MinIO in Compose + AWS SDK v3, internal/public S3Clients)
+**Libraries:** @aws-sdk/client-s3, @aws-sdk/s3-request-presigner
 
 ---
 
@@ -74,7 +75,8 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — official NestJS 11 integration (`@nestjs/bullmq` 12 supports `bullmq` ^6) and native primitives for dedup, unrecoverable errors and custom backoff; the Redis-loss risk is covered by DB-as-source-of-truth + reconciler instead of a DLQ.
 
-**Decision:** _[pending]_
+**Decision:** A (BullMQ + Redis via @nestjs/bullmq)
+**Libraries:** bullmq, @nestjs/bullmq
 
 ---
 
@@ -103,7 +105,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — isolation of Option C at the code-sharing cost of Option B.
 
-**Decision:** _[pending]_
+**Decision:** A (separate video-worker service, same codebase, standalone context)
 
 ---
 
@@ -133,7 +135,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — the only option meeting "no bytes through API" and resumability with the storage chosen in TD-01. Depends on TD-01 (public endpoint) and TD-06 (draft creation).
 
-**Decision:** _[pending]_
+**Decision:** A (S3 presigned multipart upload, API orchestrates)
 
 ---
 
@@ -162,7 +164,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — smallest artifact that makes the 10GB criterion verifiable and testable.
 
-**Decision:** _[pending]_
+**Decision:** A (Node script scripts/upload-video.ts)
 
 ---
 
@@ -187,7 +189,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — 1:1 data doesn't justify extra tables; keeps the status machine in one row.
 
-**Decision:** _[pending]_
+**Decision:** A (single videos table with status enum + processing columns)
 
 ---
 
@@ -216,7 +218,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — avoids per-job 10GB temp storage; network failures are retried by TD-09.
 
-**Decision:** _[pending]_
+**Decision:** A (ffprobe/ffmpeg over internal presigned GET URL)
 
 ---
 
@@ -244,7 +246,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — cheap single seek with a sensible frame; Fase 04 adds custom thumbnails anyway.
 
-**Decision:** _[pending]_
+**Decision:** A (min(10% of duration, duration − 0.1s))
 
 ---
 
@@ -273,7 +275,8 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — correctness for users (no false `ERROR`) with the DB as source of truth, without an outbox.
 
-**Decision:** _[pending]_
+**Decision:** A (infra failures retry forever; permanent → ERROR; DB-driven reconciler)
+**Libraries:** @nestjs/schedule
 
 ---
 
@@ -301,7 +304,8 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — guaranteed uniqueness with no conflict path; enumeration risk is acceptable because non-`READY` videos return 404 (TD-12).
 
-**Decision:** _[pending]_
+**Decision:** A (public_id = Sqids(seq), shuffled alphabet, min length 10)
+**Libraries:** sqids
 
 ---
 
@@ -331,7 +335,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — simplest correct streaming with centralized authz; Option B recorded as evolution once a CDN exists.
 
-**Decision:** _[pending]_
+**Decision:** A (API proxy with Range pass-through)
 
 ---
 
@@ -356,7 +360,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — prevents enumeration (complements TD-10).
 
-**Decision:** _[pending]_
+**Decision:** A (owner-only writes, READY-only reads, 404 for hidden)
 
 ---
 
@@ -385,7 +389,7 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 **Recommendation:** **Option A** — real integration with cheap isolation.
 
-**Decision:** _[pending]_
+**Decision:** A (dedicated bucket/prefix + video e2e inside worker container)
 
 ---
 
@@ -411,16 +415,16 @@ _Origin:_ the options below were discussed and a preferred path was agreed in th
 
 | ID | Scope | Decision | Recommendation | Choice |
 |----|-------|----------|---------------|--------|
-| TD-01 | Backend | Object storage & endpoints | A (MinIO + 2 S3Clients) | _[pending]_ |
-| TD-02 | Backend | Queue technology | A (BullMQ + Redis) | _[pending]_ |
-| TD-03 | Backend | Worker topology | A (separate service, same codebase) | _[pending]_ |
-| TD-04 | Cross-layer | Upload protocol | A (presigned multipart) | _[pending]_ |
-| TD-05 | Repo-wide | Upload client | A (Node script) | _[pending]_ |
-| TD-06 | Backend | Video entity / draft | A (single table) | _[pending]_ |
-| TD-07 | Backend | Metadata extraction | A (ffprobe on presigned URL) | _[pending]_ |
-| TD-08 | Backend | Thumbnail frame | A (min(10%, d−0.1s)) | _[pending]_ |
-| TD-09 | Backend | Status lifecycle & failures | A (infra retries forever + reconciler) | _[pending]_ |
-| TD-10 | Backend | Public video ID | A (Sqids(seq)) | _[pending]_ |
-| TD-11 | Cross-layer | Streaming & download | A (API Range proxy) | _[pending]_ |
-| TD-12 | Cross-layer | Authorization matrix | A (404 for hidden) | _[pending]_ |
-| TD-13 | Repo-wide | Test isolation | A (test bucket/prefix, e2e in worker) | _[pending]_ |
+| TD-01 | Backend | Object storage & endpoints | A (MinIO + 2 S3Clients) | A |
+| TD-02 | Backend | Queue technology | A (BullMQ + Redis) | A |
+| TD-03 | Backend | Worker topology | A (separate service, same codebase) | A |
+| TD-04 | Cross-layer | Upload protocol | A (presigned multipart) | A |
+| TD-05 | Repo-wide | Upload client | A (Node script) | A |
+| TD-06 | Backend | Video entity / draft | A (single table) | A |
+| TD-07 | Backend | Metadata extraction | A (ffprobe on presigned URL) | A |
+| TD-08 | Backend | Thumbnail frame | A (min(10%, d−0.1s)) | A |
+| TD-09 | Backend | Status lifecycle & failures | A (infra retries forever + reconciler) | A |
+| TD-10 | Backend | Public video ID | A (Sqids(seq)) | A |
+| TD-11 | Cross-layer | Streaming & download | A (API Range proxy) | A |
+| TD-12 | Cross-layer | Authorization matrix | A (404 for hidden) | A |
+| TD-13 | Repo-wide | Test isolation | A (test bucket/prefix, e2e in worker) | A |
