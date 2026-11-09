@@ -147,7 +147,7 @@ Entregar o upload e processamento de vídeos no `nestjs-project/` — serviço d
 ### SI-03.5 — Endpoint POST /videos/uploads (Início do Upload e Pré-cadastro em Rascunho)
 
 **Route:** POST /videos/uploads
-**Test Specs:** _pending /plan-test-specs_
+**Test Specs:** see `nestjs-project/specs/videos-uploads.plan.md`
 **Authorization:** Authenticated (torna-se owner do vídeo criado)
 
 **Description:** Inicia o upload multipart pré-assinado e pré-cadastra o vídeo como `DRAFT` no mesmo passo, devolvendo todas as URLs de parte sem que nenhum byte de vídeo passe pela API.
@@ -185,7 +185,7 @@ Entregar o upload e processamento de vídeos no `nestjs-project/` — serviço d
 ### SI-03.6 — Endpoints POST /videos/:id/uploads/parts e DELETE /videos/:id/uploads (Renovação e Abort)
 
 **Route:** POST /videos/:id/uploads/parts, DELETE /videos/:id/uploads
-**Test Specs:** _pending /plan-test-specs_
+**Test Specs:** see `nestjs-project/specs/videos-uploads-renew-abort.plan.md`
 **Authorization:** Owner (anônimo 401; não-owner 404; status ≠ `DRAFT` → 409)
 
 **Description:** Permite retomar uploads (renovando URLs de parte expiradas) e cancelá-los (abortando o multipart e removendo o rascunho), e introduz as exceções de domínio de vídeo e a regra de ownership "404, nunca 403".
@@ -221,7 +221,7 @@ Entregar o upload e processamento de vídeos no `nestjs-project/` — serviço d
 ### SI-03.7 — Endpoint POST /videos/:id/uploads/complete (Finalização e Enfileiramento)
 
 **Route:** POST /videos/:id/uploads/complete
-**Test Specs:** _pending /plan-test-specs_
+**Test Specs:** see `nestjs-project/specs/videos-uploads-complete.plan.md`
 **Authorization:** Owner (anônimo 401; não-owner 404; status ≠ `DRAFT` → 409)
 
 **Description:** Finaliza o multipart com os ETags enviados pelo cliente, grava `PROCESSING` antes de enfileirar e responde `202` mesmo com o Redis fora — o banco é a fonte da verdade e o reconciler cobre o enqueue perdido.
@@ -317,7 +317,7 @@ Entregar o upload e processamento de vídeos no `nestjs-project/` — serviço d
 ### SI-03.10 — Endpoint GET /videos/:id (Metadados com Autenticação Opcional)
 
 **Route:** GET /videos/:id
-**Test Specs:** _pending /plan-test-specs_
+**Test Specs:** see `nestjs-project/specs/videos-metadata.plan.md`
 **Authorization:** Anonymous / Authenticated veem só `READY`; Owner vê qualquer status (oculto → 404)
 
 **Description:** Expõe os metadados do vídeo pela URL única, aplicando a matriz "owner vê tudo, demais só `READY`, oculto é 404" — o que exige autenticação opcional numa rota pública.
@@ -353,7 +353,7 @@ Entregar o upload e processamento de vídeos no `nestjs-project/` — serviço d
 ### SI-03.11 — Endpoints GET /videos/:id/stream, /download e /thumbnail (Proxy com Range)
 
 **Route:** GET /videos/:id/stream, GET /videos/:id/download, GET /videos/:id/thumbnail
-**Test Specs:** _pending /plan-test-specs_
+**Test Specs:** see `nestjs-project/specs/videos-media.plan.md`
 **Authorization:** Anonymous, Authenticated e Owner — somente vídeos `READY` (demais → 404)
 
 **Description:** Entrega reprodução via streaming e download pelo proxy da API, repassando `Range` e devolvendo `206`, sem bufferizar e sem expor o storage — a autorização fica centralizada por requisição.
