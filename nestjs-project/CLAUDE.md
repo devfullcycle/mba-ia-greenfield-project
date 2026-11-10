@@ -115,6 +115,8 @@ The video E2E suites (`test/video/`) run **only in the `video-worker` container*
 
 `npm run upload:video` (`scripts/upload-video.ts`) drives the full upload contract with constant memory. Preconditions: the API is running (`npm run start:dev`) and you have an access token. Inside the container, pass `--storage-connect minio:9000`: part URLs are signed for `S3_PUBLIC_ENDPOINT` (`localhost:9000`), and the flag connects to MinIO through the Compose network while keeping the signed `Host` header (SigV4 signatures are host-bound).
 
+The script compiles to `dist-scripts/` (`tsconfig.scripts.json`, gitignored) and runs as plain JS — not `ts-node`, whose compiler baseline alone exceeds the memory budget. It runs with `node --max-semi-space-size=1` so the 64 KiB read buffers of each part are collected promptly; without it ~65 MiB of dead buffers accumulate between scavenges and RSS exceeds `part_size × concurrency + 100MB`.
+
 During active development, run only the tests related to the file being changed (`npm test -- path/to/file.spec.ts`). Before declaring a task done, run the full suite — see the global `CLAUDE.md` → "Definition of Done (Technical)".
 
 ## Long-running Processes

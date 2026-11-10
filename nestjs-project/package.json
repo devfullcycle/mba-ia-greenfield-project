@@ -28,7 +28,7 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/database/data-source.ts",
     "migration:create": "npm run typeorm -- migration:create",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts",
-    "upload:video": "ts-node -T scripts/upload-video.ts",
+    "upload:video": "tsc -p tsconfig.scripts.json && node --max-semi-space-size=1 dist-scripts/scripts/upload-video.js",
     "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts"
   },
   "dependencies": {
