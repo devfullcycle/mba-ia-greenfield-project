@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 3/13 completed
+**SIs:** 4/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -36,9 +36,20 @@
   - `VideosRepository` expõe por enquanto só `reserveSeq()`. As SIs seguintes adicionam as consultas que usarem.
 
 ### SI-03.4 — Infra: Fila video-processing e Processo video-worker
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 10 passing (`video-processing.queue.integration-spec.ts` 6 + `video-processing.queue.spec.ts` 2 + `worker.module.spec.ts` 2)
+- **Observations:**
+  - **Versões:** `@nestjs/bullmq@12` e `@nestjs/schedule@12` (instalados na SI-03.1) são ESM-only e quebram o Jest (CJS/ts-jest). Foram trocados por `@nestjs/bullmq@^11.0.5` e `@nestjs/schedule@^6.1.3` (majors alinhadas ao Nest 11, CJS; o `@nestjs/bullmq@11.0.5` aceita `bullmq` 6).
+  - **bullmq v6:** o `ioredis` virou peer dependency opcional e foi instalado explicitamente (`ioredis@^5.11.1`). Nenhuma API usada pelo plano (jobId dedup, `UnrecoverableError`, `backoffStrategy`, `getJob`/`getState`/`remove`, `obliterate`) foi removida na v6.
+  - **Redis double:** `attempts: Number.MAX_SAFE_INTEGER` volta do Redis como `9007199254741000` (o Lua guarda como double). Isso não afeta a semântica de retry infinito; o teste afirma `>= MAX_SAFE_INTEGER`.
+  - **Bug corrigido da SI-03.1:** `test/jest-e2e.json` tinha `setupFiles` com `<rootDir>/test/setup-test-env.ts`, mas o `rootDir` desse config já é `test/`. O caminho foi corrigido para `<rootDir>/setup-test-env.ts` (antes disso, o `npm run test:e2e` nem iniciava).
+  - `tsconfig.build.json` passou a excluir `dist-worker` (sem isso, o `nest start` do worker lia a própria saída como entrada: TS5055).
+  - A config do TypeORM foi extraída para `src/database/database.module.ts` (`DatabaseModule`), compartilhada por `AppModule` e `WorkerModule`, sem duplicar a factory.
+  - Criado `.dockerignore` (node_modules/dist/dist-worker/coverage/.git) para o build do `Dockerfile.worker` não enviar o `node_modules` do host como contexto.
+  - Teste unitário extra `video-processing.queue.spec.ts` cobre o timeout de 5s do `enqueue` com fake timers.
+  - Verificado manualmente: `video-worker` running, `ffprobe -version` OK (FFmpeg 5.1.9), nenhum listener na 3000 (só o DNS embutido do Docker em 127.0.0.11). Com o Redis parado, `enqueue` rejeitou em 5001ms com `EnqueueTimeoutError`. `jest-e2e.json --listTests` não inclui `test/video/`.
+  - Fixtures: `test/video/fixtures/sample.mp4` (~885KB, h264 640x360 + aac, 6s, gerado com ffmpeg `testsrc2`) e `fake.mp4` (texto).
+  - `test:e2e:video` ainda não tem suítes (`--listTests` vazio). As suítes de `test/video/` chegam nas SIs 03.8/03.13.
 
 ### SI-03.5 — Endpoint POST /videos/uploads (Início do Upload e Pré-cadastro em Rascunho)
 - **Status:** pending

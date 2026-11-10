@@ -11,7 +11,11 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "setupFiles": [
-    "<rootDir>/test/setup-test-env.ts",
+    "<rootDir>/setup-test-env.ts",
     "dotenv/config"
+  ],
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "/test/video/"
   ]
 }
