@@ -167,4 +167,17 @@ describe('videos-uploads-complete', () => {
     expect((res.body as ErrorBody).error).toBe('VALIDATION_ERROR');
     expect((await findVideo(draft.publicId)).status).toBe('DRAFT');
   });
+
+  test('completar-upload-com-milhares-de-partes-nao-estoura-limite-do-body', async () => {
+    // A 10GB upload completes with ~2,000-10,000 parts (> Express' 100kb default).
+    const parts = Array.from({ length: 10_000 }, (_, index) => ({
+      part_number: index + 1,
+      etag: '"00000000000000000000000000000000"',
+    }));
+
+    const res = await complete(app, draft.publicId, parts);
+
+    expect(res.status).not.toBe(413);
+    expect((res.body as ErrorBody).error).toBe('INVALID_UPLOAD_PARTS');
+  });
 });

@@ -10,7 +10,9 @@ import {
 } from '@nestjs/throttler';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../../src/app.module';
+import { JSON_BODY_LIMIT } from '../../src/common/http/body-limit';
 import { AuthService } from '../../src/auth/auth.service';
 import { DomainExceptionFilter } from '../../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../../src/common/filters/validation-exception.filter';
@@ -30,7 +32,8 @@ export async function createE2eApp(
     Test.createTestingModule({ imports: [AppModule] }),
   ).compile();
 
-  const app = moduleFixture.createNestApplication<INestApplication<App>>();
+  const app = moduleFixture.createNestApplication<NestExpressApplication>();
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -43,7 +46,7 @@ export async function createE2eApp(
     new ValidationExceptionFilter(),
   );
   await app.init();
-  return { app, moduleFixture };
+  return { app: app as unknown as INestApplication<App>, moduleFixture };
 }
 
 /** Auth routes are rate limited (10 req/min); reset between tests that log users in. */
