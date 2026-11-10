@@ -7,6 +7,11 @@ export abstract class DomainException extends Error {
     super(message);
     this.name = this.constructor.name;
   }
+
+  /** Extra HTTP headers the response must carry (none by default). */
+  get headers(): Record<string, string> {
+    return {};
+  }
 }
 
 export class EmailAlreadyExistsException extends DomainException {
@@ -70,5 +75,9 @@ export class InvalidUploadPartsException extends DomainException {
 export class RangeNotSatisfiableException extends DomainException {
   constructor(public readonly objectSize: number) {
     super('RANGE_NOT_SATISFIABLE', 416, 'Requested range is not satisfiable');
+  }
+
+  override get headers(): Record<string, string> {
+    return { 'Content-Range': `bytes */${this.objectSize}` };
   }
 }

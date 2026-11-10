@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 10/13 completed
+**SIs:** 11/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -111,9 +111,14 @@
   - Helper E2E `test/utils/video-seed.ts` (`channelOf`, `seedVideo`) para semear vídeos em qualquer status (reutilizável na SI-03.11).
 
 ### SI-03.11 — Endpoints GET /videos/:id/stream, /download e /thumbnail (Proxy com Range)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 18 passing (`media-delivery.service.integration-spec.ts` 3 + `domain-exception.filter.spec.ts` (+2 novos) + `test/videos-media.e2e-spec.ts` 7)
+- **Observations:**
+  - `DomainException` ganhou o getter `headers` (vazio por padrão), e o `DomainExceptionFilter` aplica esses headers. `RangeNotSatisfiableException` devolve `Content-Range: bytes */{size}`. O filtro não conhece exceções específicas.
+  - O `size` do `416` vem de `video.size_bytes`, não do corpo de erro do S3 (o formato de `InvalidRange` varia entre S3 e MinIO).
+  - `attachmentDisposition()` (`src/videos/content-disposition.ts`): fallback ASCII sem aspas, barra invertida ou controle, mais `filename*=UTF-8''` com percent-encoding RFC 5987 (que também codifica `'()*`). O E2E usa `vídeo "férias".mp4`.
+  - O controller faz `stream.pipeline(body, res)`. Se o cliente desconecta no meio, a falha é só logada (os headers já foram enviados, não há resposta de erro possível), e o `pipeline` destrói o stream do S3, liberando o socket.
+  - O cenário 1.7 do E2E inspeciona as respostas coletadas pelos cenários anteriores do mesmo arquivo. Depende da ordem de execução dentro do arquivo (padrão do Jest, sequencial).
 
 ### SI-03.12 — Criar Cliente de Upload scripts/upload-video.ts
 - **Status:** pending

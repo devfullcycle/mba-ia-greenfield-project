@@ -781,6 +781,140 @@
           "videos"
         ]
       }
+    },
+    "/videos/{id}/stream": {
+      "get": {
+        "description": "Proxies the video file with Range pass-through (206 for partial content). READY videos only.",
+        "operationId": "VideosController_stream",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Video public id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full video body"
+          },
+          "206": {
+            "description": "Requested byte range"
+          },
+          "404": {
+            "description": "Video not found or not READY (VIDEO_NOT_FOUND)",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range outside the file size (RANGE_NOT_SATISFIABLE); Content-Range: bytes */{size}",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stream a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{id}/download": {
+      "get": {
+        "description": "Same as stream, as an attachment named after the original file. Supports Range for resumable downloads. READY videos only.",
+        "operationId": "VideosController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Video public id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full video body as attachment"
+          },
+          "206": {
+            "description": "Requested byte range"
+          },
+          "404": {
+            "description": "Video not found or not READY (VIDEO_NOT_FOUND)",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range outside the file size (RANGE_NOT_SATISFIABLE)",
+            "content": {
+              "video/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Download a video",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
+    "/videos/{id}/thumbnail": {
+      "get": {
+        "description": "JPEG frame generated during processing. READY videos only.",
+        "operationId": "VideosController_thumbnail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Video public id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JPEG thumbnail"
+          },
+          "404": {
+            "description": "Video not found or not READY (VIDEO_NOT_FOUND)",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a video thumbnail",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {

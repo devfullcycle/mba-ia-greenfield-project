@@ -34,4 +34,17 @@ export class VideosService {
     }
     return video;
   }
+
+  /** Media is served only for READY videos, owner included. */
+  async findReady(publicId: string): Promise<Video> {
+    if (this.publicIds.decode(publicId) === null) {
+      throw new VideoNotFoundException();
+    }
+    const video =
+      await this.videosRepository.findByPublicIdWithChannel(publicId);
+    if (!video || video.status !== 'READY') {
+      throw new VideoNotFoundException();
+    }
+    return video;
+  }
 }
