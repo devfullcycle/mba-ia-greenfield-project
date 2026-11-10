@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 9/13 completed
+**SIs:** 10/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -103,9 +103,12 @@
   - Para assinar as URLs de parte com o host alcançável de dentro do container, o script de verificação rodou com `S3_PUBLIC_ENDPOINT=http://minio:9000`. Trocar o host de uma URL já assinada a invalida (TD-01).
 
 ### SI-03.10 — Endpoint GET /videos/:id (Metadados com Autenticação Opcional)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 29 passing (`jwt-auth.guard.spec.ts` + `videos.service.spec.ts` = 23; `test/videos-metadata.e2e-spec.ts` 6). `test/auth.e2e-spec.ts` re-executado depois da refatoração do guard: 45/45.
+- **Observations:**
+  - O `JwtAuthGuard` foi refatorado em `verifyBearer()` (payload ou `null`) + `isMarked(key)`. Em rotas `@OptionalAuth()`, token ausente ou inválido segue anônimo; nas demais, o comportamento continua idêntico (401).
+  - `VideoResponseDto.from(video)` é uma allow-list explícita: o UUID interno, `storage_key`, `upload_id`, `seq` e `thumbnail_key` nunca são serializados. As URLs de mídia são relativas (`/videos/{public_id}/stream|download|thumbnail`), como no contrato.
+  - Helper E2E `test/utils/video-seed.ts` (`channelOf`, `seedVideo`) para semear vídeos em qualquer status (reutilizável na SI-03.11).
 
 ### SI-03.11 — Endpoints GET /videos/:id/stream, /download e /thumbnail (Proxy com Range)
 - **Status:** pending

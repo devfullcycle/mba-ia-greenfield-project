@@ -733,6 +733,54 @@
           "videos"
         ]
       }
+    },
+    "/videos/{id}": {
+      "get": {
+        "description": "Public route with optional authentication: the owner sees any status, everyone else only READY videos. Media URLs are only set when READY.",
+        "operationId": "VideosController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Video public id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Video not found, or not READY and the requester is not the owner (VIDEO_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get video metadata",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {
@@ -797,6 +845,10 @@
         "properties": {}
       },
       "CompleteUploadResponseDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "VideoResponseDto": {
         "type": "object",
         "properties": {}
       },
