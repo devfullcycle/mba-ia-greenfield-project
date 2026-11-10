@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 2/13 completed
+**SIs:** 3/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -25,9 +25,15 @@
   - Tipos de retorno (`UploadedPart`, `PresignedPart`, `ObjectStream`, `ObjectHead`) ficam em `src/storage/storage.types.ts`.
 
 ### SI-03.3 — Criar Entidade Video, Migration e Gerador de public_id
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 181 passing (suíte unit+integration completa, 27 suites — inclui `video.entity.integration-spec.ts`, `video-public-id.service.spec.ts`, `migrations.integration-spec.ts`)
+- **Observations:**
+  - Migration `1794273602577-CreateVideos` gerada via `migration:generate` (nomes de índices/constraints batem com o que o `synchronize` dos testes produz). Sequence `videos_seq_seq` adicionada à mão (o CLI não expressa sequence standalone), com `OWNED BY videos.seq` e `DROP SEQUENCE IF EXISTS` no `down`.
+  - A relação inversa `Channel.videos` obriga todo `DataSource` de teste com `Channel` a registrar `Video`: `Video` foi adicionado ao `ALL_ENTITIES` de 10 specs existentes (auth/users/channels).
+  - O entity `seq` não declara default (por design do plano), mas a migration declara `DEFAULT nextval(...)`. Um `synchronize: true` em teste pode tentar remover esse default. Na rodada atual o default continuou presente, mas existe o risco de drift. O app sempre grava `seq` via `reserveSeq()`, então não há impacto funcional.
+  - O teste "revert last migration" de `migrations.integration-spec.ts` agora reverte `CreateVideos` (antes revertia `CreateAuthTokens`), porque essa passou a ser a última migration.
+  - Pré-condição: suítes que usam `synchronize: true` sobre um banco **sem** a migration `CreateVideos` criam `videos` sem a sequence. Rodar `migration:run` antes dos testes, como as e2e já exigem.
+  - `VideosRepository` expõe por enquanto só `reserveSeq()`. As SIs seguintes adicionam as consultas que usarem.
 
 ### SI-03.4 — Infra: Fila video-processing e Processo video-worker
 - **Status:** pending

@@ -3,11 +3,13 @@ import {
   CreateDateColumn,
   Entity,
   JoinColumn,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { Video } from '../../videos/entities/video.entity';
 
 @Entity('channels')
 export class Channel {
@@ -35,4 +37,7 @@ export class Channel {
   @OneToOne(() => User, (user) => user.channel)
   @JoinColumn({ name: 'user_id' })
   user: User;
+
+  @OneToMany(() => Video, (video) => video.channel)
+  videos: Video[];
 }
