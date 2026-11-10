@@ -438,6 +438,64 @@
           "auth"
         ]
       }
+    },
+    "/videos/uploads": {
+      "post": {
+        "description": "Starts a presigned multipart upload and pre-registers the video as DRAFT. Returns one presigned PUT URL per part (valid for 6h); no video bytes pass through the API.",
+        "operationId": "VideoUploadsController_initiate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Upload started; video pre-registered as DRAFT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiateUploadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed (non-video MIME type, size above 10GB, missing filename)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start a video upload",
+        "tags": [
+          "videos"
+        ]
+      }
     }
   },
   "info": {
@@ -478,6 +536,14 @@
         "properties": {}
       },
       "ResetPasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InitiateUploadDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "InitiateUploadResponseDto": {
         "type": "object",
         "properties": {}
       },

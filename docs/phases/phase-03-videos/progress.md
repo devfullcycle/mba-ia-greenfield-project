@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 4/13 completed
+**SIs:** 5/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -52,9 +52,16 @@
   - `test:e2e:video` ainda não tem suítes (`--listTests` vazio). As suítes de `test/video/` chegam nas SIs 03.8/03.13.
 
 ### SI-03.5 — Endpoint POST /videos/uploads (Início do Upload e Pré-cadastro em Rascunho)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 17 passing da SI (`upload-plan.spec.ts` 6, `video-uploads.service.integration-spec.ts` 2, `channels.service.integration-spec.ts` +2, `test/videos-uploads.e2e-spec.ts` 4). Suíte unit+integration completa verde: 201/32 suites.
+- **Observations:**
+  - **Correção da SI-03.3 (sequence):** o TypeORM interpreta `DEFAULT nextval('<tabela>_<coluna>_seq')` como coluna `increment`. Como o entity não é `@Generated`, qualquer `synchronize: true` de teste rodava `DROP SEQUENCE videos_seq_seq`, e o `reserveSeq()` passava a falhar com `relation "videos_seq_seq" does not exist`. A migration `CreateVideos` deixou de declarar `DEFAULT nextval(...)` na coluna `seq` (a "rede de segurança" do plano foi removida). A sequence continua existindo com o mesmo nome e `OWNED BY videos.seq`. A migration só tinha rodado localmente nesta branch sem push, então foi editada e reaplicada em vez de ganhar uma migration nova.
+  - **Correção da SI-03.3 (deadlock):** o `beforeAll` de `migrations.integration-spec.ts` fazia os `DROP TABLE ... CASCADE` em paralelo. Com `videos → channels`, isso dava deadlock e deixava o banco parcialmente migrado. Agora é um único `DROP TABLE IF EXISTS a, b, … CASCADE`. O schema local de dev/teste foi recriado (`DROP SCHEMA public CASCADE` + `migration:run`).
+  - Helpers E2E compartilhados em `test/utils/e2e-app.ts`: `createE2eApp()` (reproduz pipes e filters do `main.ts`), `resetThrottler()` (register/login seguem limitados a 10 req/min) e `registerConfirmAndLogin()`. O `auth.e2e-spec.ts` não foi refatorado para usá-los (fora de escopo).
+  - O plano cita `ApiErrorEnvelopeDto`, mas a classe existente se chama `ApiErrorEnvelope`. Foi usada a existente.
+  - `ChannelsService.findByUserId` retornando `null` dentro de `initiate` lança `Error` genérico (500). Todo usuário ganha channel no registro, então esse caso é violação de invariante, não erro do catálogo.
+  - Constantes e chaves de storage (`videoSourceKey`, `videoThumbnailKey`, `UPLOAD_URL_TTL_SECONDS`, `MAX_VIDEO_SIZE_BYTES`, `VIDEO_MIME_TYPE_PATTERN`) ficam em `videos.constants.ts`.
+  - **OpenAPI (pré-existente):** `openapi:export` roda via ts-node sem o plugin do `@nestjs/swagger`, então todos os DTOs (inclusive os de auth, desde a Fase 02) saem com `properties: {}`. O endpoint e as respostas 201/400/401 foram exportados, mas os schemas dos DTOs ficaram vazios. Isso fica como pendência separada.
 
 ### SI-03.6 — Endpoints POST /videos/:id/uploads/parts e DELETE /videos/:id/uploads (Renovação e Abort)
 - **Status:** pending

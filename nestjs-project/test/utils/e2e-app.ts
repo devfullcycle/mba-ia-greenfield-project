@@ -1,0 +1,74 @@
+import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import {
+  ThrottlerStorage,
+  type ThrottlerStorageService,
+} from '@nestjs/throttler';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { AppModule } from '../../src/app.module';
+import { AuthService } from '../../src/auth/auth.service';
+import { DomainExceptionFilter } from '../../src/common/filters/domain-exception.filter';
+import { ValidationExceptionFilter } from '../../src/common/filters/validation-exception.filter';
+
+export interface E2eApp {
+  app: INestApplication<App>;
+  moduleFixture: TestingModule;
+}
+
+/** Boots AppModule with the same global pipes/filters `main.ts` applies. */
+export async function createE2eApp(): Promise<E2eApp> {
+  const moduleFixture = await Test.createTestingModule({
+    imports: [AppModule],
+  }).compile();
+
+  const app = moduleFixture.createNestApplication<INestApplication<App>>();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  app.useGlobalFilters(
+    new DomainExceptionFilter(),
+    new ValidationExceptionFilter(),
+  );
+  await app.init();
+  return { app, moduleFixture };
+}
+
+/** Auth routes are rate limited (10 req/min); reset between tests that log users in. */
+export function resetThrottler(moduleFixture: TestingModule): void {
+  moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage).storage.clear();
+}
+
+/** Registers, confirms (capturing the emailed token) and logs a user in; returns the access token. */
+export async function registerConfirmAndLogin(
+  app: INestApplication<App>,
+  email: string,
+  password = 'password123',
+): Promise<string> {
+  const mailService = app.get(AuthService)['mailService'];
+  let confirmationToken = '';
+  jest
+    .spyOn(mailService, 'sendConfirmationEmail')
+    .mockImplementationOnce((_email: string, _name: string, token: string) => {
+      confirmationToken = token;
+      return Promise.resolve();
+    });
+
+  await request(app.getHttpServer())
+    .post('/auth/register')
+    .send({ email, password })
+    .expect(201);
+  await request(app.getHttpServer())
+    .get('/auth/confirm-email')
+    .query({ token: confirmationToken })
+    .expect(204);
+  const login = await request(app.getHttpServer())
+    .post('/auth/login')
+    .send({ email, password })
+    .expect(200);
+  return (login.body as { access_token: string }).access_token;
+}
