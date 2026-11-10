@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 8/13 completed
+**SIs:** 9/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -93,9 +93,14 @@
   - Verificado manualmente com o worker de dev: com o MinIO parado, o vídeo ficou `PROCESSING` e o job foi para `delayed` com `delay: 30000` (`getaddrinfo ENOTFOUND minio`). Com o MinIO de volta, o retry levou o vídeo a `READY`.
 
 ### SI-03.9 — Reconciliar Vídeos Presos em PROCESSING
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 10 passing (`video-reconciler.service.integration-spec.ts` 8 + `worker.module.spec.ts` 2 re-executado)
+- **Observations:**
+  - A consulta de vídeos presos fica em `VideosRepository.findStaleProcessing(updatedBefore)` (`status = 'PROCESSING' AND updated_at < …`, índice `(status, updated_at)`). O `VideoReconcilerService.findStaleProcessing(now)` só calcula o corte de 15 min.
+  - `reconcile(now?)` devolve quantos vídeos re-enfileirou. Falhas por vídeo (Redis fora) são logadas sem interromper o lote (contexto de cron).
+  - O `ProcessingModule` importa `ConfigModule.forFeature(videoConfig)` para ler `VIDEO_RECONCILER_ENABLED`.
+  - **Verificação manual (AC #4), 2026-11-10:** com o Redis parado, o fluxo real `initiate` → PUT → `complete` (via `VideoUploadsService`) respondeu `{ status: "PROCESSING" }` em 5032ms (timeout do enqueue engolido) e a linha ficou `PROCESSING`. O Redis foi religado e o `updated_at` retrocedido em 20 min por SQL, para não esperar 15 min reais. No disparo das 03:05:00 o cron do worker de dev logou `Re-enqueued 2 stale video(s)`, e às 03:05:01 o vídeo estava `READY`. O segundo vídeo re-enfileirado era um `PROCESSING` deixado no banco compartilhado pelos E2E da SI-03.7 (o reconciler também o recuperou).
+  - Para assinar as URLs de parte com o host alcançável de dentro do container, o script de verificação rodou com `S3_PUBLIC_ENDPOINT=http://minio:9000`. Trocar o host de uma URL já assinada a invalida (TD-01).
 
 ### SI-03.10 — Endpoint GET /videos/:id (Metadados com Autenticação Opcional)
 - **Status:** pending

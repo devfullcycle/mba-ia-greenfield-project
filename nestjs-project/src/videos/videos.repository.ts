@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { Repository } from 'typeorm';
+import { LessThan, type Repository } from 'typeorm';
 import { Video, type VideoStatus } from './entities/video.entity';
 import { VIDEO_SEQUENCE } from './videos.constants';
 
@@ -88,6 +88,14 @@ export class VideosRepository {
       { id, status: 'PROCESSING' },
       { status: 'ERROR', error_reason: reason },
     );
+  }
+
+  /** PROCESSING videos untouched since `updatedBefore` (served by the (status, updated_at) index). */
+  async findStaleProcessing(updatedBefore: Date): Promise<Video[]> {
+    return this.repository.find({
+      where: { status: 'PROCESSING', updated_at: LessThan(updatedBefore) },
+      order: { updated_at: 'ASC' },
+    });
   }
 
   async deleteById(id: string): Promise<void> {
