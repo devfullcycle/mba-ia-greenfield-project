@@ -1,12 +1,19 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 0/13 completed
+**SIs:** 1/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 13 passing (`src/config/env.validation.integration-spec.ts`)
+- **Observations:**
+  - **Imagem MinIO:** `minio/minio` e `minio/mc` não são mais publicadas (pull negado no Docker Hub e no quay.io). Por escolha do usuário, foram usadas `bitnamilegacy/minio:2025.7.23-debian-12-r5` e `bitnamilegacy/minio-client:2025.7.21-debian-12-r3` (mesmo binário MinIO; imagens congeladas, sem updates). O `minio-init` foi mantido como one-shot com `mc`, e o healthcheck usa `curl /minio/health/live`.
+  - Verificado: `redis` e `minio` healthy, `minio-init` exit 0, buckets `streamtube` e `streamtube-test` criados, `mc admin config get … api` mostra `stale_uploads_expiry=24h`.
+  - `S3_ACCESS_KEY_ID` e `S3_SECRET_ACCESS_KEY` também são obrigatórios no schema (credenciais, como `DB_PASSWORD`). O Compose interpola esses valores do `.env` em `MINIO_ROOT_USER` e `MINIO_ROOT_PASSWORD`.
+  - `nestjs-api` também espera `minio-init` terminar (`service_completed_successfully`), para os buckets existirem antes do boot.
+  - Versões instaladas: `@aws-sdk/client-s3`/`s3-request-presigner` ^3.1165.0, `bullmq` ^6.7.2, `@nestjs/bullmq` ^12.0.1, `@nestjs/schedule` ^12.0.3, `sqids` ^0.3.0 (peer deps aceitam Nest 11).
+  - Os namespaces `storage`/`queue`/`video` foram criados mas ainda não estão no `load` do `ConfigModule` (a SI não pede isso). Cada módulo consumidor deve registrá-los.
+  - Fora de escopo: `nestjs-project/CLAUDE.md` ainda lista só `nestjs-api`/`db` como serviços. Atualizar a documentação com `redis`/`minio`/`minio-init` fica como tarefa separada.
 
 ### SI-03.2 — Criar StorageModule com Clientes S3 Interno e Público
 - **Status:** pending
