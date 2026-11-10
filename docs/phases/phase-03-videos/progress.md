@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 11/13 completed
+**SIs:** 12/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -121,9 +121,16 @@
   - O cenário 1.7 do E2E inspeciona as respostas coletadas pelos cenários anteriores do mesmo arquivo. Depende da ordem de execução dentro do arquivo (padrão do Jest, sequencial).
 
 ### SI-03.12 — Criar Cliente de Upload scripts/upload-video.ts
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 7 passing (`src/upload-client/multipart-uploader.spec.ts`)
+- **Observations:**
+  - `UploadApi` e `PartPutter` são injetáveis. Os testes de `uploadFile` usam fakes (fatiamento, ETags, renovação só das pendentes após `403`, retry de erro de rede, esgotamento de tentativas). O teste do `--storage-connect` usa um servidor HTTP local em `127.0.0.1` e confere que o header `Host` continua sendo o da URL assinada.
+  - A URL expirada (`403`) não consome tentativa: renova as partes ainda não confirmadas, com um único `renewParts` compartilhado entre workers concorrentes, e repete. Outras falhas têm backoff linear e até 5 tentativas por parte.
+  - `mimeTypeFor` cobre `.mp4/.m4v/.mov/.webm/.mkv/.avi`. Extensão desconhecida aborta antes de iniciar o upload (a API recusaria um MIME não-`video/*`).
+  - Corrigido durante a implementação: `URL.port` é `''` na porta padrão, então o fallback usa `||` (com `??` a porta virava `0`).
+  - `npm run build` verificado: `dist/main.js`, `dist/worker.js` e `dist/mail/templates/*.hbs` presentes, sem `dist/src`.
+  - Verificado manualmente com a API rodando (`start:dev` temporário no container) e a config de dev (`S3_PUBLIC_ENDPOINT=http://localhost:9000`): `npm run upload:video -- --file test/video/fixtures/sample.mp4 --api http://nestjs-api:3000 --storage-connect minio:9000 --token …` saiu com exit 0 e imprimiu `id=QevEWIV09d status=PROCESSING`. O worker de dev levou o vídeo a `READY` em segundos.
+  - O AC de RSS (arquivo de vários GB) é medido na prova de 10GB da SI-03.13, na mesma rodada.
 
 ### SI-03.13 — Fluxo Completo de Upload, Processamento e Streaming (prova de entrega)
 - **Status:** pending
