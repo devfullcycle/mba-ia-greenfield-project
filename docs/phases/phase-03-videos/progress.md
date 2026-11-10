@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 1/13 completed
+**SIs:** 2/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -16,9 +16,13 @@
   - Fora de escopo: `nestjs-project/CLAUDE.md` ainda lista só `nestjs-api`/`db` como serviços. Atualizar a documentação com `redis`/`minio`/`minio-init` fica como tarefa separada.
 
 ### SI-03.2 — Criar StorageModule com Clientes S3 Interno e Público
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 11 passing (`storage.module.spec.ts` 1 + `storage.service.integration-spec.ts` 10)
+- **Observations:**
+  - `StorageModule` importa `ConfigModule.forFeature(storageConfig)`, então funciona sozinho tanto no `AppModule` quanto no `WorkerModule` sem depender do `load` global.
+  - Além de `NoSuchKey`, `StorageNotFoundError` também cobre `NotFound`, que é o nome que o SDK usa no 404 de `HeadObject` (resposta sem corpo).
+  - `putObject` aceita `Buffer` (thumbnail). Stream de tamanho desconhecido exigiria `ContentLength` ou o `Upload` do lib-storage, o que fica fora do escopo.
+  - Tipos de retorno (`UploadedPart`, `PresignedPart`, `ObjectStream`, `ObjectHead`) ficam em `src/storage/storage.types.ts`.
 
 ### SI-03.3 — Criar Entidade Video, Migration e Gerador de public_id
 - **Status:** pending
