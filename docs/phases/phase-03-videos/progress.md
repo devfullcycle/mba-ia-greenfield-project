@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 12/13 completed
+**SIs:** 13/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -133,9 +133,17 @@
   - O AC de RSS (arquivo de vários GB) é medido na prova de 10GB da SI-03.13, na mesma rodada.
 
 ### SI-03.13 — Fluxo Completo de Upload, Processamento e Streaming (prova de entrega)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 2 passing (`test/video/video-pipeline.e2e-spec.ts` no container `video-worker`)
+- **Observations:**
+  - **Bug encontrado na prova de 10GB, corrigido em branch separada (`bugfix/upload-body-limit`, mergeada na feature):** concluir um upload de 10GB envia até 10.000 pares `{ part_number, etag }` (~600kb), acima dos 100kb padrão do Express, e a API respondia `413`. `JSON_BODY_LIMIT = '2mb'` (`src/common/http/body-limit.ts`) é aplicado em `main.ts` e em `test/utils/e2e-app.ts`, com teste de regressão em `videos-uploads-complete.e2e-spec.ts`. A branch saiu da `feature/phase-03-videos`, não da `dev`, porque o bug só existe no endpoint da Fase 03.
+  - `upload:video` passou a usar `ts-node -T` (transpile-only): o cliente não paga type-check a cada execução.
+  - **Prova de 10GB, 2026-11-10:** arquivo de 10.489.279.614 bytes (MPEG-4 1920x1080, 3000s, gerado com `ffmpeg`, em `nestjs-project/.tmp-10gb/`), enviado com `docker compose exec nestjs-api npm run upload:video -- --file .tmp-10gb/video-10gb.mp4 --api http://nestjs-api:3000 --storage-connect minio:9000 --token …`. Exit 0, upload em **40s**, e o vídeo `aCWjUcTEYt` chegou a **`READY`** (duração 3000s e dimensões extraídas pelo worker). `GET /videos/aCWjUcTEYt/stream` com `Range: bytes=10000000000-10000001023` respondeu `206` com 1024 bytes em 27ms.
+  - **Memória da API (RSS do processo `dist/main`, amostra a cada 2s, 19 amostras):** 161MB em repouso, um degrau único para 344MB no `initiate` (pré-assinatura de ~2.000 URLs de parte), e depois plano em 344MB durante os 40s de transferência (os bytes vão direto ao MinIO; a API não os toca). Não cresce com o volume transferido: um segundo upload terminou em 352MB, e depois do GC o RSS voltou a 180MB. Cliente: RSS entre 162 e 226MB (mediana 215MB) durante todo o upload, constante (cobre o AC de memória da SI-03.12).
+  - **API sem bloqueio:** `GET /videos/Gqi9eizN6I` (outro vídeo) teve mediana de 3,4ms (máx. 9,9ms) em repouso e, durante o upload de 10GB, 20/20 respostas `200` com mediana de 12,1ms e máx. de 20,7ms (API e cliente dividindo o mesmo container).
+  - **Limite de disco do Docker:** a segunda rodada de 10GB falhou com `507` do MinIO na parte 1392 porque o disco da VM do Docker encheu (55GB, 100%). O rascunho foi abortado via `DELETE /videos/pEAGyJtMgl/uploads` (204), o que liberou 7GB. Follow-up fora de escopo: o cliente não chama o abort quando uma parte falha de vez; o multipart fica para o `MINIO_API_STALE_UPLOADS_EXPIRY=24h`.
+  - **Smoke test do Compose, 2026-11-10:** depois de `docker compose down -v`, um único `docker compose up -d` deixou `db`, `redis`, `minio` e `mailpit` em `healthy`, `nestjs-api` e `video-worker` em `Up` (log `video-worker started`) e `minio-init` em `Exited (0)` (buckets `streamtube` e `streamtube-test` criados). Depois de `npm run migration:run`, o E2E do pipeline foi re-executado no ambiente zerado: 2/2.
+  - Documentação (ação 2): a readiness do MinIO está descrita pelo healthcheck do Compose (`healthy`) e pelo `minio-init` em `Exited (0)`, não por `mc ready`. O efeito é o mesmo, sem depender de alias do `mc` no container.
 
 ## Validações do planejamento
 

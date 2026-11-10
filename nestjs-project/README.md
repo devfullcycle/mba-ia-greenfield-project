@@ -25,6 +25,34 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## StreamTube services (Docker Compose)
+
+| Service | Role |
+|---------|------|
+| `nestjs-api` | REST API (port 3000) |
+| `video-worker` | Standalone worker with FFmpeg: video processing queue + reconciler cron |
+| `db` | PostgreSQL 17 |
+| `redis` | BullMQ queues |
+| `minio` / `minio-init` | S3-compatible storage; `minio-init` creates the `streamtube` and `streamtube-test` buckets |
+| `mailpit` | Email capture (UI on port 8025) |
+
+```bash
+docker compose up -d                                   # all services
+docker compose exec redis redis-cli ping               # PONG
+docker compose exec nestjs-api npm run migration:run   # schema
+docker compose exec video-worker npm run test:e2e:video
+```
+
+Upload a video end to end (API running via `npm run start:dev`):
+
+```bash
+docker compose exec nestjs-api npm run upload:video -- \
+  --file <path.mp4> --api http://nestjs-api:3000 \
+  --storage-connect minio:9000 --token <access_token>
+```
+
+After `npm install` in `nestjs-api`, rebuild the worker: `docker compose build video-worker && docker compose up -d -V video-worker`.
+
 ## Project setup
 
 ```bash
