@@ -2,8 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ChannelsService } from '../channels/channels.service';
 import { StorageService } from '../storage/storage.service';
+import {
+  InvalidUploadPartsException,
+  VideoNotFoundException,
+  VideoNotInDraftException,
+} from '../common/exceptions/domain.exception';
 import type { InitiateUploadResponseDto } from './dto/initiate-upload-response.dto';
 import type { InitiateUploadDto } from './dto/initiate-upload.dto';
+import type { RenewPartsResponseDto } from './dto/renew-parts-response.dto';
+import type { RenewPartsDto } from './dto/renew-parts.dto';
+import type { Video } from './entities/video.entity';
 import { computeUploadPlan } from './upload-plan';
 import { VideoPublicIdService } from './video-public-id.service';
 import { UPLOAD_URL_TTL_SECONDS, videoSourceKey } from './videos.constants';
@@ -60,18 +68,78 @@ export class VideoUploadsService {
     }
 
     const plan = computeUploadPlan(dto.size_bytes);
-    const issuedAt = Date.now();
-    const parts = await this.storage.presignUploadParts(
-      storageKey,
-      uploadId,
-      Array.from({ length: plan.part_count }, (_, index) => index + 1),
-      UPLOAD_URL_TTL_SECONDS,
+    const partNumbers = Array.from(
+      { length: plan.part_count },
+      (_, index) => index + 1,
     );
-
     return {
       id: publicId,
       status: 'DRAFT',
       ...plan,
+      ...(await this.presignParts(storageKey, uploadId, partNumbers)),
+    };
+  }
+
+  /** Re-signs part URLs of a DRAFT upload (resumed upload or expired URLs). */
+  async renewParts(
+    publicId: string,
+    userId: string,
+    dto: RenewPartsDto,
+  ): Promise<RenewPartsResponseDto> {
+    const video = await this.findOwnedDraft(publicId, userId);
+    const { part_count } = computeUploadPlan(video.size_bytes);
+    if (dto.part_numbers.some((partNumber) => partNumber > part_count)) {
+      throw new InvalidUploadPartsException();
+    }
+    return this.presignParts(
+      video.storage_key,
+      video.upload_id!,
+      dto.part_numbers,
+    );
+  }
+
+  /** Cancels a DRAFT upload: aborts the multipart upload and removes the row. */
+  async abort(publicId: string, userId: string): Promise<void> {
+    const video = await this.findOwnedDraft(publicId, userId);
+    await this.storage.abortMultipartUpload(
+      video.storage_key,
+      video.upload_id!,
+    );
+    await this.videosRepository.deleteById(video.id);
+  }
+
+  /**
+   * Resolves a DRAFT video owned by `userId`. Unknown ids and other users'
+   * videos are indistinguishable (404, never 403).
+   */
+  async findOwnedDraft(publicId: string, userId: string): Promise<Video> {
+    if (this.publicIds.decode(publicId) === null) {
+      throw new VideoNotFoundException();
+    }
+    const video =
+      await this.videosRepository.findByPublicIdWithChannel(publicId);
+    if (!video || video.channel.user_id !== userId) {
+      throw new VideoNotFoundException();
+    }
+    if (video.status !== 'DRAFT') {
+      throw new VideoNotInDraftException();
+    }
+    return video;
+  }
+
+  private async presignParts(
+    storageKey: string,
+    uploadId: string,
+    partNumbers: number[],
+  ): Promise<RenewPartsResponseDto> {
+    const issuedAt = Date.now();
+    const parts = await this.storage.presignUploadParts(
+      storageKey,
+      uploadId,
+      partNumbers,
+      UPLOAD_URL_TTL_SECONDS,
+    );
+    return {
       parts: parts.map(({ partNumber, url }) => ({
         part_number: partNumber,
         url,

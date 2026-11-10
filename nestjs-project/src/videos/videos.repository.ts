@@ -40,4 +40,16 @@ export class VideosRepository {
   async insert(video: NewVideo): Promise<void> {
     await this.repository.insert(video);
   }
+
+  /** Loads the video with its channel so callers can check ownership. */
+  async findByPublicIdWithChannel(publicId: string): Promise<Video | null> {
+    return this.repository.findOne({
+      where: { public_id: publicId },
+      relations: { channel: true },
+    });
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.repository.delete({ id });
+  }
 }

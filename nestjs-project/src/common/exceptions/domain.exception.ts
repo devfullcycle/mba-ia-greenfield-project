@@ -48,3 +48,27 @@ export class TokenReuseDetectedException extends DomainException {
     );
   }
 }
+
+export class VideoNotFoundException extends DomainException {
+  constructor() {
+    super('VIDEO_NOT_FOUND', 404, 'Video not found');
+  }
+}
+
+export class VideoNotInDraftException extends DomainException {
+  constructor() {
+    super('VIDEO_NOT_IN_DRAFT', 409, 'Video is not in DRAFT status');
+  }
+}
+
+export class InvalidUploadPartsException extends DomainException {
+  constructor() {
+    super('INVALID_UPLOAD_PARTS', 400, 'Upload parts are invalid');
+  }
+}
+
+export class RangeNotSatisfiableException extends DomainException {
+  constructor(public readonly objectSize: number) {
+    super('RANGE_NOT_SATISFIABLE', 416, 'Requested range is not satisfiable');
+  }
+}

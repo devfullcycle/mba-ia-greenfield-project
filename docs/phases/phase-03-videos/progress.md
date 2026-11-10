@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 5/13 completed
+**SIs:** 6/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -64,9 +64,13 @@
   - **OpenAPI (pré-existente):** `openapi:export` roda via ts-node sem o plugin do `@nestjs/swagger`, então todos os DTOs (inclusive os de auth, desde a Fase 02) saem com `properties: {}`. O endpoint e as respostas 201/400/401 foram exportados, mas os schemas dos DTOs ficaram vazios. Isso fica como pendência separada.
 
 ### SI-03.6 — Endpoints POST /videos/:id/uploads/parts e DELETE /videos/:id/uploads (Renovação e Abort)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 17 passing (`video-uploads.service.spec.ts` 7 + `video-uploads.service.integration-spec.ts` 4 + `test/videos-uploads-renew-abort.e2e-spec.ts` 6)
+- **Observations:**
+  - `VideosRepository` ganhou `findByPublicIdWithChannel` (carrega `channel` para checar `user_id`) e `deleteById`. A ownership é resolvida pela relação `channel.user_id`, sem chamada extra ao `ChannelsService`.
+  - `findOwnedDraft` rejeita ids que não decodificam canonicamente antes de consultar o banco, e devolve o mesmo `VIDEO_NOT_FOUND` para inexistente e para não-owner (o E2E confirma corpo idêntico).
+  - `RangeNotSatisfiableException` carrega `objectSize`, para a SI-03.11 montar `Content-Range: bytes */{size}`. O `DomainExceptionFilter` atual não define headers, então a SI-03.11 precisa tratar isso.
+  - O `presignParts` privado é compartilhado por `initiate` e `renewParts`.
 
 ### SI-03.7 — Endpoint POST /videos/:id/uploads/complete (Finalização e Enfileiramento)
 - **Status:** pending

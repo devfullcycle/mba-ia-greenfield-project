@@ -143,4 +143,45 @@ describe('VideoUploadsService (integration)', () => {
     expect(await openUploadsFor(storageKey)).toHaveLength(0);
     expect(await dataSource.getRepository(Video).count()).toBe(0);
   });
+
+  describe('renewParts / abort', () => {
+    const initiateDraft = () =>
+      service.initiate(user.id, {
+        original_filename: 'a.mp4',
+        mime_type: 'video/mp4',
+        size_bytes: 12 * 1024 * 1024,
+      });
+
+    it('should issue renewed part URLs that accept a PUT', async () => {
+      const { id } = await initiateDraft();
+
+      const renewed = await service.renewParts(id, user.id, {
+        part_numbers: [3],
+      });
+
+      expect(renewed.parts.map((part) => part.part_number)).toEqual([3]);
+      const response = await fetch(renewed.parts[0].url, {
+        method: 'PUT',
+        body: new Uint8Array(1024),
+      });
+      expect(response.ok).toBe(true);
+      expect(response.headers.get('etag')).toBeTruthy();
+
+      await service.abort(id, user.id);
+    });
+
+    it('should remove the DRAFT row and invalidate the UploadId on abort', async () => {
+      const { id } = await initiateDraft();
+      const video = await dataSource
+        .getRepository(Video)
+        .findOneByOrFail({ public_id: id });
+
+      await service.abort(id, user.id);
+
+      expect(
+        await dataSource.getRepository(Video).countBy({ id: video.id }),
+      ).toBe(0);
+      expect(await openUploadsFor(video.storage_key)).toHaveLength(0);
+    });
+  });
 });
