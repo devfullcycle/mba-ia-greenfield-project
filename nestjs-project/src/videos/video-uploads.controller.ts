@@ -20,6 +20,8 @@ import { SkipThrottle } from '@nestjs/throttler';
 import type { JwtPayload } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ApiErrorEnvelope } from '../common/openapi/api-error-envelope.dto';
+import { CompleteUploadResponseDto } from './dto/complete-upload-response.dto';
+import { CompleteUploadDto } from './dto/complete-upload.dto';
 import { InitiateUploadResponseDto } from './dto/initiate-upload-response.dto';
 import { InitiateUploadDto } from './dto/initiate-upload.dto';
 import { RenewPartsResponseDto } from './dto/renew-parts-response.dto';
@@ -106,6 +108,49 @@ export class VideoUploadsController {
     @Body() dto: RenewPartsDto,
   ): Promise<RenewPartsResponseDto> {
     return this.videoUploadsService.renewParts(id, user.sub, dto);
+  }
+
+  @Post(':id/uploads/complete')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Complete a video upload',
+    description:
+      'Finalizes the multipart upload with the part ETags, marks the video as PROCESSING and enqueues processing. Returns 202 even if enqueuing fails (it is retried later). Owner only.',
+  })
+  @ApiParam({ name: 'id', description: 'Video public id' })
+  @ApiBody({ type: CompleteUploadDto })
+  @ApiResponse({
+    status: 202,
+    description: 'Upload completed; processing scheduled',
+    type: CompleteUploadResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Validation failed, or storage rejected the part list (INVALID_UPLOAD_PARTS)',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing or invalid access token',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found or owned by another user (VIDEO_NOT_FOUND)',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Video is not in DRAFT status (VIDEO_NOT_IN_DRAFT)',
+    schema: { $ref: getSchemaPath(ApiErrorEnvelope) },
+  })
+  async complete(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CompleteUploadDto,
+  ): Promise<CompleteUploadResponseDto> {
+    return this.videoUploadsService.complete(id, user.sub, dto);
   }
 
   @Delete(':id/uploads')

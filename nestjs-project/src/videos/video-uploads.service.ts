@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ChannelsService } from '../channels/channels.service';
+import { VideoProcessingQueue } from '../queue/video-processing.queue';
+import { StorageInvalidPartsError } from '../storage/storage.errors';
 import { StorageService } from '../storage/storage.service';
 import {
   InvalidUploadPartsException,
   VideoNotFoundException,
   VideoNotInDraftException,
 } from '../common/exceptions/domain.exception';
+import type { CompleteUploadResponseDto } from './dto/complete-upload-response.dto';
+import type { CompleteUploadDto } from './dto/complete-upload.dto';
 import type { InitiateUploadResponseDto } from './dto/initiate-upload-response.dto';
 import type { InitiateUploadDto } from './dto/initiate-upload.dto';
 import type { RenewPartsResponseDto } from './dto/renew-parts-response.dto';
@@ -25,7 +29,10 @@ export class VideoUploadsService {
     private readonly videosRepository: VideosRepository,
     private readonly publicIds: VideoPublicIdService,
     private readonly storage: StorageService,
+    private readonly processingQueue: VideoProcessingQueue,
   ) {}
+
+  private readonly logger = new Logger(VideoUploadsService.name);
 
   /** Starts the multipart upload and pre-registers the video as DRAFT. */
   async initiate(
@@ -96,6 +103,55 @@ export class VideoUploadsService {
       video.upload_id!,
       dto.part_numbers,
     );
+  }
+
+  /**
+   * Finalizes the multipart upload, persists PROCESSING and only then enqueues
+   * processing. The DB is the source of truth: a failed enqueue is logged and
+   * left to the reconciler, so the client still gets 202.
+   */
+  async complete(
+    publicId: string,
+    userId: string,
+    dto: CompleteUploadDto,
+  ): Promise<CompleteUploadResponseDto> {
+    const video = await this.findOwnedDraft(publicId, userId);
+
+    try {
+      await this.storage.completeMultipartUpload(
+        video.storage_key,
+        video.upload_id!,
+        dto.parts.map((part) => ({
+          partNumber: part.part_number,
+          etag: part.etag,
+        })),
+      );
+    } catch (err) {
+      if (err instanceof StorageInvalidPartsError) {
+        throw new InvalidUploadPartsException();
+      }
+      throw err;
+    }
+
+    const moved = await this.videosRepository.transitionStatus(
+      video.id,
+      'DRAFT',
+      'PROCESSING',
+    );
+    if (!moved) {
+      throw new VideoNotInDraftException();
+    }
+
+    try {
+      await this.processingQueue.enqueue(video.id);
+    } catch (err) {
+      this.logger.error(
+        `Enqueue failed for video ${video.id}; the reconciler will retry`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
+
+    return { id: publicId, status: 'PROCESSING' };
   }
 
   /** Cancels a DRAFT upload: aborts the multipart upload and removes the row. */

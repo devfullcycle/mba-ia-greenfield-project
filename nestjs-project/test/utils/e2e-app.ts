@@ -1,5 +1,9 @@
 import { type INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test, type TestingModule } from '@nestjs/testing';
+import {
+  Test,
+  type TestingModule,
+  type TestingModuleBuilder,
+} from '@nestjs/testing';
 import {
   ThrottlerStorage,
   type ThrottlerStorageService,
@@ -17,10 +21,14 @@ export interface E2eApp {
 }
 
 /** Boots AppModule with the same global pipes/filters `main.ts` applies. */
-export async function createE2eApp(): Promise<E2eApp> {
-  const moduleFixture = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+export async function createE2eApp(
+  customize: (builder: TestingModuleBuilder) => TestingModuleBuilder = (
+    builder,
+  ) => builder,
+): Promise<E2eApp> {
+  const moduleFixture = await customize(
+    Test.createTestingModule({ imports: [AppModule] }),
+  ).compile();
 
   const app = moduleFixture.createNestApplication<INestApplication<App>>();
   app.useGlobalPipes(

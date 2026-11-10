@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Repository } from 'typeorm';
-import { Video } from './entities/video.entity';
+import { Video, type VideoStatus } from './entities/video.entity';
 import { VIDEO_SEQUENCE } from './videos.constants';
 
 export type NewVideo = Pick<
@@ -47,6 +47,22 @@ export class VideosRepository {
       where: { public_id: publicId },
       relations: { channel: true },
     });
+  }
+
+  /**
+   * Atomic status transition: only applies while the row is still in `from`.
+   * Returns false when another request already moved it.
+   */
+  async transitionStatus(
+    id: string,
+    from: VideoStatus,
+    to: VideoStatus,
+  ): Promise<boolean> {
+    const result = await this.repository.update(
+      { id, status: from },
+      { status: to },
+    );
+    return (result.affected ?? 0) > 0;
   }
 
   async deleteById(id: string): Promise<void> {

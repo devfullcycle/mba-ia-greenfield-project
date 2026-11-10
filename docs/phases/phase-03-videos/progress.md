@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 6/13 completed
+**SIs:** 7/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -73,9 +73,13 @@
   - O `presignParts` privado é compartilhado por `initiate` e `renewParts`.
 
 ### SI-03.7 — Endpoint POST /videos/:id/uploads/complete (Finalização e Enfileiramento)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 22 passing (`video-uploads.service.spec.ts` 11 + `video-uploads.service.integration-spec.ts` 5 + `test/videos-uploads-complete.e2e-spec.ts` 6)
+- **Observations:**
+  - A transição `DRAFT → PROCESSING` usa o `VideosRepository.transitionStatus(id, from, to)`, um `UPDATE … WHERE status = from` atômico. Se outra requisição já moveu o vídeo (complete concorrente), responde `VIDEO_NOT_IN_DRAFT` e não enfileira. É um single statement em autocommit, então o "commit antes do enqueue" fica garantido sem transação explícita.
+  - O helper `createE2eApp` passou a aceitar um `customize(builder)` opcional (usado no cenário 1.3 com `overrideProvider(VideoProcessingQueue)`).
+  - O AC "com o Redis parado ainda retorna 202" está coberto no E2E pelo override do enqueue. A parada real do Redis fica para a verificação manual da SI-03.9, como o spec define. O timeout real de 5s já foi verificado na SI-03.4.
+  - `upload_id` permanece gravado depois do complete (o plano não pede para limpá-lo).
 
 ### SI-03.8 — Processar Vídeo no Worker (Metadados, Thumbnail e Política de Falha)
 - **Status:** pending

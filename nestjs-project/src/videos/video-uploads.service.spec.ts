@@ -1,10 +1,13 @@
 import { Test } from '@nestjs/testing';
 import { ChannelsService } from '../channels/channels.service';
 import {
+  InvalidUploadPartsException,
   VideoNotFoundException,
   VideoNotInDraftException,
 } from '../common/exceptions/domain.exception';
 import videoConfig from '../config/video.config';
+import { VideoProcessingQueue } from '../queue/video-processing.queue';
+import { StorageInvalidPartsError } from '../storage/storage.errors';
 import { StorageService } from '../storage/storage.service';
 import type { Video, VideoStatus } from './entities/video.entity';
 import { VideoPublicIdService } from './video-public-id.service';
@@ -14,12 +17,17 @@ import { VideosRepository } from './videos.repository';
 const OWNER_ID = 'owner-user-id';
 
 describe('VideoUploadsService', () => {
-  const videosRepository = { findByPublicIdWithChannel: jest.fn() };
+  const videosRepository = {
+    findByPublicIdWithChannel: jest.fn(),
+    transitionStatus: jest.fn(),
+  };
+  const storage = { completeMultipartUpload: jest.fn() };
+  const processingQueue = { enqueue: jest.fn() };
   let service: VideoUploadsService;
   let publicIds: VideoPublicIdService;
 
   beforeEach(async () => {
-    videosRepository.findByPublicIdWithChannel.mockReset();
+    jest.resetAllMocks();
     const module = await Test.createTestingModule({
       providers: [
         VideoUploadsService,
@@ -33,7 +41,8 @@ describe('VideoUploadsService', () => {
         },
         { provide: VideosRepository, useValue: videosRepository },
         { provide: ChannelsService, useValue: {} },
-        { provide: StorageService, useValue: {} },
+        { provide: StorageService, useValue: storage },
+        { provide: VideoProcessingQueue, useValue: processingQueue },
       ],
     }).compile();
     service = module.get(VideoUploadsService);
@@ -93,6 +102,73 @@ describe('VideoUploadsService', () => {
       await expect(
         service.findOwnedDraft(publicIds.encode(1), OWNER_ID),
       ).resolves.toBe(video);
+    });
+  });
+
+  describe('complete', () => {
+    const parts = [{ part_number: 1, etag: '"etag-1"' }];
+    let publicId: string;
+
+    beforeEach(() => {
+      publicId = publicIds.encode(1);
+      videosRepository.findByPublicIdWithChannel.mockResolvedValue({
+        ...videoWith('DRAFT'),
+        storage_key: 'videos/video-uuid/source',
+        upload_id: 'upload-id',
+      });
+      videosRepository.transitionStatus.mockResolvedValue(true);
+    });
+
+    it('should persist PROCESSING before enqueuing the processing job', async () => {
+      const calls: string[] = [];
+      videosRepository.transitionStatus.mockImplementation(() => {
+        calls.push('transition');
+        return Promise.resolve(true);
+      });
+      processingQueue.enqueue.mockImplementation(() => {
+        calls.push('enqueue');
+        return Promise.resolve();
+      });
+
+      const result = await service.complete(publicId, OWNER_ID, { parts });
+
+      expect(calls).toEqual(['transition', 'enqueue']);
+      expect(videosRepository.transitionStatus).toHaveBeenCalledWith(
+        'video-uuid',
+        'DRAFT',
+        'PROCESSING',
+      );
+      expect(processingQueue.enqueue).toHaveBeenCalledWith('video-uuid');
+      expect(result).toEqual({ id: publicId, status: 'PROCESSING' });
+    });
+
+    it('should still resolve PROCESSING when enqueuing fails', async () => {
+      processingQueue.enqueue.mockRejectedValue(new Error('redis down'));
+
+      await expect(
+        service.complete(publicId, OWNER_ID, { parts }),
+      ).resolves.toEqual({ id: publicId, status: 'PROCESSING' });
+    });
+
+    it('should map rejected parts to INVALID_UPLOAD_PARTS without changing status or enqueuing', async () => {
+      storage.completeMultipartUpload.mockRejectedValue(
+        new StorageInvalidPartsError(),
+      );
+
+      await expect(
+        service.complete(publicId, OWNER_ID, { parts }),
+      ).rejects.toBeInstanceOf(InvalidUploadPartsException);
+      expect(videosRepository.transitionStatus).not.toHaveBeenCalled();
+      expect(processingQueue.enqueue).not.toHaveBeenCalled();
+    });
+
+    it('should throw VIDEO_NOT_IN_DRAFT when a concurrent request already moved the video', async () => {
+      videosRepository.transitionStatus.mockResolvedValue(false);
+
+      await expect(
+        service.complete(publicId, OWNER_ID, { parts }),
+      ).rejects.toBeInstanceOf(VideoNotInDraftException);
+      expect(processingQueue.enqueue).not.toHaveBeenCalled();
     });
   });
 });

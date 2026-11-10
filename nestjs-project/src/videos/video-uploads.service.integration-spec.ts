@@ -15,6 +15,10 @@ import { Channel } from '../channels/entities/channel.entity';
 import { CreateUsersAndChannels1775687773260 } from '../database/migrations/1775687773260-CreateUsersAndChannels';
 import { CreateAuthTokens1777579850478 } from '../database/migrations/1777579850478-CreateAuthTokens';
 import { CreateVideos1794273602577 } from '../database/migrations/1794273602577-CreateVideos';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { VIDEO_PROCESSING_QUEUE } from '../queue/queue.constants';
+import { QueueModule } from '../queue/queue.module';
 import { S3_INTERNAL_CLIENT } from '../storage/storage.constants';
 import { StorageModule } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
@@ -58,6 +62,7 @@ describe('VideoUploadsService (integration)', () => {
         TypeOrmModule.forRoot(options),
         VideosDataModule,
         StorageModule,
+        QueueModule,
         ChannelsModule,
       ],
       providers: [VideoUploadsService],
@@ -182,6 +187,52 @@ describe('VideoUploadsService (integration)', () => {
         await dataSource.getRepository(Video).countBy({ id: video.id }),
       ).toBe(0);
       expect(await openUploadsFor(video.storage_key)).toHaveLength(0);
+    });
+  });
+
+  describe('complete', () => {
+    const MIB = 1024 * 1024;
+
+    afterEach(async () => {
+      await module
+        .get<Queue>(getQueueToken(VIDEO_PROCESSING_QUEUE))
+        .obliterate({ force: true });
+    });
+
+    it('should assemble the object, persist PROCESSING and enqueue process-video with jobId = video.id', async () => {
+      const chunks = [Buffer.alloc(5 * MIB, 1), Buffer.alloc(MIB, 2)];
+      const sizeBytes = chunks[0].length + chunks[1].length;
+      const draft = await service.initiate(user.id, {
+        original_filename: 'two-parts.mp4',
+        mime_type: 'video/mp4',
+        size_bytes: sizeBytes,
+      });
+      expect(draft.part_count).toBe(2);
+      const parts = await Promise.all(
+        draft.parts.map(async ({ part_number, url }) => {
+          const response = await fetch(url, {
+            method: 'PUT',
+            body: new Uint8Array(chunks[part_number - 1]),
+          });
+          return { part_number, etag: response.headers.get('etag')! };
+        }),
+      );
+
+      const result = await service.complete(draft.id, user.id, { parts });
+
+      expect(result).toEqual({ id: draft.id, status: 'PROCESSING' });
+      const video = await dataSource
+        .getRepository(Video)
+        .findOneByOrFail({ public_id: draft.id });
+      expect(video.status).toBe('PROCESSING');
+      expect((await storage.headObject(video.storage_key)).contentLength).toBe(
+        sizeBytes,
+      );
+      const job = await module
+        .get<Queue>(getQueueToken(VIDEO_PROCESSING_QUEUE))
+        .getJob(video.id);
+      expect(job?.name).toBe('process-video');
+      expect(job?.data).toEqual({ videoId: video.id });
     });
   });
 });
