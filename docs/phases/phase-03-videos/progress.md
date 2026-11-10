@@ -1,7 +1,7 @@
 # phase-03-videos — Progress
 
 **Status:** in_progress
-**SIs:** 7/13 completed
+**SIs:** 8/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
 - **Status:** completed
@@ -82,9 +82,15 @@
   - `upload_id` permanece gravado depois do complete (o plano não pede para limpá-lo).
 
 ### SI-03.8 — Processar Vídeo no Worker (Metadados, Thumbnail e Política de Falha)
-- **Status:** pending
-- **Tests:** no tests
-- **Observations:** none
+- **Status:** completed
+- **Tests:** 33 passing (`processing-policy.spec.ts` + `video.processor.spec.ts` + `worker.module.spec.ts` = 30 no `nestjs-api`; `test/video/video-processing.e2e-spec.ts` 3 no `video-worker` com FFmpeg real). As duas suítes encerram sem `--forceExit` (sem handles abertos).
+- **Observations:**
+  - **Correção da SI-03.4 (grafo de entidades do worker):** o `autoLoadEntities` só conhece entidades passadas a `forFeature`. O `WorkerModule` registrava só `Video` (via `VideosDataModule`), mas o grafo `Video → Channel → User` exige as três, e o `DataSource` falhava com `Entity metadata for Video#channel was not found` (com o retry do TypeORM, os testes ficavam pendurados). Agora o `WorkerModule` importa `UsersModule`, que registra `User` e, via `ChannelsModule`, `Channel`.
+  - Erros de processamento são tipados em `src/processing/processing.errors.ts` (`FfmpegProcessError` com `command`/`exitCode`/`stderr`, `FfmpegTimeoutError`, `NoVideoStreamError`, `NoDurationError`). Para ser `INVALID_FILE`, o `classifyProcessingError` exige `command === 'ffprobe'`, código ≠ 0, padrão de dado inválido **e** ausência de padrão de rede. Falha do `ffmpeg` (extração de frame) é infra.
+  - `VideosRepository.markReady`/`markError` são `UPDATE … WHERE status = 'PROCESSING'` (idempotentes com entrega at-least-once). `findById` foi adicionado.
+  - `ObjectHead` passou a expor `lastModified`, usado no E2E para provar que reprocessar um vídeo `READY` não regrava a thumbnail.
+  - A URL interna pré-assinada para o ffprobe/ffmpeg dura 1h (`INTERNAL_URL_TTL_SECONDS`). O plano não fixava valor; está dimensionada para o probe/frame de arquivos grandes, dentro do timeout de 10 min por comando.
+  - Verificado manualmente com o worker de dev: com o MinIO parado, o vídeo ficou `PROCESSING` e o job foi para `delayed` com `delay: 30000` (`getaddrinfo ENOTFOUND minio`). Com o MinIO de volta, o retry levou o vídeo a `READY`.
 
 ### SI-03.9 — Reconciliar Vídeos Presos em PROCESSING
 - **Status:** pending

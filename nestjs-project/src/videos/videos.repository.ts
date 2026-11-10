@@ -19,6 +19,11 @@ export type NewVideo = Pick<
   | 'upload_id'
 >;
 
+export type ProcessingResult = Pick<
+  Video,
+  'duration_seconds' | 'width' | 'height' | 'codec' | 'thumbnail_key'
+>;
+
 /** Data access for `videos`; the only place that touches `Repository<Video>`. */
 @Injectable()
 export class VideosRepository {
@@ -63,6 +68,26 @@ export class VideosRepository {
       { status: to },
     );
     return (result.affected ?? 0) > 0;
+  }
+
+  async findById(id: string): Promise<Video | null> {
+    return this.repository.findOneBy({ id });
+  }
+
+  /** PROCESSING -> READY with the extracted metadata; no-op if no longer PROCESSING. */
+  async markReady(id: string, result: ProcessingResult): Promise<void> {
+    await this.repository.update(
+      { id, status: 'PROCESSING' },
+      { ...result, status: 'READY', error_reason: null },
+    );
+  }
+
+  /** PROCESSING -> ERROR with a permanent failure reason; no-op if no longer PROCESSING. */
+  async markError(id: string, reason: string): Promise<void> {
+    await this.repository.update(
+      { id, status: 'PROCESSING' },
+      { status: 'ERROR', error_reason: reason },
+    );
   }
 
   async deleteById(id: string): Promise<void> {

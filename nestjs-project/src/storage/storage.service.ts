@@ -137,6 +137,7 @@ export class StorageService {
     return {
       contentLength: output.ContentLength ?? 0,
       contentType: output.ContentType,
+      lastModified: output.LastModified,
     };
   }
 

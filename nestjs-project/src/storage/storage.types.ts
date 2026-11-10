@@ -20,4 +20,5 @@ export interface ObjectStream {
 export interface ObjectHead {
   contentLength: number;
   contentType?: string;
+  lastModified?: Date;
 }
