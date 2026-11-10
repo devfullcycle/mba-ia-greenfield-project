@@ -3,7 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import type { ConfigType } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule } from '@nestjs/swagger';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { JSON_BODY_LIMIT } from './common/http/body-limit';
 import { DomainExceptionFilter } from './common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from './common/filters/validation-exception.filter';
 import swaggerConfig from './config/swagger.config';
@@ -11,7 +13,8 @@ import { buildSwaggerDocument } from './swagger/swagger-document';
 import swaggerMetadata from './metadata.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') ?? 3000;
 
