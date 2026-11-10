@@ -1,6 +1,6 @@
 # phase-03-videos — Progress
 
-**Status:** in_progress
+**Status:** completed
 **SIs:** 13/13 completed
 
 ### SI-03.1 — Infra: Dependências, Configuração e Serviços Redis/MinIO no Compose
@@ -122,7 +122,7 @@
 
 ### SI-03.12 — Criar Cliente de Upload scripts/upload-video.ts
 - **Status:** completed
-- **Tests:** 7 passing (`src/upload-client/multipart-uploader.spec.ts`)
+- **Tests:** 7 passing (`src/upload-client/multipart-uploader.spec.ts`), mais a re-prova de RSS com o arquivo de 10GB (ver abaixo)
 - **Observations:**
   - `UploadApi` e `PartPutter` são injetáveis. Os testes de `uploadFile` usam fakes (fatiamento, ETags, renovação só das pendentes após `403`, retry de erro de rede, esgotamento de tentativas). O teste do `--storage-connect` usa um servidor HTTP local em `127.0.0.1` e confere que o header `Host` continua sendo o da URL assinada.
   - A URL expirada (`403`) não consome tentativa: renova as partes ainda não confirmadas, com um único `renewParts` compartilhado entre workers concorrentes, e repete. Outras falhas têm backoff linear e até 5 tentativas por parte.
@@ -130,17 +130,23 @@
   - Corrigido durante a implementação: `URL.port` é `''` na porta padrão, então o fallback usa `||` (com `??` a porta virava `0`).
   - `npm run build` verificado: `dist/main.js`, `dist/worker.js` e `dist/mail/templates/*.hbs` presentes, sem `dist/src`.
   - Verificado manualmente com a API rodando (`start:dev` temporário no container) e a config de dev (`S3_PUBLIC_ENDPOINT=http://localhost:9000`): `npm run upload:video -- --file test/video/fixtures/sample.mp4 --api http://nestjs-api:3000 --storage-connect minio:9000 --token …` saiu com exit 0 e imprimiu `id=QevEWIV09d status=PROCESSING`. O worker de dev levou o vídeo a `READY` em segundos.
-  - O AC de RSS (arquivo de vários GB) é medido na prova de 10GB da SI-03.13, na mesma rodada.
+  - **AC de RSS, correção (2026-11-10):** o AC ("durante o upload de vários GB, o RSS do processo do script fica abaixo de part_size × concurrency + 100MB") foi dado inicialmente como coberto, o que estava errado. Para o arquivo de 10GB o limite é 5 MiB × 4 + 100 MiB = 120 MiB. Via `ts-node` o cliente mediu 162–226MB, e mesmo como JS compilado ficou em ~157 MiB.
+  - **Causa (investigada):** não é vazamento, e o backpressure funciona. Cada parte de 5 MiB é lida como ~80 Buffers de 64 KiB (`highWaterMark` padrão do `createReadStream`, em `src/upload-client/multipart-uploader.ts`). Esses buffers externos só são liberados quando os wrappers JS (pequenos) são coletados pelo scavenge, então até ~65 MiB de buffers mortos se acumulam entre GCs da young generation, e a glibc mantém o pico no RSS (baseline do runtime ~42 MiB, heap ~17 MiB).
+  - Mudar o `highWaterMark` não resolveu: com 1 MiB os buffers vão para `mmap` e o RSS oscila; com 16 KiB o heap cresce.
+  - **Correção:** `upload:video` passou a rodar `tsc -p tsconfig.scripts.json && node --max-semi-space-size=1 dist-scripts/scripts/upload-video.js`. Novo `tsconfig.scripts.json`, com saída em `dist-scripts/` (no `.gitignore` e no `exclude` do `tsconfig.build.json`). Documentado em `nestjs-project/CLAUDE.md` § Upload client.
+  - **Re-prova com o npm script real:** 10.489.279.614 bytes, 2001 partes de 5 MiB, concorrência 4, upload em 35,2s, vídeo `9qFQxEJqyc` em `READY` ~8s depois. RSS do cliente em 30 amostras: mín. 88,8 / mediana 106,6 / máx. 108,9 MiB, abaixo dos 120 MiB (PASS, margem de ~11 MiB). Qualquer nova checagem precisa usar o npm script ou a mesma flag.
+  - `tsc`, `eslint` e `jest src/upload-client` (7/7) passam depois da correção.
 
 ### SI-03.13 — Fluxo Completo de Upload, Processamento e Streaming (prova de entrega)
 - **Status:** completed
 - **Tests:** 2 passing (`test/video/video-pipeline.e2e-spec.ts` no container `video-worker`)
 - **Observations:**
-  - **Bug encontrado na prova de 10GB, corrigido em branch separada (`bugfix/upload-body-limit`, mergeada na feature):** concluir um upload de 10GB envia até 10.000 pares `{ part_number, etag }` (~600kb), acima dos 100kb padrão do Express, e a API respondia `413`. `JSON_BODY_LIMIT = '2mb'` (`src/common/http/body-limit.ts`) é aplicado em `main.ts` e em `test/utils/e2e-app.ts`, com teste de regressão em `videos-uploads-complete.e2e-spec.ts`. A branch saiu da `feature/phase-03-videos`, não da `dev`, porque o bug só existe no endpoint da Fase 03.
-  - `upload:video` passou a usar `ts-node -T` (transpile-only): o cliente não paga type-check a cada execução.
+  - **Bug encontrado na prova de 10GB, corrigido em branch separada (`bugfix/upload-body-limit`, mergeada na feature):** o `complete` pode receber até 10.000 pares `{ part_number, etag }` (~600kb, máximo teórico pelo limite do S3). A prova real de 10GB enviou ~2.001 pares (~120kb), já acima dos 100kb padrão do Express, e a API respondia `413`. `JSON_BODY_LIMIT = '2mb'` (`src/common/http/body-limit.ts`) é aplicado em `main.ts` e em `test/utils/e2e-app.ts`, com teste de regressão em `videos-uploads-complete.e2e-spec.ts`. A branch saiu da `feature/phase-03-videos`, não da `dev`, porque o bug só existe no endpoint da Fase 03.
+  - `upload:video` passou primeiro a usar `ts-node -T` (transpile-only) e depois a rodar JS compilado com `node --max-semi-space-size=1` (ver a entrada da SI-03.12).
   - **Prova de 10GB, 2026-11-10:** arquivo de 10.489.279.614 bytes (MPEG-4 1920x1080, 3000s, gerado com `ffmpeg`, em `nestjs-project/.tmp-10gb/`), enviado com `docker compose exec nestjs-api npm run upload:video -- --file .tmp-10gb/video-10gb.mp4 --api http://nestjs-api:3000 --storage-connect minio:9000 --token …`. Exit 0, upload em **40s**, e o vídeo `aCWjUcTEYt` chegou a **`READY`** (duração 3000s e dimensões extraídas pelo worker). `GET /videos/aCWjUcTEYt/stream` com `Range: bytes=10000000000-10000001023` respondeu `206` com 1024 bytes em 27ms.
-  - **Memória da API (RSS do processo `dist/main`, amostra a cada 2s, 19 amostras):** 161MB em repouso, um degrau único para 344MB no `initiate` (pré-assinatura de ~2.000 URLs de parte), e depois plano em 344MB durante os 40s de transferência (os bytes vão direto ao MinIO; a API não os toca). Não cresce com o volume transferido: um segundo upload terminou em 352MB, e depois do GC o RSS voltou a 180MB. Cliente: RSS entre 162 e 226MB (mediana 215MB) durante todo o upload, constante (cobre o AC de memória da SI-03.12).
-  - **API sem bloqueio:** `GET /videos/Gqi9eizN6I` (outro vídeo) teve mediana de 3,4ms (máx. 9,9ms) em repouso e, durante o upload de 10GB, 20/20 respostas `200` com mediana de 12,1ms e máx. de 20,7ms (API e cliente dividindo o mesmo container).
+  - **Memória da API (RSS do processo `dist/main`, amostra a cada 2s, 19 amostras):** 161MB em repouso, um degrau único para 344MB no `initiate`, e depois plano em 344MB durante os 40s de transferência (os bytes vão direto ao MinIO; a API não os toca). Parte do degrau vem da pré-assinatura de todas as URLs de parte (~2.000 aqui). O número de URLs cresce com o tamanho do arquivo até o teto de 10.000, então o degrau é limitado, mas não estritamente independente do tamanho. Não cresce com o volume transferido: um segundo upload terminou em 352MB. Na primeira rodada o RSS voltou a 180MB depois do GC; nas rodadas seguintes ficou em ~340 MiB após 30s ocioso (heap retido ainda não coletado). Fica como follow-up a investigar, não bloqueante.
+  - Cliente via `ts-node`: RSS entre 162 e 226MB (mediana 215MB). Isso **não** cobria o AC de memória da SI-03.12; a correção e a re-prova estão na entrada da SI-03.12.
+  - **API sem bloqueio:** `GET /videos/Gqi9eizN6I` (outro vídeo) teve mediana de 3,4ms (máx. 9,9ms) em repouso e, durante o upload de 10GB, 20/20 respostas `200` com mediana de 12,1ms e máx. de 20,7ms (API e cliente dividindo o mesmo container). Na re-prova com o cliente compilado: 76/76 respostas `200`, mediana de 6,2ms, p95 de 20,3ms e máx. de 28,9ms.
   - **Limite de disco do Docker:** a segunda rodada de 10GB falhou com `507` do MinIO na parte 1392 porque o disco da VM do Docker encheu (55GB, 100%). O rascunho foi abortado via `DELETE /videos/pEAGyJtMgl/uploads` (204), o que liberou 7GB. Follow-up fora de escopo: o cliente não chama o abort quando uma parte falha de vez; o multipart fica para o `MINIO_API_STALE_UPLOADS_EXPIRY=24h`.
   - **Smoke test do Compose, 2026-11-10:** depois de `docker compose down -v`, um único `docker compose up -d` deixou `db`, `redis`, `minio` e `mailpit` em `healthy`, `nestjs-api` e `video-worker` em `Up` (log `video-worker started`) e `minio-init` em `Exited (0)` (buckets `streamtube` e `streamtube-test` criados). Depois de `npm run migration:run`, o E2E do pipeline foi re-executado no ambiente zerado: 2/2.
   - Documentação (ação 2): a readiness do MinIO está descrita pelo healthcheck do Compose (`healthy`) e pelo `minio-init` em `Exited (0)`, não por `mc ready`. O efeito é o mesmo, sem depender de alias do `mc` no container.
@@ -159,3 +165,19 @@ Vereditos dos validadores independentes (subagente novo por ciclo, conforme o "M
   - Ciclo 5: aprovado; não bloqueantes para tratar no `/implement`: `"dist-worker"` no `exclude` do tsconfig, `default nextval` na entidade, `MaxLength(127)` em `mime_type`, `VIDEO_PUBLIC_ID_ALPHABET`/`REDIS_*` no `.env.example`, `load` dos configs novos no `ConfigModule`.
 
 **Desvio registrado — TD-04:** o TD pede "bucket lifecycle aborts incomplete multipart after 1 day". O MinIO não implementa a ação de lifecycle `AbortIncompleteMultipartUpload`; o plano (SI-03.1) usa `MINIO_API_STALE_UPLOADS_EXPIRY=24h`, mecanismo nativo do MinIO com o mesmo efeito (uploads incompletos são abortados após ~1 dia). A revisão formal no `technical-decisions-phase-03-videos.md` fica para o fechamento da fase: editar o doc agora alteraria o mtime das fontes e invalidaria `context.md`, `validation.md` e o plano (staleness do pipeline).
+
+## Validação final (2026-11-10)
+
+- **Verificação final (subagente independente): APROVADO.** Unit+integration: 39 suites / 281 testes. E2E: 8 suites / 82 testes. E2E de vídeo: 2 suites / 5 testes. `tsc --noEmit` exit 0, lint OK (nenhum arquivo alterado pelo `--fix`), `openapi:export` sem diff, build OK (`dist/main.js`, `dist/worker.js`).
+- **Validadores por SI (um subagente por SI, análise estática):** SI-03.1 a 03.11 e 03.13 APROVADO COM RESSALVAS (sem bloqueantes). SI-03.12 inicialmente REPROVADO (AC de RSS), resolvido como descrito na entrada da SI-03.12.
+
+### Follow-ups
+
+1. **OpenAPI:** todos os schemas de DTO saem com `properties: {}` desde a Fase 02. O `openapi:export` roda via ts-node sem o plugin CLI do `@nestjs/swagger` (`src/metadata.ts` não é carregado). Branch `bugfix/openapi-dto-schemas`.
+2. **Abort:** o delete no `abort` é incondicional depois da checagem de DRAFT (corrida com um `complete` concorrente pode apagar um vídeo `PROCESSING`). `abortMultipartUpload` não trata `NoSuchUpload` como sucesso (o rascunho fica impossível de apagar, `500`). O cliente de upload nunca chama `DELETE /videos/:id/uploads` em falha definitiva. Branch `bugfix/video-upload-abort`.
+3. **Robustez do cliente de upload:** qualquer `403` é tratado como URL expirada, sem teto de renovações (loop infinito em `SignatureDoesNotMatch`). Sem timeout de socket. `--concurrency` não é validado (`NaN`/`0` resulta em zero workers). Branch `bugfix/upload-client-robustness`.
+4. **Vídeos presos:** se o `transitionStatus` falha depois de um complete bem-sucedido no S3, o vídeo fica em DRAFT para sempre (o reconciler não cobre DRAFT). Objeto de origem ausente faz o worker repetir para sempre como erro de infra. Vídeo `READY` sem objeto ou com `thumbnail_key` nulo gera `500` nas rotas de mídia.
+5. **Fila/reconciler:** `hasActiveJob` não tem timeout (ticks podem se acumular com o Redis fora). `updated_at` é `timestamp` sem time zone comparado a um `Date` do Node (sensível a TZ). `findStaleProcessing` não tem `LIMIT`.
+6. **RSS da API:** fica em ~340 MiB depois de um `initiate` grande. Investigar heap retido pela pré-assinatura.
+7. **Docs:** o plano (`phase-03-videos.md`, SI-03.3 ação 2 e Data Model) e a entrada da SI-03.3 neste progress ainda citam `DEFAULT nextval` em `seq`, removido na SI-03.5. O README não tem checagem de readiness do MinIO. O default `DB_HOST=localhost` em `env.validation.ts` contradiz a regra de usar o nome do serviço do Compose.
+8. **Lacunas menores de teste:** o status do login não é verificado em `video-pipeline.e2e-spec.ts`. O E2E de processamento do "fake mp4" pode ter corrida entre `markError` e o estado `failed` do job. O teste "more than one number" de `video-public-id` não exercita esse branch.
