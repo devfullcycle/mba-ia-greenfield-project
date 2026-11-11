@@ -171,9 +171,19 @@ Vereditos dos validadores independentes (subagente novo por ciclo, conforme o "M
 - **Verificação final (subagente independente): APROVADO.** Unit+integration: 39 suites / 281 testes. E2E: 8 suites / 82 testes. E2E de vídeo: 2 suites / 5 testes. `tsc --noEmit` exit 0, lint OK (nenhum arquivo alterado pelo `--fix`), `openapi:export` sem diff, build OK (`dist/main.js`, `dist/worker.js`).
 - **Validadores por SI (um subagente por SI, análise estática):** SI-03.1 a 03.11 e 03.13 APROVADO COM RESSALVAS (sem bloqueantes). SI-03.12 inicialmente REPROVADO (AC de RSS), resolvido como descrito na entrada da SI-03.12.
 
+### Ciclo 2 (2026-11-10)
+
+- **Base:** commit b063871. Validadores independentes (um subagente por SI, análise estática num worktree isolado) mais uma verificação final.
+- **Resultado:** SI-03.1 APROVADO. SI-03.2 a 03.13 APROVADO COM RESSALVAS, nenhum bloqueante. A SI-03.12, reprovada no ciclo 1, foi aprovada.
+- **Verificação final: APROVADO.** Unit+integration: 39 suites / 281 testes. E2E: 8 suites / 82 testes. E2E de vídeo: 2 suites / 5 testes. `tsc --noEmit` exit 0, lint sem alterações, `openapi:export` sem diff, build OK, `tsc -p tsconfig.scripts.json` OK.
+- **Bugfix `bugfix/openapi-dto-schemas` (commit 685ec96, merge 461b0ad), resolve o Follow-up 1:**
+  - Causa real: o `openapi:export` rodava em ts-node puro, sem o transformer do plugin CLI do `@nestjs/swagger`, que só roda em `nest build`/`nest start`. O `src/metadata.ts` é um stub e não tinha papel nisso.
+  - Correção: o hook `scripts/register-swagger-ts-node.js` registra o ts-node com o transformer, usando as opções do `nest-cli.json`. O `openapi.json` exportado ficou idêntico ao gerado pelo build.
+  - Revisão independente: APROVADO COM RESSALVAS. Aplicados timeout no `execFileSync` e limpeza do arquivo temporário do spec; nota adicionada no `nestjs-project/CLAUDE.md`.
+
 ### Follow-ups
 
-1. **OpenAPI:** todos os schemas de DTO saem com `properties: {}` desde a Fase 02. O `openapi:export` roda via ts-node sem o plugin CLI do `@nestjs/swagger` (`src/metadata.ts` não é carregado). Branch `bugfix/openapi-dto-schemas`.
+1. **OpenAPI:** todos os schemas de DTO saem com `properties: {}` desde a Fase 02. O `openapi:export` roda via ts-node sem o plugin CLI do `@nestjs/swagger` (`src/metadata.ts` não é carregado). Branch `bugfix/openapi-dto-schemas`. — **resolvido** em 685ec96 (merge 461b0ad).
 2. **Abort:** o delete no `abort` é incondicional depois da checagem de DRAFT (corrida com um `complete` concorrente pode apagar um vídeo `PROCESSING`). `abortMultipartUpload` não trata `NoSuchUpload` como sucesso (o rascunho fica impossível de apagar, `500`). O cliente de upload nunca chama `DELETE /videos/:id/uploads` em falha definitiva. Branch `bugfix/video-upload-abort`.
 3. **Robustez do cliente de upload:** qualquer `403` é tratado como URL expirada, sem teto de renovações (loop infinito em `SignatureDoesNotMatch`). Sem timeout de socket. `--concurrency` não é validado (`NaN`/`0` resulta em zero workers). Branch `bugfix/upload-client-robustness`.
 4. **Vídeos presos:** se o `transitionStatus` falha depois de um complete bem-sucedido no S3, o vídeo fica em DRAFT para sempre (o reconciler não cobre DRAFT). Objeto de origem ausente faz o worker repetir para sempre como erro de infra. Vídeo `READY` sem objeto ou com `thumbnail_key` nulo gera `500` nas rotas de mídia.
@@ -181,3 +191,12 @@ Vereditos dos validadores independentes (subagente novo por ciclo, conforme o "M
 6. **RSS da API:** fica em ~340 MiB depois de um `initiate` grande. Investigar heap retido pela pré-assinatura.
 7. **Docs:** o plano (`phase-03-videos.md`, SI-03.3 ação 2 e Data Model) e a entrada da SI-03.3 neste progress ainda citam `DEFAULT nextval` em `seq`, removido na SI-03.5. O README não tem checagem de readiness do MinIO. O default `DB_HOST=localhost` em `env.validation.ts` contradiz a regra de usar o nome do serviço do Compose.
 8. **Lacunas menores de teste:** o status do login não é verificado em `video-pipeline.e2e-spec.ts`. O E2E de processamento do "fake mp4" pode ter corrida entre `markError` e o estado `failed` do job. O teste "more than one number" de `video-public-id` não exercita esse branch.
+9. **`.dockerignore`:** não lista `.tmp-10gb` nem `dist-scripts`. Um `docker compose build` levaria o arquivo de 10GB para o contexto de build.
+10. **Worker:** se o ffmpeg sai com 0 sem produzir frame, `extractFrame` devolve um Buffer vazio e o vídeo vira `READY` com thumbnail de 0 bytes (`ffmpeg.service.ts`, `video.processor.ts`). JSON truncado do ffprobe é tratado como erro de infra e repete para sempre. stdout/stderr do ffmpeg acumulam sem teto.
+11. **Testes de integração em paralelo:** `npm test` roda os integration specs em workers paralelos enquanto `migrations.integration-spec.ts` faz `DROP TABLE videos`/`DROP SEQUENCE` no banco compartilhado. Risco de falha intermitente fora do `--runInBand` (a suíte oficial usa `--runInBand`).
+12. **OpenAPI:** `GET /videos/{id}` declara `security: [{bearer: []}]` (Bearer obrigatório) apesar do `@OptionalAuth`. `@ApiProduces('video/*')`/`image/jpeg` faz os erros 404/416 de stream/download/thumbnail aparecerem com esse content type em vez de JSON. `status` sai como `{"type":"object"}` nos DTOs de resposta (union de literais via `import type`; precisa de `@ApiProperty({ enum: VIDEO_STATUSES })`). `metadata.ts` e o `loadPluginMetadata` em `main.ts` são código morto.
+13. **`complete` concorrente:** as duas requisições chamam `completeMultipartUpload` antes do UPDATE condicional. A segunda recebe `NoSuchUpload` e responde 400 `INVALID_UPLOAD_PARTS` em vez do 409 `VIDEO_NOT_IN_DRAFT` do contrato.
+14. **`initiate`:** se a pré-assinatura falha depois do insert, ficam um rascunho DRAFT e um multipart órfãos, sem o cliente receber o id. Os E2E deixam ~16 multiparts incompletos abertos por execução no bucket `streamtube-test`.
+15. **SI-03.12:** a margem do AC de RSS é de ~6,5 MiB se "100MB" for decimal (limite de ~115,4 MiB), não ~11 MiB. A medição a ~1 Hz pode perder picos (`VmHWM` daria o pico real). O AC depende de uma flag de runtime sem teste automatizado. `scripts/` está fora do lint. O plano ainda descreve `upload:video` com ts-node.
+16. **Lacunas de teste (ciclo 2):** o polling de `video-pipeline.e2e-spec.ts` não tem limite próprio nem checa o status HTTP. Não há teste do cron com a flag ligada nem de falha em um vídeo sem interromper o lote. Os defaults de `S3_BUCKET`/`QUEUE_PREFIX`/`VIDEO_RECONCILER_ENABLED` não são testados. `worker.module.spec` só olha os controllers do próprio módulo.
+17. **Docs do progress:** a entrada da SI-03.13 mistura as rodadas da prova de 10GB e as unidades MB/MiB. A observação da SI-03.6 sobre "o filter não define headers" está desatualizada.
