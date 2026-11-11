@@ -181,11 +181,26 @@ Vereditos dos validadores independentes (subagente novo por ciclo, conforme o "M
   - Correção: o hook `scripts/register-swagger-ts-node.js` registra o ts-node com o transformer, usando as opções do `nest-cli.json`. O `openapi.json` exportado ficou idêntico ao gerado pelo build.
   - Revisão independente: APROVADO COM RESSALVAS. Aplicados timeout no `execFileSync` e limpeza do arquivo temporário do spec; nota adicionada no `nestjs-project/CLAUDE.md`.
 
+### Correções pós-validação (2026-11-10)
+
+Cada branch foi implementada por um subagente e revisada por outro subagente independente. Veredito das duas: APROVADO COM RESSALVAS, sem bloqueantes.
+
+- **`bugfix/video-upload-abort` (commit cea6432, merge 2ee8d7a), resolve o Follow-up 2:**
+  - O delete do rascunho só acontece com `status = 'DRAFT'` (`VideosRepository.deleteDraft`). Se nenhuma linha for apagada, a resposta é 409 `VIDEO_NOT_IN_DRAFT`.
+  - `NoSuchUpload` no abort é tratado como sucesso na camada de storage (`isUploadGone`). No `complete`, continua mapeado para `INVALID_UPLOAD_PARTS`.
+  - Na falha definitiva, o cliente chama `DELETE /videos/:id/uploads` em best-effort, depois de esperar as partes em voo, sem mascarar o erro original.
+  - Suíte: 297 unit+integration, 83 e2e, 5 e2e de vídeo.
+- **`bugfix/upload-client-robustness` (commit ae6af38, merge d30afeb), resolve o Follow-up 3:**
+  - Um 403 logo depois de renovar a URL da parte falha de vez, com mensagem apontando SignatureDoesNotMatch, Host ou `--storage-connect`. Antes, entrava em loop infinito.
+  - Cada PUT de parte tem timeout de inatividade de 60s, inclusive na conexão TCP (`options.timeout`), com retry. O `ReadStream` é destruído quando o request fecha, sem vazar file descriptor.
+  - `--concurrency` só aceita inteiros de 1 a 32, tanto na CLI quanto em `uploadFile`.
+  - Suíte: 317 unit+integration, 83 e2e, 5 e2e de vídeo.
+
 ### Follow-ups
 
 1. **OpenAPI:** todos os schemas de DTO saem com `properties: {}` desde a Fase 02. O `openapi:export` roda via ts-node sem o plugin CLI do `@nestjs/swagger` (`src/metadata.ts` não é carregado). Branch `bugfix/openapi-dto-schemas`. — **resolvido** em 685ec96 (merge 461b0ad).
-2. **Abort:** o delete no `abort` é incondicional depois da checagem de DRAFT (corrida com um `complete` concorrente pode apagar um vídeo `PROCESSING`). `abortMultipartUpload` não trata `NoSuchUpload` como sucesso (o rascunho fica impossível de apagar, `500`). O cliente de upload nunca chama `DELETE /videos/:id/uploads` em falha definitiva. Branch `bugfix/video-upload-abort`.
-3. **Robustez do cliente de upload:** qualquer `403` é tratado como URL expirada, sem teto de renovações (loop infinito em `SignatureDoesNotMatch`). Sem timeout de socket. `--concurrency` não é validado (`NaN`/`0` resulta em zero workers). Branch `bugfix/upload-client-robustness`.
+2. **Abort:** o delete no `abort` é incondicional depois da checagem de DRAFT (corrida com um `complete` concorrente pode apagar um vídeo `PROCESSING`). `abortMultipartUpload` não trata `NoSuchUpload` como sucesso (o rascunho fica impossível de apagar, `500`). O cliente de upload nunca chama `DELETE /videos/:id/uploads` em falha definitiva. Branch `bugfix/video-upload-abort`. — **resolvido** em cea6432 (merge 2ee8d7a).
+3. **Robustez do cliente de upload:** qualquer `403` é tratado como URL expirada, sem teto de renovações (loop infinito em `SignatureDoesNotMatch`). Sem timeout de socket. `--concurrency` não é validado (`NaN`/`0` resulta em zero workers). Branch `bugfix/upload-client-robustness`. — **resolvido** em ae6af38 (merge d30afeb).
 4. **Vídeos presos:** se o `transitionStatus` falha depois de um complete bem-sucedido no S3, o vídeo fica em DRAFT para sempre (o reconciler não cobre DRAFT). Objeto de origem ausente faz o worker repetir para sempre como erro de infra. Vídeo `READY` sem objeto ou com `thumbnail_key` nulo gera `500` nas rotas de mídia.
 5. **Fila/reconciler:** `hasActiveJob` não tem timeout (ticks podem se acumular com o Redis fora). `updated_at` é `timestamp` sem time zone comparado a um `Date` do Node (sensível a TZ). `findStaleProcessing` não tem `LIMIT`.
 6. **RSS da API:** fica em ~340 MiB depois de um `initiate` grande. Investigar heap retido pela pré-assinatura.
@@ -200,3 +215,7 @@ Vereditos dos validadores independentes (subagente novo por ciclo, conforme o "M
 15. **SI-03.12:** a margem do AC de RSS é de ~6,5 MiB se "100MB" for decimal (limite de ~115,4 MiB), não ~11 MiB. A medição a ~1 Hz pode perder picos (`VmHWM` daria o pico real). O AC depende de uma flag de runtime sem teste automatizado. `scripts/` está fora do lint. O plano ainda descreve `upload:video` com ts-node.
 16. **Lacunas de teste (ciclo 2):** o polling de `video-pipeline.e2e-spec.ts` não tem limite próprio nem checa o status HTTP. Não há teste do cron com a flag ligada nem de falha em um vídeo sem interromper o lote. Os defaults de `S3_BUCKET`/`QUEUE_PREFIX`/`VIDEO_RECONCILER_ENABLED` não são testados. `worker.module.spec` só olha os controllers do próprio módulo.
 17. **Docs do progress:** a entrada da SI-03.13 mistura as rodadas da prova de 10GB e as unidades MB/MiB. A observação da SI-03.6 sobre "o filter não define headers" está desatualizada.
+18. **Janela residual no abort (aberta pela idempotência):** se o `CompleteMultipartUpload` do `complete` já terminou mas o `transitionStatus` ainda não rodou, o abort recebe `NoSuchUpload` (sucesso), o `deleteDraft` apaga a linha DRAFT, o abort responde 204 e o complete 409, e o objeto montado fica órfão em `videos/<uuid>/source`. Gravidade baixa: mesmo dono, janela de uma query (o cliente pode provocar isso ao abortar depois de um 5xx no complete). Opções: sweeper de objetos `source` sem linha no banco, ou serializar abort/complete por linha. Efeito positivo: o rascunho preso em DRAFT após falha do `transitionStatus` (Follow-up 4) agora pode ser removido pelo abort.
+19. **Cliente de upload (abort):** uma parte em voo continua tentando até `maxAttempts` antes do abort. Com duas falhas, o erro relançado é o do primeiro worker no array, não necessariamente o primeiro no tempo. `createHttpApi().abort` não tem teste. O teste unitário "multipart já removido" do service é igual ao caminho feliz.
+20. **Teste de timeout de conexão** (`multipart-uploader.spec.ts`): depende de a rede descartar o SYN para `10.255.255.1`. Numa rede que responda `ENETUNREACH` na hora, ele falharia (no container é estável).
+21. **Teste "share one renewal":** provavelmente já passava antes do fix do 403 e não exercita de forma determinística o desvio "URL já renovada por outro worker".
