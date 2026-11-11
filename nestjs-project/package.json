@@ -29,7 +29,7 @@
     "migration:create": "npm run typeorm -- migration:create",
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' src/database/seeds/seed.ts",
     "upload:video": "tsc -p tsconfig.scripts.json && node --max-semi-space-size=1 dist-scripts/scripts/upload-video.js",
-    "openapi:export": "ts-node -r tsconfig-paths/register src/openapi-export.ts"
+    "openapi:export": "node -r ./scripts/register-swagger-ts-node.js -r tsconfig-paths/register src/openapi-export.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1165.0",
