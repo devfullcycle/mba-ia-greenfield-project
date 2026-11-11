@@ -1,5 +1,7 @@
 # compiled output
 /dist
+/dist-worker
+/dist-scripts
 /node_modules
 /build
 
@@ -45,6 +47,7 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+/.tmp-10gb
 
 # Runtime data
 pids

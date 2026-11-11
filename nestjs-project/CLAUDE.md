@@ -13,6 +13,9 @@ docker compose ps   # all services must show status "running"
 Then verify each infrastructure service is actually ready to accept connections — not just running:
 
 - **PostgreSQL:** `docker compose exec db pg_isready -U streamtube` — expect `accepting connections`
+- **Redis:** `docker compose exec redis redis-cli ping` — expect `PONG`
+- **MinIO:** `docker compose ps minio` shows `healthy` (healthcheck hits `/minio/health/live`); `minio-init` must show `Exited (0)` (it creates the `streamtube` and `streamtube-test` buckets)
+- **video-worker:** `docker compose logs video-worker` shows `video-worker started`
 
 Only start the NestJS dev server (`npm run start:dev`) when the user **explicitly** asks to run the application — never as part of "start the environment".
 
@@ -33,7 +36,18 @@ docker compose exec nestjs-api npm run start:dev
 
 Services:
 - `nestjs-api` — NestJS API, port `3000`
+- `video-worker` — same codebase, standalone worker process (`src/worker.ts`, no HTTP) with FFmpeg; consumes the `video-processing` queue and runs the reconciler cron. Built from `Dockerfile.worker`, starts with `npm run start:worker:dev`
 - `db` — PostgreSQL 17, port `5432`, database `streamtube`, user/password `streamtube`
+- `redis` — Redis 7 (BullMQ queues), port `6379`
+- `minio` — S3-compatible object storage (`bitnamilegacy/minio`; official `minio/minio` images are no longer published), API port `9000`, console `9001`
+- `minio-init` — one-shot `mc` container that creates the `streamtube` and `streamtube-test` buckets
+- `mailpit` — SMTP capture, ports `1025` (SMTP) / `8025` (UI/API)
+
+**After `npm install` in `nestjs-api`**, the worker keeps its own `node_modules` (anonymous volume, installed by `npm ci` in the image). Rebuild it so it picks up dependency changes:
+
+```bash
+docker compose build video-worker && docker compose up -d -V video-worker
+```
 
 All verification and teardown commands run on the **host machine**:
 
@@ -67,6 +81,8 @@ npm test                                 # Unit tests
 npm run test:watch                       # Unit tests in watch mode
 npm run test:cov                         # Coverage report
 npm run test:e2e                         # End-to-end tests (always with --runInBand)
+npm run upload:video -- --file <path> --api http://nestjs-api:3000 --storage-connect minio:9000 --token <access_token>
+npm run openapi:export                   # Regenerate openapi.json
 
 npx tsc --noEmit                         # Type-check (required before declaring a task done)
 npm run lint                             # ESLint with auto-fix
@@ -89,9 +105,22 @@ Integration and e2e suites share a single test database. They **must** be run wi
 ```bash
 docker compose exec nestjs-api npm test -- --runInBand
 docker compose exec nestjs-api npm run test:e2e   # already configured
+docker compose exec video-worker npm run test:e2e:video   # video pipeline suites (test/video/), need FFmpeg
 ```
 
 Parallel execution causes FK violations, deadlocks, and cross-suite contamination because suites truncate or seed shared tables concurrently.
+
+The video E2E suites (`test/video/`) run **only in the `video-worker` container** (the API image has no FFmpeg); `npm run test:e2e` ignores them. Tests use the `streamtube-test` bucket and BullMQ prefix (`test/setup-test-env.ts`), never development data.
+
+### Upload client
+
+`npm run upload:video` (`scripts/upload-video.ts`) drives the full upload contract with constant memory. Preconditions: the API is running (`npm run start:dev`) and you have an access token. Inside the container, pass `--storage-connect minio:9000`: part URLs are signed for `S3_PUBLIC_ENDPOINT` (`localhost:9000`), and the flag connects to MinIO through the Compose network while keeping the signed `Host` header (SigV4 signatures are host-bound).
+
+The script compiles to `dist-scripts/` (`tsconfig.scripts.json`, gitignored) and runs as plain JS — not `ts-node`, whose compiler baseline alone exceeds the memory budget. It runs with `node --max-semi-space-size=1` so the 64 KiB read buffers of each part are collected promptly; without it ~65 MiB of dead buffers accumulate between scavenges and RSS exceeds `part_size × concurrency + 100MB`.
+
+### OpenAPI export
+
+`npm run openapi:export` regenerates `openapi.json` and must run through `scripts/register-swagger-ts-node.js`, which registers `ts-node` with the `@nestjs/swagger` CLI plugin transformer using the plugin options from `nest-cli.json`. Plain `ts-node` skips the plugin and exports DTO schemas without properties.
 
 During active development, run only the tests related to the file being changed (`npm test -- path/to/file.spec.ts`). Before declaring a task done, run the full suite — see the global `CLAUDE.md` → "Definition of Done (Technical)".
 

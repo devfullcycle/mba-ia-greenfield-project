@@ -11,5 +11,5 @@ export async function exportSpec(outputPath = 'openapi.json'): Promise<void> {
 }
 
 if (require.main === module) {
-  void exportSpec();
+  void exportSpec(process.argv[2]);
 }

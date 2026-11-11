@@ -1,0 +1,14 @@
+FROM node:25.6.0-slim
+
+# ffmpeg/ffprobe are only needed by the video worker, so they live in this image, not the API one.
+RUN apt update && apt install -y procps curl ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /home/node/app
+RUN chown node:node /home/node/app
+
+USER node
+
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci
+
+CMD [ "npm", "run", "start:worker:dev" ]
