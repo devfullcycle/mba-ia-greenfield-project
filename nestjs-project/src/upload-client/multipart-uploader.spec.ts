@@ -1,11 +1,24 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import {
+  mkdtempSync,
+  readdirSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { createServer, type IncomingHttpHeaders, type Server } from 'http';
-import type { AddressInfo } from 'net';
+import {
+  type AddressInfo,
+  createServer as createNetServer,
+  type Server as NetServer,
+  type Socket,
+} from 'net';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
   createPartPutter,
+  MAX_CONCURRENCY,
   mimeTypeFor,
+  parseConcurrency,
   type PartPutter,
   type UploadApi,
   uploadFile,
@@ -102,6 +115,66 @@ describe('uploadFile', () => {
       { part_number: 3, etag: '"new-3"' },
     ]);
   });
+
+  it('should share one renewal across workers when every URL expires at once', async () => {
+    const api = fakeApi();
+    const putPart = jest.fn((url: string) =>
+      Promise.resolve(
+        url.startsWith('old-')
+          ? { status: 403 }
+          : { status: 200, etag: `"${url}"` },
+      ),
+    );
+
+    await uploadFile({
+      filePath: '/fake/file.mp4',
+      filename: 'file.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: SIZE,
+      api,
+      putPart,
+      concurrency: 3,
+      maxAttempts: 1, // an expiry must not consume the only attempt
+      retryDelayMs: 0,
+    });
+
+    expect(api.renewParts).toHaveBeenCalledTimes(1);
+    expect(api.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('should fail definitively with a clear error when a part gets 403 even after renewal', async () => {
+    const api = fakeApi();
+    const putPart = jest.fn(() => Promise.resolve({ status: 403 }));
+
+    await expect(upload(api, putPart)).rejects.toThrow(
+      /Part 1 failed: HTTP 403 even with a freshly renewed URL.*--storage-connect/,
+    );
+
+    expect(api.renewParts).toHaveBeenCalledTimes(1);
+    expect(putPart).toHaveBeenCalledTimes(2);
+    expect(api.complete).not.toHaveBeenCalled();
+    expect(api.abort).toHaveBeenCalledWith('public-id');
+  });
+
+  it.each([0, -1, NaN, 1.5, MAX_CONCURRENCY + 1])(
+    'should reject concurrency %p before initiating the upload',
+    async (concurrency) => {
+      const api = fakeApi();
+
+      await expect(
+        uploadFile({
+          filePath: '/fake/file.mp4',
+          filename: 'file.mp4',
+          mimeType: 'video/mp4',
+          sizeBytes: SIZE,
+          api,
+          putPart: jest.fn(),
+          concurrency,
+        }),
+      ).rejects.toThrow('Invalid concurrency');
+      expect(api.initiate).not.toHaveBeenCalled();
+    },
+  );
 
   it('should retry a part after a network error without restarting the upload', async () => {
     const api = fakeApi();
@@ -216,6 +289,188 @@ describe('mimeTypeFor', () => {
     expect(mimeTypeFor('/a/clip.MP4')).toBe('video/mp4');
     expect(mimeTypeFor('clip.webm')).toBe('video/webm');
     expect(() => mimeTypeFor('notes.txt')).toThrow('Unsupported');
+  });
+});
+
+describe('parseConcurrency', () => {
+  it('should accept integers from 1 to MAX_CONCURRENCY', () => {
+    expect(parseConcurrency('1')).toBe(1);
+    expect(parseConcurrency(String(MAX_CONCURRENCY))).toBe(MAX_CONCURRENCY);
+  });
+
+  it.each(['abc', '', '0', '-2', '2.5', '1e1', String(MAX_CONCURRENCY + 1)])(
+    'should reject %p',
+    (raw) => {
+      expect(() => parseConcurrency(raw)).toThrow(/Invalid (--)?concurrency/);
+    },
+  );
+});
+
+describe('createPartPutter with a stalled server', () => {
+  let server: Server;
+  let port: number;
+  let requests: number;
+  let respondFrom: number;
+  let dir: string;
+  let filePath: string;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'uploader-stall-'));
+    filePath = join(dir, 'file.mp4');
+    writeFileSync(filePath, 'x'.repeat(SIZE));
+    // Reads the body but never answers until request number `respondFrom`.
+    server = createServer((req, res) => {
+      requests++;
+      const current = requests;
+      req.resume();
+      req.on('end', () => {
+        if (current >= respondFrom) {
+          res.writeHead(200, { ETag: `"etag-${current}"` }).end();
+        }
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    port = (server.address() as AddressInfo).port;
+  });
+
+  beforeEach(() => {
+    requests = 0;
+  });
+
+  afterAll(async () => {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const stalledUpload = (api: UploadApi, maxAttempts: number) =>
+    uploadFile({
+      filePath,
+      filename: 'file.mp4',
+      mimeType: 'video/mp4',
+      sizeBytes: SIZE,
+      api,
+      putPart: createPartPutter(undefined, { timeoutMs: 50 }),
+      concurrency: 1,
+      maxAttempts,
+      retryDelayMs: 0,
+      warn: jest.fn(),
+    });
+
+  const apiFor = () => {
+    const api = fakeApi();
+    api.initiate.mockResolvedValue({
+      id: 'public-id',
+      part_size: SIZE,
+      part_count: 1,
+      parts: [{ part_number: 1, url: `http://127.0.0.1:${port}/bucket/key` }],
+    });
+    return api;
+  };
+
+  it('should time out an unanswered PUT with a network error', async () => {
+    respondFrom = Infinity;
+    const putPart = createPartPutter(undefined, { timeoutMs: 50 });
+
+    await expect(
+      putPart(`http://127.0.0.1:${port}/bucket/key`, filePath, 0, 4),
+    ).rejects.toThrow('timed out after 50ms');
+  });
+
+  it('should retry a timed-out part and complete', async () => {
+    respondFrom = 2;
+    const api = apiFor();
+
+    await stalledUpload(api, 3);
+
+    expect(requests).toBe(2);
+    expect(api.complete).toHaveBeenCalledWith('public-id', [
+      { part_number: 1, etag: '"etag-2"' },
+    ]);
+  });
+
+  it('should fail definitively and abort after every attempt times out', async () => {
+    respondFrom = Infinity;
+    const api = apiFor();
+
+    await expect(stalledUpload(api, 2)).rejects.toThrow(
+      'Part 1 failed: Part PUT timed out',
+    );
+    expect(requests).toBe(2);
+    expect(api.abort).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createPartPutter resource cleanup', () => {
+  const BIG_SIZE = 8 * 1024 * 1024; // far above socket buffers: forces backpressure
+  let server: NetServer;
+  const sockets = new Set<Socket>();
+  let port: number;
+  let dir: string;
+  let filePath: string;
+
+  /** Open fds of this process that point at `path` (Linux /proc). */
+  const openFdsFor = (path: string): number =>
+    readdirSync('/proc/self/fd').filter((fd) => {
+      try {
+        return readlinkSync(`/proc/self/fd/${fd}`) === path;
+      } catch {
+        return false; // fd closed while listing
+      }
+    }).length;
+
+  const waitForNoFds = async (path: string): Promise<number> => {
+    for (let i = 0; i < 50 && openFdsFor(path) > 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return openFdsFor(path);
+  };
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'uploader-fd-'));
+    filePath = join(dir, 'file.mp4');
+    writeFileSync(filePath, Buffer.alloc(BIG_SIZE));
+    // Accepts the connection but never reads: the PUT body stalls mid-stream.
+    server = createNetServer((socket) => {
+      sockets.add(socket);
+      socket.pause();
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, '127.0.0.1', resolve),
+    );
+    port = (server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    // Paused sockets never read the client's FIN, so close them explicitly.
+    sockets.forEach((socket) => socket.destroy());
+    await new Promise((resolve) => server.close(resolve));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('should destroy the file read stream after a timed-out PUT', async () => {
+    const putPart = createPartPutter(undefined, { timeoutMs: 100 });
+
+    await expect(
+      putPart(`http://127.0.0.1:${port}/bucket/key`, filePath, 0, BIG_SIZE - 1),
+    ).rejects.toThrow('timed out after 100ms');
+
+    expect(await waitForNoFds(filePath)).toBe(0);
+  });
+
+  it('should time out a stalled TCP connect with the same retryable error', async () => {
+    // Non-routable address: SYN is dropped, so only the pre-connect timeout ends it.
+    const putPart = createPartPutter('10.255.255.1:9000', { timeoutMs: 100 });
+    const startedAt = Date.now();
+
+    await expect(
+      putPart('http://localhost:9000/bucket/key', filePath, 0, 9),
+    ).rejects.toThrow('Part PUT timed out after 100ms idle');
+
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    expect(await waitForNoFds(filePath)).toBe(0);
   });
 });
 

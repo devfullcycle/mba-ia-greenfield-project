@@ -5,6 +5,7 @@ import {
   createHttpApi,
   createPartPutter,
   mimeTypeFor,
+  parseConcurrency,
   uploadFile,
 } from '../src/upload-client/multipart-uploader';
 
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   if (!values.file || !values.api || !values.token) {
     throw new Error(USAGE);
   }
+  const concurrency = parseConcurrency(values.concurrency);
 
   const { size } = await stat(values.file);
   const startedAt = Date.now();
@@ -34,7 +36,7 @@ async function main(): Promise<void> {
     sizeBytes: size,
     api: createHttpApi(values.api, values.token),
     putPart: createPartPutter(values['storage-connect']),
-    concurrency: Number(values.concurrency),
+    concurrency,
   });
 
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
