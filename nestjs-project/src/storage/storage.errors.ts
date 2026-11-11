@@ -33,6 +33,14 @@ export class StorageNotFoundError extends StorageError {
 const matches = (names: readonly string[], err: S3ServiceException): boolean =>
   names.includes(err.name);
 
+/** True when S3 reports the multipart upload no longer exists (aborted, completed or expired). */
+export function isUploadGone(err: unknown): boolean {
+  return (
+    err instanceof S3ServiceException &&
+    matches(S3_ERROR_NAMES.UPLOAD_GONE, err)
+  );
+}
+
 /** Translates known SDK errors into typed storage errors; rethrows anything else unchanged. */
 export function toStorageError(err: unknown): unknown {
   if (!(err instanceof S3ServiceException)) return err;

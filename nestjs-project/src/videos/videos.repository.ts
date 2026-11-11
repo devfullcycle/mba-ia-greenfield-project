@@ -98,7 +98,12 @@ export class VideosRepository {
     });
   }
 
-  async deleteById(id: string): Promise<void> {
-    await this.repository.delete({ id });
+  /**
+   * Deletes the row only while it is still DRAFT, so a concurrent complete that
+   * already moved it to PROCESSING wins. Returns false when nothing was deleted.
+   */
+  async deleteDraft(id: string): Promise<boolean> {
+    const result = await this.repository.delete({ id, status: 'DRAFT' });
+    return (result.affected ?? 0) > 0;
   }
 }

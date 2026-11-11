@@ -1,8 +1,10 @@
+import { AbortMultipartUploadCommand, type S3Client } from '@aws-sdk/client-s3';
 import type { INestApplication } from '@nestjs/common';
 import type { TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import { S3_INTERNAL_CLIENT } from '../src/storage/storage.constants';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 import { Video } from '../src/videos/entities/video.entity';
 import { VideoPublicIdService } from '../src/videos/video-public-id.service';
@@ -130,6 +132,21 @@ describe('videos-uploads-renew-abort', () => {
 
     const again = await abort(videoId, ownerToken).expect(404);
     expect((again.body as ErrorBody).error).toBe('VIDEO_NOT_FOUND');
+  });
+
+  test('abortar-upload-com-multipart-ja-removido-do-storage-remove-rascunho', async () => {
+    const video = await findVideo();
+    await moduleFixture.get<S3Client>(S3_INTERNAL_CLIENT).send(
+      new AbortMultipartUploadCommand({
+        Bucket: process.env.S3_BUCKET,
+        Key: video!.storage_key,
+        UploadId: video!.upload_id!,
+      }),
+    );
+
+    const res = await abort(videoId, ownerToken).expect(204);
+    expect(res.text).toBe('');
+    expect(await findVideo()).toBeNull();
   });
 
   test('rotas-recusam-video-fora-de-draft', async () => {

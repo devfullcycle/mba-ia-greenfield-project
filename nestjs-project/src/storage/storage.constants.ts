@@ -10,4 +10,5 @@ export const S3_ERROR_NAMES = {
   ],
   INVALID_RANGE: ['InvalidRange'],
   NOT_FOUND: ['NoSuchKey', 'NotFound'],
+  UPLOAD_GONE: ['NoSuchUpload'],
 } as const;

@@ -129,6 +129,28 @@ describe('StorageService (integration)', () => {
 
       expect(ok).toBe(false);
     });
+
+    it('should treat aborting an already-aborted multipart upload as success', async () => {
+      const key = newKey();
+      const uploadId = await storage.createMultipartUpload(key, 'video/mp4');
+      await storage.abortMultipartUpload(key, uploadId);
+
+      await expect(
+        storage.abortMultipartUpload(key, uploadId),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should still map an unknown UploadId on complete to StorageInvalidPartsError', async () => {
+      const key = newKey();
+      const uploadId = await storage.createMultipartUpload(key, 'video/mp4');
+      await storage.abortMultipartUpload(key, uploadId);
+
+      await expect(
+        storage.completeMultipartUpload(key, uploadId, [
+          { partNumber: 1, etag: '"00000000000000000000000000000000"' },
+        ]),
+      ).rejects.toBeInstanceOf(StorageInvalidPartsError);
+    });
   });
 
   describe('object reads', () => {

@@ -154,14 +154,24 @@ export class VideoUploadsService {
     return { id: publicId, status: 'PROCESSING' };
   }
 
-  /** Cancels a DRAFT upload: aborts the multipart upload and removes the row. */
+  /**
+   * Cancels a DRAFT upload: aborts the multipart upload and removes the row.
+   *
+   * Storage goes first so a 204 means nothing is left behind, and a transient
+   * storage failure keeps the row for a retry. The abort is idempotent, and
+   * aborting an upload a concurrent complete already finished is a no-op, so
+   * the conditional delete decides the race: 0 rows means the video left DRAFT.
+   */
   async abort(publicId: string, userId: string): Promise<void> {
     const video = await this.findOwnedDraft(publicId, userId);
     await this.storage.abortMultipartUpload(
       video.storage_key,
       video.upload_id!,
     );
-    await this.videosRepository.deleteById(video.id);
+    const deleted = await this.videosRepository.deleteDraft(video.id);
+    if (!deleted) {
+      throw new VideoNotInDraftException();
+    }
   }
 
   /**

@@ -14,7 +14,7 @@ import type { ConfigType } from '@nestjs/config';
 import type { Readable } from 'stream';
 import storageConfig from '../config/storage.config';
 import { S3_INTERNAL_CLIENT, S3_PUBLIC_CLIENT } from './storage.constants';
-import { toStorageError } from './storage.errors';
+import { isUploadGone, toStorageError } from './storage.errors';
 import type {
   ObjectHead,
   ObjectStream,
@@ -101,16 +101,23 @@ export class StorageService {
     );
   }
 
+  /**
+   * Idempotent: an upload that is already gone (aborted before, completed, or
+   * expired by the stale-uploads sweep) counts as aborted.
+   */
   async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
-    await this.run(() =>
-      this.internalClient.send(
+    try {
+      await this.internalClient.send(
         new AbortMultipartUploadCommand({
           Bucket: this.bucket,
           Key: key,
           UploadId: uploadId,
         }),
-      ),
-    );
+      );
+    } catch (err) {
+      if (isUploadGone(err)) return;
+      throw toStorageError(err);
+    }
   }
 
   /** Returns the object body as an unbuffered stream; the caller must consume or destroy it. */

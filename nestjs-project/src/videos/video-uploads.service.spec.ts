@@ -20,8 +20,12 @@ describe('VideoUploadsService', () => {
   const videosRepository = {
     findByPublicIdWithChannel: jest.fn(),
     transitionStatus: jest.fn(),
+    deleteDraft: jest.fn(),
   };
-  const storage = { completeMultipartUpload: jest.fn() };
+  const storage = {
+    completeMultipartUpload: jest.fn(),
+    abortMultipartUpload: jest.fn(),
+  };
   const processingQueue = { enqueue: jest.fn() };
   let service: VideoUploadsService;
   let publicIds: VideoPublicIdService;
@@ -169,6 +173,68 @@ describe('VideoUploadsService', () => {
         service.complete(publicId, OWNER_ID, { parts }),
       ).rejects.toBeInstanceOf(VideoNotInDraftException);
       expect(processingQueue.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('abort', () => {
+    let publicId: string;
+
+    beforeEach(() => {
+      publicId = publicIds.encode(1);
+      videosRepository.findByPublicIdWithChannel.mockResolvedValue({
+        ...videoWith('DRAFT'),
+        storage_key: 'videos/video-uuid/source',
+        upload_id: 'upload-id',
+      });
+      storage.abortMultipartUpload.mockResolvedValue(undefined);
+      videosRepository.deleteDraft.mockResolvedValue(true);
+    });
+
+    it('should abort the multipart upload before deleting the DRAFT row', async () => {
+      const calls: string[] = [];
+      storage.abortMultipartUpload.mockImplementation(() => {
+        calls.push('abort');
+        return Promise.resolve();
+      });
+      videosRepository.deleteDraft.mockImplementation(() => {
+        calls.push('delete');
+        return Promise.resolve(true);
+      });
+
+      await expect(service.abort(publicId, OWNER_ID)).resolves.toBeUndefined();
+
+      expect(calls).toEqual(['abort', 'delete']);
+      expect(storage.abortMultipartUpload).toHaveBeenCalledWith(
+        'videos/video-uuid/source',
+        'upload-id',
+      );
+      expect(videosRepository.deleteDraft).toHaveBeenCalledWith('video-uuid');
+    });
+
+    it('should throw VIDEO_NOT_IN_DRAFT when a concurrent complete moved the video before the delete', async () => {
+      videosRepository.deleteDraft.mockResolvedValue(false);
+
+      await expect(service.abort(publicId, OWNER_ID)).rejects.toBeInstanceOf(
+        VideoNotInDraftException,
+      );
+    });
+
+    it('should delete the row when storage reports the multipart upload already gone', async () => {
+      // StorageService.abortMultipartUpload resolves for a missing upload (idempotent).
+      storage.abortMultipartUpload.mockResolvedValue(undefined);
+
+      await service.abort(publicId, OWNER_ID);
+
+      expect(videosRepository.deleteDraft).toHaveBeenCalledWith('video-uuid');
+    });
+
+    it('should keep the row for a retry when storage fails', async () => {
+      storage.abortMultipartUpload.mockRejectedValue(new Error('minio down'));
+
+      await expect(service.abort(publicId, OWNER_ID)).rejects.toThrow(
+        'minio down',
+      );
+      expect(videosRepository.deleteDraft).not.toHaveBeenCalled();
     });
   });
 });
