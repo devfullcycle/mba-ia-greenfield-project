@@ -7,6 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { VideoNotInDraftException } from '../common/exceptions/domain.exception';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
 import { ChannelsModule } from '../channels/channels.module';
@@ -187,6 +188,50 @@ describe('VideoUploadsService (integration)', () => {
         await dataSource.getRepository(Video).countBy({ id: video.id }),
       ).toBe(0);
       expect(await openUploadsFor(video.storage_key)).toHaveLength(0);
+    });
+
+    it('should delete the DRAFT row when the multipart upload is already gone from storage', async () => {
+      const { id } = await initiateDraft();
+      const video = await dataSource
+        .getRepository(Video)
+        .findOneByOrFail({ public_id: id });
+      await s3.send(
+        new AbortMultipartUploadCommand({
+          Bucket: BUCKET,
+          Key: video.storage_key,
+          UploadId: video.upload_id!,
+        }),
+      );
+
+      await service.abort(id, user.id);
+
+      expect(
+        await dataSource.getRepository(Video).countBy({ id: video.id }),
+      ).toBe(0);
+    });
+
+    it('should not delete a video a concurrent complete moved to PROCESSING', async () => {
+      const { id } = await initiateDraft();
+      const repository = module.get(VideosRepository);
+      const video = await dataSource
+        .getRepository(Video)
+        .findOneByOrFail({ public_id: id });
+      // Simulates complete winning the race between findOwnedDraft and the delete.
+      jest
+        .spyOn(storage, 'abortMultipartUpload')
+        .mockImplementationOnce(async () => {
+          await repository.transitionStatus(video.id, 'DRAFT', 'PROCESSING');
+        });
+
+      await expect(service.abort(id, user.id)).rejects.toBeInstanceOf(
+        VideoNotInDraftException,
+      );
+
+      const after = await dataSource
+        .getRepository(Video)
+        .findOneByOrFail({ id: video.id });
+      expect(after.status).toBe('PROCESSING');
+      await storage.abortMultipartUpload(video.storage_key, video.upload_id!);
     });
   });
 

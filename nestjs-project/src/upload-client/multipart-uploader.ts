@@ -36,6 +36,7 @@ export interface UploadApi {
     id: string,
     parts: { part_number: number; etag: string }[],
   ) => Promise<CompletedUpload>;
+  abort: (id: string) => Promise<void>;
 }
 
 export interface PartResult {
@@ -61,6 +62,8 @@ export interface UploadOptions {
   concurrency?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
+  /** Receives non-fatal diagnostics, e.g. a failed best-effort abort. */
+  warn?: (message: string) => void;
 }
 
 const URL_EXPIRED_STATUS = 403;
@@ -102,6 +105,7 @@ export async function uploadFile(
     concurrency = 4,
     maxAttempts = 5,
     retryDelayMs = 500,
+    warn = (message: string) => console.error(message),
   } = options;
 
   const upload = await api.initiate({
@@ -109,6 +113,60 @@ export async function uploadFile(
     mime_type: options.mimeType,
     size_bytes: sizeBytes,
   });
+
+  try {
+    return await transferParts(upload, {
+      api,
+      putPart,
+      filePath,
+      sizeBytes,
+      concurrency,
+      maxAttempts,
+      retryDelayMs,
+    });
+  } catch (err) {
+    // Definitive failure: release the draft so it doesn't linger. Best-effort —
+    // an abort failure is reported but never replaces the original error.
+    try {
+      await api.abort(upload.id);
+    } catch (abortErr) {
+      warn(
+        `Abort of upload ${upload.id} failed: ${
+          abortErr instanceof Error ? abortErr.message : String(abortErr)
+        }`,
+      );
+    }
+    throw err;
+  }
+}
+
+type TransferSettings = Required<
+  Pick<
+    UploadOptions,
+    | 'api'
+    | 'putPart'
+    | 'filePath'
+    | 'sizeBytes'
+    | 'concurrency'
+    | 'maxAttempts'
+    | 'retryDelayMs'
+  >
+>;
+
+/** Uploads every part (with retries and URL renewal) and completes the upload. */
+async function transferParts(
+  upload: InitiatedUpload,
+  settings: TransferSettings,
+): Promise<CompletedUpload> {
+  const {
+    api,
+    putPart,
+    filePath,
+    sizeBytes,
+    concurrency,
+    maxAttempts,
+    retryDelayMs,
+  } = settings;
   const urls = new Map(upload.parts.map((p) => [p.part_number, p.url]));
   const etags = new Map<number, string>();
   let renewal: Promise<void> | null = null;
@@ -164,11 +222,22 @@ export async function uploadFile(
     { length: Math.min(concurrency, queue.length) },
     async () => {
       for (let next = queue.shift(); next; next = queue.shift()) {
-        await uploadPart(next);
+        try {
+          await uploadPart(next);
+        } catch (err) {
+          queue.length = 0; // stop the other workers from taking new parts
+          throw err;
+        }
       }
     },
   );
-  await Promise.all(workers);
+  // Wait for in-flight parts so no PUT races the caller's abort.
+  const failure = (await Promise.allSettled(workers)).find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failure) {
+    throw failure.reason;
+  }
 
   return api.complete(
     upload.id,
@@ -216,20 +285,28 @@ export function createPartPutter(storageConnect?: string): PartPutter {
 
 /** UploadApi over the StreamTube REST endpoints. */
 export function createHttpApi(apiBaseUrl: string, token: string): UploadApi {
-  const call = async <T>(path: string, body: unknown): Promise<T> => {
+  const send = async (
+    method: 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> => {
     const res = await fetch(new URL(path, apiBaseUrl), {
-      method: 'POST',
+      method,
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) {
-      throw new Error(`POST ${path} -> ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `${method} ${path} -> ${res.status}: ${await res.text()}`,
+      );
     }
-    return (await res.json()) as T;
+    return res;
   };
+  const call = async <T>(path: string, body: unknown): Promise<T> =>
+    (await (await send('POST', path, body)).json()) as T;
   return {
     initiate: (body) => call<InitiatedUpload>('/videos/uploads', body),
     renewParts: async (id, partNumbers) =>
@@ -240,5 +317,8 @@ export function createHttpApi(apiBaseUrl: string, token: string): UploadApi {
       ).parts,
     complete: (id, parts) =>
       call<CompletedUpload>(`/videos/${id}/uploads/complete`, { parts }),
+    abort: async (id) => {
+      await send('DELETE', `/videos/${id}/uploads`);
+    },
   };
 }

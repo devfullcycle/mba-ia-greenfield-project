@@ -31,10 +31,15 @@ function fakeApi(): jest.Mocked<UploadApi> {
       ReturnType<UploadApi['complete']>,
       Parameters<UploadApi['complete']>
     >((id) => Promise.resolve({ id, status: 'PROCESSING' })),
+    abort: jest.fn().mockResolvedValue(undefined),
   };
 }
 
-const upload = (api: UploadApi, putPart: PartPutter) =>
+const upload = (
+  api: UploadApi,
+  putPart: PartPutter,
+  warn: (message: string) => void = jest.fn(),
+) =>
   uploadFile({
     filePath: '/fake/file.mp4',
     filename: 'file.mp4',
@@ -44,6 +49,7 @@ const upload = (api: UploadApi, putPart: PartPutter) =>
     putPart,
     concurrency: 1,
     retryDelayMs: 0,
+    warn,
   });
 
 describe('uploadFile', () => {
@@ -71,6 +77,7 @@ describe('uploadFile', () => {
       { part_number: 3, etag: '"etag-old-3"' },
     ]);
     expect(result).toEqual({ id: 'public-id', status: 'PROCESSING' });
+    expect(api.abort).not.toHaveBeenCalled();
   });
 
   it('should renew only pending parts after a 403 and not resend confirmed ones', async () => {
@@ -125,6 +132,82 @@ describe('uploadFile', () => {
 
     await expect(upload(api, putPart)).rejects.toThrow('Part 1 failed');
     expect(api.complete).not.toHaveBeenCalled();
+  });
+
+  it('should abort the upload exactly once and rethrow the original error when a part fails definitively', async () => {
+    const api = fakeApi();
+    const putPart = jest.fn(() => Promise.resolve({ status: 500 }));
+
+    await expect(upload(api, putPart)).rejects.toThrow(
+      'Part 1 failed: HTTP 500',
+    );
+
+    expect(api.abort).toHaveBeenCalledTimes(1);
+    expect(api.abort).toHaveBeenCalledWith('public-id');
+  });
+
+  it('should stop taking new parts and abort only after in-flight parts settle', async () => {
+    const api = fakeApi();
+    const events: string[] = [];
+    api.abort.mockImplementation(() => {
+      events.push('abort');
+      return Promise.resolve();
+    });
+    const putPart = jest.fn(async (url: string) => {
+      events.push(`put ${url}`);
+      if (url === 'old-1') return { status: 500 };
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      events.push(`done ${url}`);
+      return { status: 200, etag: `"${url}"` };
+    });
+
+    await expect(
+      uploadFile({
+        filePath: '/fake/file.mp4',
+        filename: 'file.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: SIZE,
+        api,
+        putPart,
+        concurrency: 2,
+        maxAttempts: 1,
+        retryDelayMs: 0,
+        warn: jest.fn(),
+      }),
+    ).rejects.toThrow('Part 1 failed');
+
+    expect(events).toEqual(['put old-1', 'put old-2', 'done old-2', 'abort']);
+  });
+
+  it('should not let an abort failure mask the original error, and report it', async () => {
+    const api = fakeApi();
+    api.abort.mockRejectedValue(new Error('DELETE -> 500'));
+    const warn = jest.fn();
+    const putPart = jest.fn(() => Promise.resolve({ status: 500 }));
+
+    await expect(upload(api, putPart, warn)).rejects.toThrow('Part 1 failed');
+
+    expect(api.abort).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('DELETE -> 500'));
+  });
+
+  it('should abort when complete fails', async () => {
+    const api = fakeApi();
+    api.complete.mockRejectedValue(new Error('POST complete -> 400'));
+    const putPart = jest.fn((url: string) =>
+      Promise.resolve({ status: 200, etag: `"${url}"` }),
+    );
+
+    await expect(upload(api, putPart)).rejects.toThrow('POST complete -> 400');
+    expect(api.abort).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not abort when initiate itself fails', async () => {
+    const api = fakeApi();
+    api.initiate.mockRejectedValue(new Error('POST /videos/uploads -> 401'));
+
+    await expect(upload(api, jest.fn())).rejects.toThrow('401');
+    expect(api.abort).not.toHaveBeenCalled();
   });
 });
 
