@@ -68,6 +68,36 @@ export interface UploadOptions {
 
 const URL_EXPIRED_STATUS = 403;
 
+/** Upper bound for parallel part uploads (each holds one part in flight). */
+export const MAX_CONCURRENCY = 32;
+
+/** Default inactivity timeout of a part PUT before it is retried. */
+export const DEFAULT_PART_TIMEOUT_MS = 60_000;
+
+function assertValidConcurrency(concurrency: number): void {
+  if (
+    !Number.isInteger(concurrency) ||
+    concurrency < 1 ||
+    concurrency > MAX_CONCURRENCY
+  ) {
+    throw new Error(
+      `Invalid concurrency: ${concurrency} (expected an integer between 1 and ${MAX_CONCURRENCY})`,
+    );
+  }
+}
+
+/** Parses a CLI `--concurrency` value, rejecting anything but 1..MAX_CONCURRENCY. */
+export function parseConcurrency(raw: string): number {
+  const value = /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
+  if (Number.isNaN(value)) {
+    throw new Error(
+      `Invalid --concurrency "${raw}" (expected an integer between 1 and ${MAX_CONCURRENCY})`,
+    );
+  }
+  assertValidConcurrency(value);
+  return value;
+}
+
 const MIME_TYPES: Record<string, string> = {
   '.mp4': 'video/mp4',
   '.m4v': 'video/x-m4v',
@@ -107,6 +137,7 @@ export async function uploadFile(
     retryDelayMs = 500,
     warn = (message: string) => console.error(message),
   } = options;
+  assertValidConcurrency(concurrency);
 
   const upload = await api.initiate({
     original_filename: options.filename,
@@ -187,27 +218,44 @@ async function transferParts(
   const uploadPart = async (partNumber: number): Promise<void> => {
     const start = (partNumber - 1) * upload.part_size;
     const end = Math.min(start + upload.part_size, sizeBytes) - 1;
+    // True while the part's current URL came from a renewal triggered by its
+    // own 403: another 403 then cannot be an expiry, so it is permanent.
+    let renewedAfter403 = false;
     for (let attempt = 1; ; attempt++) {
       let failure: string;
       try {
-        const result = await putPart(
-          urls.get(partNumber)!,
-          filePath,
-          start,
-          end,
-        );
+        const url = urls.get(partNumber)!;
+        const result = await putPart(url, filePath, start, end);
         if (result.status >= 200 && result.status < 300 && result.etag) {
           etags.set(partNumber, result.etag);
           return;
         }
         if (result.status === URL_EXPIRED_STATUS) {
-          // Expired URL: renew and retry without consuming an attempt.
-          await renewPending();
+          if (renewedAfter403) {
+            throw new PartUploadError(
+              partNumber,
+              'HTTP 403 even with a freshly renewed URL. This is not an expiry: ' +
+                'the signature is likely rejected (SignatureDoesNotMatch), e.g. the ' +
+                'Host reaching storage differs from the signed one. Inside Docker, ' +
+                'pass --storage-connect <host:port> (e.g. minio:9000).',
+            );
+          }
+          // Expired URL: renew (unless another worker already did) and retry
+          // without consuming an attempt.
+          if (urls.get(partNumber) === url) {
+            await renewPending();
+          }
+          renewedAfter403 = true;
           attempt--;
           continue;
         }
+        renewedAfter403 = false;
         failure = `HTTP ${result.status}`;
       } catch (err) {
+        if (err instanceof PartUploadError) {
+          throw err;
+        }
+        renewedAfter403 = false;
         failure = err instanceof Error ? err.message : String(err);
       }
       if (attempt >= maxAttempts) {
@@ -253,11 +301,22 @@ async function transferParts(
  * host (SigV4 signatures are host-bound) — e.g. reaching `minio:9000` from
  * inside Compose with URLs signed for `localhost:9000`.
  */
-export function createPartPutter(storageConnect?: string): PartPutter {
+export function createPartPutter(
+  storageConnect?: string,
+  { timeoutMs = DEFAULT_PART_TIMEOUT_MS }: { timeoutMs?: number } = {},
+): PartPutter {
   const [connectHost, connectPort] = storageConnect?.split(':') ?? [];
   return (url, filePath, start, end) =>
     new Promise((resolve, reject) => {
       const target = new URL(url);
+      // Settles once: a destroyed request may emit several events after it.
+      let settled = false;
+      const fail = (err: Error) => {
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      };
       const req = httpRequest(
         {
           method: 'PUT',
@@ -265,20 +324,36 @@ export function createPartPutter(storageConnect?: string): PartPutter {
           port: Number(connectPort || target.port || 80),
           path: `${target.pathname}${target.search}`,
           headers: { Host: target.host, 'Content-Length': end - start + 1 },
+          // Socket inactivity timeout, armed before connect: also bounds a
+          // stalled TCP handshake (req.setTimeout only arms once connected).
+          timeout: timeoutMs,
         },
         (res) => {
           res.resume();
-          res.on('end', () =>
-            resolve({
-              status: res.statusCode ?? 0,
-              etag: res.headers.etag,
-            }),
-          );
+          res.on('error', fail);
+          res.on('close', () => {
+            if (!res.complete) {
+              fail(new Error('Connection closed before the response ended'));
+            }
+          });
+          res.on('end', () => {
+            if (!settled) {
+              settled = true;
+              resolve({ status: res.statusCode ?? 0, etag: res.headers.etag });
+            }
+          });
         },
       );
-      req.on('error', reject);
+      req.on('error', fail);
+      // Connect, upload or response stalled: destroy the request so the caller
+      // sees a retryable network error instead of hanging forever.
+      req.on('timeout', () => {
+        req.destroy(new Error(`Part PUT timed out after ${timeoutMs}ms idle`));
+      });
       const body = createReadStream(filePath, { start, end });
       body.on('error', (err) => req.destroy(err));
+      // A destroyed request only unpipes the body: release its fd and buffer.
+      req.on('close', () => body.destroy());
       body.pipe(req);
     });
 }
