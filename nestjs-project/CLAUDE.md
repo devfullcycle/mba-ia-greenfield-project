@@ -82,6 +82,7 @@ npm run test:watch                       # Unit tests in watch mode
 npm run test:cov                         # Coverage report
 npm run test:e2e                         # End-to-end tests (always with --runInBand)
 npm run upload:video -- --file <path> --api http://nestjs-api:3000 --storage-connect minio:9000 --token <access_token>
+npm run openapi:export                   # Regenerate openapi.json
 
 npx tsc --noEmit                         # Type-check (required before declaring a task done)
 npm run lint                             # ESLint with auto-fix
@@ -116,6 +117,10 @@ The video E2E suites (`test/video/`) run **only in the `video-worker` container*
 `npm run upload:video` (`scripts/upload-video.ts`) drives the full upload contract with constant memory. Preconditions: the API is running (`npm run start:dev`) and you have an access token. Inside the container, pass `--storage-connect minio:9000`: part URLs are signed for `S3_PUBLIC_ENDPOINT` (`localhost:9000`), and the flag connects to MinIO through the Compose network while keeping the signed `Host` header (SigV4 signatures are host-bound).
 
 The script compiles to `dist-scripts/` (`tsconfig.scripts.json`, gitignored) and runs as plain JS — not `ts-node`, whose compiler baseline alone exceeds the memory budget. It runs with `node --max-semi-space-size=1` so the 64 KiB read buffers of each part are collected promptly; without it ~65 MiB of dead buffers accumulate between scavenges and RSS exceeds `part_size × concurrency + 100MB`.
+
+### OpenAPI export
+
+`npm run openapi:export` regenerates `openapi.json` and must run through `scripts/register-swagger-ts-node.js`, which registers `ts-node` with the `@nestjs/swagger` CLI plugin transformer using the plugin options from `nest-cli.json`. Plain `ts-node` skips the plugin and exports DTO schemas without properties.
 
 During active development, run only the tests related to the file being changed (`npm test -- path/to/file.spec.ts`). Before declaring a task done, run the full suite — see the global `CLAUDE.md` → "Definition of Done (Technical)".
 

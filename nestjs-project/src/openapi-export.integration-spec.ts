@@ -1,20 +1,37 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportSpec } from './openapi-export';
 
-describe('exportSpec (integration)', () => {
+describe('openapi:export (integration)', () => {
   let outputPath: string;
   let document: Record<string, unknown>;
 
-  beforeAll(async () => {
+  // Runs the real npm script (not exportSpec in-process): ts-jest compiles in
+  // isolatedModules mode, where the @nestjs/swagger CLI plugin cannot run, so
+  // only the script itself proves DTO schemas are exported with properties.
+  beforeAll(() => {
     outputPath = join(tmpdir(), `openapi-test-${Date.now()}.json`);
-    await exportSpec(outputPath);
+    execFileSync(
+      'npm',
+      ['run', '--silent', 'openapi:export', '--', outputPath],
+      {
+        cwd: join(__dirname, '..'),
+        stdio: 'pipe',
+        // Must stay below the hook timeout: the sync call blocks Jest's own
+        // timer, so only this kills a hung export.
+        timeout: 110_000,
+      },
+    );
     document = JSON.parse(readFileSync(outputPath, 'utf-8')) as Record<
       string,
       unknown
     >;
-  }, 30_000);
+  }, 120_000);
+
+  afterAll(() => {
+    rmSync(outputPath, { force: true });
+  });
 
   it('exports a valid OpenAPI 3.x document', () => {
     expect(document.openapi).toMatch(/^3\./);
@@ -64,6 +81,22 @@ describe('exportSpec (integration)', () => {
     expect(props).toHaveProperty('error');
     expect(props).toHaveProperty('message');
     expect(props).toHaveProperty('code');
+  });
+
+  it.each([
+    ['InitiateUploadDto', ['original_filename', 'mime_type', 'size_bytes']],
+    ['VideoResponseDto', ['id', 'status']],
+    ['RegisterDto', ['email', 'password']],
+  ])('infers %s properties via the swagger CLI plugin', (name, keys) => {
+    const components = document.components as Record<string, unknown>;
+    const schemas = components.schemas as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const props = schemas[name]?.properties as Record<string, unknown>;
+    for (const key of keys) {
+      expect(props).toHaveProperty(key);
+    }
   });
 
   it('has at least one path with a 401 response referencing ApiErrorEnvelope', () => {
