@@ -10,6 +10,13 @@ export const env = createEnv({
   server: {
     API_URL: z.url(),
     SESSION_PASSWORD: z.string().min(32, "SESSION_PASSWORD must be at least 32 characters"),
+    // Dev-only QA page (/qa/phase-03): tokens stay server-side, never in the client bundle.
+    QA_OWNER_TOKEN: z.string().min(1).optional(),
+    QA_OTHER_TOKEN: z.string().min(1).optional(),
+    // "host:port" to dial for presigned storage PUTs (Host header keeps the signed URL host).
+    QA_STORAGE_CONNECT: z.string().min(1).optional(),
+    // Path (inside the container) of the sample video served by /api/qa/phase-03/sample.
+    QA_SAMPLE_PATH: z.string().min(1).optional(),
   },
 
   client: {},

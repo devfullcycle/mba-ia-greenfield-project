@@ -2,6 +2,8 @@
 
 Valida upload multipart, processamento assíncrono e entrega de mídia, sem passar por autenticação. Use o HTTP Client do IntelliJ/WebStorm com os arquivos de `nestjs-project/http/phase-03-manual/`, escolhendo o ambiente **dev**.
 
+> **Alternativa sem IntelliJ:** a mesma validação, com botões, está em **http://localhost:3001/qa/phase-03** (frontend em dev: `docker compose exec -d next-frontend npm run dev` a partir de `next-frontend/`). A página executa todos os passos deste roteiro, marca ✔/✘, mostra os vídeos com player e gera um relatório em markdown para anexar como evidência. Tokens e o envio da parte ao MinIO ficam no servidor da página.
+
 Cada request tem `client.test` que marca ✔/✘ na aba de resultados; o "Esperado" abaixo é o que deve aparecer.
 
 ## 1. Preparação (uma vez)

@@ -7,5 +7,7 @@ services:
       - 3001:3000
     volumes:
       - .:/home/node/app
+      # Sample video for the dev-only QA page (/qa/phase-03).
+      - ../nestjs-project/test/video/fixtures:/fixtures:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
