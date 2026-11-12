@@ -19,6 +19,23 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # One-shot: applies migrations and the idempotent Phase 03 dev seed on every `up`.
+  dev-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: sh -c "npm run migration:run && npm run seed"
+    volumes:
+      - .:/home/node/app
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
   video-worker:
     build:
       context: .

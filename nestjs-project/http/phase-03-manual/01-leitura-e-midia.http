@@ -1,0 +1,163 @@
+### Fase 03 — leitura de metadados e entrega de mídia, usando os vídeos da seed.
+### Valores fixos; tokens (dono e outro usuário) vêm de http-client.env.json (ambiente "dev").
+### Pré-requisito: `docker compose exec nestjs-api npm run seed`.
+###
+### Vídeos da seed:
+###   ThlVOZkDUF  READY       dono   (arquivos reais no MinIO)
+###   mO46RhTA92  PROCESSING  dono
+###   jgINrSoIxv  ERROR       dono   (error_reason = PROBE_FAILED)
+###   W8kCDreTVS  PROCESSING  outro usuário
+
+### L1. Metadados READY, anônimo (200, status READY, stream_url/download_url/thumbnail_url)
+GET {{baseUrl}}/videos/ThlVOZkDUF
+
+> {%
+  client.test("200 READY", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(response.body.status === "READY", "status " + response.body.status);
+    client.assert(response.body.duration_seconds === 6, "duração");
+    client.assert(response.body.width === 640 && response.body.height === 360, "dimensões");
+    client.assert(response.body.codec === "h264", "codec");
+  });
+%}
+
+### L2. Metadados READY, dono autenticado (200)
+GET {{baseUrl}}/videos/ThlVOZkDUF
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("200", function () { client.assert(response.status === 200, "recebido " + response.status); }); %}
+
+### L3. Metadados PROCESSING, anônimo (404 VIDEO_NOT_FOUND: só READY é público)
+GET {{baseUrl}}/videos/mO46RhTA92
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### L4. Metadados PROCESSING, dono (200, status PROCESSING)
+GET {{baseUrl}}/videos/mO46RhTA92
+Authorization: Bearer {{ownerToken}}
+
+> {%
+  client.test("200 PROCESSING", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(response.body.status === "PROCESSING", "status " + response.body.status);
+  });
+%}
+
+### L5. Metadados ERROR, dono (200, status ERROR, error_reason PROBE_FAILED)
+GET {{baseUrl}}/videos/jgINrSoIxv
+Authorization: Bearer {{ownerToken}}
+
+> {%
+  client.test("200 ERROR", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(response.body.status === "ERROR", "status " + response.body.status);
+    client.assert(response.body.error_reason === "PROBE_FAILED", "error_reason");
+  });
+%}
+
+### L6. Vídeo PROCESSING de outro usuário, pedido pelo dono (404: não vaza existência)
+GET {{baseUrl}}/videos/W8kCDreTVS
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### L7. Token inválido vale como anônimo (200 em vídeo READY)
+GET {{baseUrl}}/videos/ThlVOZkDUF
+Authorization: Bearer token-invalido
+
+> {% client.test("200", function () { client.assert(response.status === 200, "recebido " + response.status); }); %}
+
+### L8. Id inexistente (404 VIDEO_NOT_FOUND)
+GET {{baseUrl}}/videos/naoexiste0
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### ---------------------------------------------------------------------------
+### Mídia (stream, download, thumbnail)
+### ---------------------------------------------------------------------------
+
+### M1. Stream completo (200, Accept-Ranges: bytes, Content-Length 905702)
+GET {{baseUrl}}/videos/ThlVOZkDUF/stream
+
+> {%
+  client.test("200 + Accept-Ranges", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(response.headers.valueOf("Accept-Ranges") === "bytes", "Accept-Ranges");
+  });
+%}
+
+### M2. Stream com Range (206, Content-Range: bytes 0-1023/905702)
+GET {{baseUrl}}/videos/ThlVOZkDUF/stream
+Range: bytes=0-1023
+
+> {%
+  client.test("206 + Content-Range", function () {
+    client.assert(response.status === 206, "recebido " + response.status);
+    client.assert(response.headers.valueOf("Content-Range") === "bytes 0-1023/905702", "Content-Range");
+  });
+%}
+
+### M3. Stream com Range aberto (206, do byte 900000 até o fim)
+GET {{baseUrl}}/videos/ThlVOZkDUF/stream
+Range: bytes=900000-
+
+> {% client.test("206", function () { client.assert(response.status === 206, "recebido " + response.status); }); %}
+
+### M4. Range fora do arquivo (416 RANGE_NOT_SATISFIABLE, Content-Range: bytes */905702)
+GET {{baseUrl}}/videos/ThlVOZkDUF/stream
+Range: bytes=999999999-
+
+> {%
+  client.test("416", function () {
+    client.assert(response.status === 416, "recebido " + response.status);
+    client.assert(response.headers.valueOf("Content-Range") === "bytes */905702", "Content-Range");
+  });
+%}
+
+### M5. Download (200, Content-Disposition: attachment; filename sample.mp4)
+GET {{baseUrl}}/videos/ThlVOZkDUF/download
+
+> {%
+  client.test("200 attachment", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(/attachment/.test(response.headers.valueOf("Content-Disposition")), "Content-Disposition");
+  });
+%}
+
+### M6. Download com Range (206)
+GET {{baseUrl}}/videos/ThlVOZkDUF/download
+Range: bytes=0-1023
+
+> {% client.test("206", function () { client.assert(response.status === 206, "recebido " + response.status); }); %}
+
+### M7. Download com Range inválido (416)
+GET {{baseUrl}}/videos/ThlVOZkDUF/download
+Range: bytes=999999999-
+
+> {% client.test("416", function () { client.assert(response.status === 416, "recebido " + response.status); }); %}
+
+### M8. Thumbnail (200, image/jpeg)
+GET {{baseUrl}}/videos/ThlVOZkDUF/thumbnail
+
+> {%
+  client.test("200 jpeg", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+    client.assert(/image\/jpeg/.test(response.headers.valueOf("Content-Type")), "Content-Type");
+  });
+%}
+
+### M9. Stream de vídeo PROCESSING (404: mídia só existe depois de READY, mesmo para o dono)
+GET {{baseUrl}}/videos/mO46RhTA92/stream
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### M10. Thumbnail de vídeo ERROR (404)
+GET {{baseUrl}}/videos/jgINrSoIxv/thumbnail
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### M11. Stream de id inexistente (404)
+GET {{baseUrl}}/videos/naoexiste0/stream
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}

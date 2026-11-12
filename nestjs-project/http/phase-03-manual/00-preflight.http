@@ -1,0 +1,21 @@
+### Fase 03 — checagem rápida do ambiente antes de começar.
+
+### P1. API no ar (200)
+GET {{baseUrl}}
+
+> {% client.test("API responde", function () { client.assert(response.status === 200, "recebido " + response.status); }); %}
+
+### P2. Token do dono funciona sem login (200: vídeo READY da seed)
+GET {{baseUrl}}/videos/ThlVOZkDUF
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("Seed + token OK", function () { client.assert(response.status === 200, "recebido " + response.status + " — rode `npm run seed`"); }); %}
+
+### P3. Token do dono é aceito em rota autenticada (400/404/201 mas nunca 401)
+POST {{baseUrl}}/videos/naoexiste0/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [1] }
+
+> {% client.test("Autenticado (404)", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}

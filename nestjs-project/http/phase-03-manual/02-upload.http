@@ -1,0 +1,248 @@
+### Fase 03 — upload multipart de ponta a ponta, sem passar por autenticação (ownerToken da seed).
+### Rode U1 -> U2 -> U3 -> U4 -> U5 -> U6 em ordem. O videoId, a URL da parte e o ETag
+### ficam guardados em variáveis globais do HTTP Client entre os requests.
+### O arquivo ../../test/video/fixtures/sample.mp4 (905702 bytes) cabe em uma parte só.
+
+### U1. Iniciar upload (201, status DRAFT, 1 parte pré-assinada)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "sample.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 905702
+}
+
+> {%
+  client.test("201 DRAFT", function () {
+    client.assert(response.status === 201, "recebido " + response.status);
+    client.assert(response.body.status === "DRAFT", "status " + response.body.status);
+    client.assert(response.body.parts.length === 1, "uma parte");
+  });
+  if (response.status === 201) {
+    client.global.set("videoId", response.body.id);
+    client.global.set("partUrl", response.body.parts[0].url);
+  }
+%}
+
+### U1a. Dono vê o DRAFT (200, status DRAFT)
+GET {{baseUrl}}/videos/{{videoId}}
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("200 DRAFT", function () { client.assert(response.status === 200 && response.body.status === "DRAFT", "recebido " + response.status); }); %}
+
+### U1b. Anônimo não vê o DRAFT (404)
+GET {{baseUrl}}/videos/{{videoId}}
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### U2. Enviar a parte 1 direto ao MinIO (200 + ETag). Sem Authorization e sem alterar o Host.
+PUT {{partUrl}}
+Content-Type: video/mp4
+
+< ../../test/video/fixtures/sample.mp4
+
+> {%
+  client.test("200 + ETag", function () {
+    client.assert(response.status === 200, "recebido " + response.status);
+  });
+  const etag = response.headers.valueOf("ETag");
+  if (etag) { client.global.set("etag", etag.replace(/"/g, "")); }
+%}
+
+### U3. Renovar a URL da parte (200, {parts, expires_at}); só vale em DRAFT
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [1] }
+
+> {% client.test("200", function () { client.assert(response.status === 200, "recebido " + response.status); }); %}
+
+### U3a. Parte inexistente (400 INVALID_UPLOAD_PARTS)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [99] }
+
+> {% client.test("400", function () { client.assert(response.status === 400, "recebido " + response.status); }); %}
+
+### U3b. Lista vazia (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [] }
+
+> {% client.test("400", function () { client.assert(response.status === 400, "recebido " + response.status); }); %}
+
+### U3c. Outro usuário tenta renovar partes do rascunho (404 VIDEO_NOT_FOUND)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{otherToken}}
+Content-Type: application/json
+
+{ "part_numbers": [1] }
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### U4a. Finalizar com corpo inválido (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "parts": [] }
+
+> {% client.test("400", function () { client.assert(response.status === 400, "recebido " + response.status); }); %}
+
+### U4. Finalizar o upload (202, status PROCESSING; o worker processa em segundos)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "parts": [
+    { "part_number": 1, "etag": "{{etag}}" }
+  ]
+}
+
+> {%
+  client.test("202 PROCESSING", function () {
+    client.assert(response.status === 202, "recebido " + response.status);
+    client.assert(response.body.status === "PROCESSING", "status " + response.body.status);
+  });
+%}
+
+### U4b. Finalizar de novo (409 VIDEO_NOT_IN_DRAFT)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "parts": [
+    { "part_number": 1, "etag": "{{etag}}" }
+  ]
+}
+
+> {% client.test("409", function () { client.assert(response.status === 409, "recebido " + response.status); }); %}
+
+### U4c. Renovar partes após finalizar (409 VIDEO_NOT_IN_DRAFT)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [1] }
+
+> {% client.test("409", function () { client.assert(response.status === 409, "recebido " + response.status); }); %}
+
+### U4d. Abortar após finalizar (409 VIDEO_NOT_IN_DRAFT)
+DELETE {{baseUrl}}/videos/{{videoId}}/uploads
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("409", function () { client.assert(response.status === 409, "recebido " + response.status); }); %}
+
+### U5. Acompanhar o processamento (200; repita até status READY)
+GET {{baseUrl}}/videos/{{videoId}}
+Authorization: Bearer {{ownerToken}}
+
+> {%
+  client.log("status do vídeo: " + response.body.status);
+  client.test("200", function () { client.assert(response.status === 200, "recebido " + response.status); });
+  if (response.body.status === "READY") {
+    client.test("metadados do worker", function () {
+      client.assert(response.body.duration_seconds === 6, "duração");
+      client.assert(response.body.width === 640 && response.body.height === 360, "dimensões");
+      client.assert(response.body.codec === "h264", "codec");
+    });
+  }
+%}
+
+### U6a. Stream do vídeo recém-processado (206, só após READY)
+GET {{baseUrl}}/videos/{{videoId}}/stream
+Range: bytes=0-1023
+
+> {% client.test("206", function () { client.assert(response.status === 206, "recebido " + response.status); }); %}
+
+### U6b. Thumbnail gerada pelo worker (200, image/jpeg)
+GET {{baseUrl}}/videos/{{videoId}}/thumbnail
+
+> {% client.test("200 jpeg", function () { client.assert(response.status === 200 && /image\/jpeg/.test(response.headers.valueOf("Content-Type")), "recebido " + response.status); }); %}
+
+### U6c. Metadados públicos agora que está READY (200)
+GET {{baseUrl}}/videos/{{videoId}}
+
+> {% client.test("200 READY", function () { client.assert(response.status === 200 && response.body.status === "READY", "recebido " + response.status); }); %}
+
+### ---------------------------------------------------------------------------
+### Abortar um rascunho (seção independente)
+### ---------------------------------------------------------------------------
+
+### A1. Iniciar upload para abortar (201)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "para-abortar.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 905702
+}
+
+> {% if (response.status === 201) { client.global.set("abortVideoId", response.body.id); } %}
+
+### A2. Abortar (204)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("204", function () { client.assert(response.status === 204, "recebido " + response.status); }); %}
+
+### A3. Abortar de novo (404 VIDEO_NOT_FOUND)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads
+Authorization: Bearer {{ownerToken}}
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### ---------------------------------------------------------------------------
+### Validações de entrada e autenticação
+### ---------------------------------------------------------------------------
+
+### E1. Sem token (401)
+POST {{baseUrl}}/videos/uploads
+Content-Type: application/json
+
+{ "original_filename": "sample.mp4", "mime_type": "video/mp4", "size_bytes": 905702 }
+
+> {% client.test("401", function () { client.assert(response.status === 401, "recebido " + response.status); }); %}
+
+### E2. MIME que não é vídeo (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "original_filename": "documento.pdf", "mime_type": "application/pdf", "size_bytes": 1000 }
+
+> {% client.test("400", function () { client.assert(response.status === 400, "recebido " + response.status); }); %}
+
+### E3. Tamanho acima de 10 GB (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "original_filename": "enorme.mp4", "mime_type": "video/mp4", "size_bytes": 10737418241 }
+
+> {% client.test("400", function () { client.assert(response.status === 400, "recebido " + response.status); }); %}
+
+### E4. Vídeo inexistente (404 VIDEO_NOT_FOUND)
+POST {{baseUrl}}/videos/naoexiste0/uploads/parts
+Authorization: Bearer {{ownerToken}}
+Content-Type: application/json
+
+{ "part_numbers": [1] }
+
+> {% client.test("404", function () { client.assert(response.status === 404, "recebido " + response.status); }); %}
+
+### E5. Abortar sem token (401)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads
+
+> {% client.test("401", function () { client.assert(response.status === 401, "recebido " + response.status); }); %}
