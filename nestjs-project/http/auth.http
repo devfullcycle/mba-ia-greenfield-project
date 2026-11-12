@@ -1,0 +1,166 @@
+### Arquivo: auth.http
+### Fluxo de autenticação. Ordem sugerida: registrar -> confirmar e-mail -> login -> demais.
+### O usuário de teste (teste@streamtube.local / senha12345) já existe no banco de dev;
+### para criar outro, altere `email`/`password` em http-client.env.json.
+### O access token expira em 15 min: rode o login novamente quando receber 401.
+
+### 1. Registrar usuário (201 {id,email}; 409 EMAIL já cadastrado; 400 validação)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 1a. Registro inválido (400 VALIDATION_ERROR: e-mail inválido e senha curta)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "nao-e-um-email",
+  "password": "123"
+}
+
+### 2. Reenviar e-mail de confirmação (204; silencioso se já confirmado ou inexistente)
+POST {{baseUrl}}/auth/resend-confirmation
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### 3a. Mailpit: buscar a mensagem mais recente enviada ao usuário (guarda o ID em mailpitMessageId)
+# @name mailpitSearch
+GET {{mailpitUrl}}/api/v1/search?query=to:{{email}}&limit=1
+Accept: application/json
+
+> {%
+  const msgs = response.body.messages || [];
+  client.test("Existe e-mail para o usuário", function () {
+    client.assert(msgs.length > 0, "nenhuma mensagem encontrada no Mailpit");
+  });
+  if (msgs.length > 0) {
+    client.global.set("mailpitMessageId", msgs[0].ID);
+  }
+%}
+
+### 3b. Mailpit: ler o HTML da mensagem e extrair o token (confirmação ou reset)
+# O link tem o formato .../auth/confirm-email?token=... ou .../auth/reset-password?token=...
+# O token é guardado em `emailToken`, usado por 3c (confirmar) e por 8 (reset).
+GET {{mailpitUrl}}/api/v1/message/{{mailpitMessageId}}
+Accept: application/json
+
+> {%
+  const match = /token=([a-f0-9]+)/i.exec(response.body.HTML || "");
+  client.test("Token encontrado no e-mail", function () {
+    client.assert(match !== null, "token não encontrado no HTML do e-mail");
+  });
+  if (match) {
+    client.global.set("emailToken", match[1]);
+  }
+%}
+
+### 3c. Confirmar e-mail com o token extraído (204; 401 token inválido/expirado/já usado; 400 sem token)
+GET {{baseUrl}}/auth/confirm-email?token={{emailToken}}
+
+### 3d. Confirmar e-mail com token inválido (401)
+GET {{baseUrl}}/auth/confirm-email?token=token-invalido
+
+### 4. Login (200; guarda accessToken e refreshToken)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+> {%
+  client.test("Login OK", function () {
+    client.assert(response.status === 200, "status esperado 200, recebido " + response.status);
+  });
+  if (response.status === 200) {
+    client.global.set("accessToken", response.body.access_token);
+    client.global.set("refreshToken", response.body.refresh_token);
+  }
+%}
+
+### 4a. Login com senha errada (401 INVALID_CREDENTIALS)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "senha-errada"
+}
+
+### 4b. Login sem e-mail confirmado (403 se o usuário existe e não confirmou; e-mail inexistente dá 401)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nao-confirmado@streamtube.local",
+  "password": "senha12345"
+}
+
+### 5. Usuário atual (200 {sub,email}; 401 sem token ou token expirado)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+### 5a. Usuário atual sem token (401)
+GET {{baseUrl}}/auth/me
+
+### 6. Renovar tokens (200; rotaciona o refresh token. Reuso tardio do token antigo dá 401)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+> {%
+  if (response.status === 200) {
+    client.global.set("accessToken", response.body.access_token);
+    client.global.set("refreshToken", response.body.refresh_token);
+  }
+%}
+
+### 6a. Refresh com token inválido (401)
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "token-invalido"
+}
+
+### 7. Esqueci a senha (204; silencioso se o e-mail não existe). Depois rode 3a e 3b para pegar o token.
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### 8. Redefinir senha com o token do e-mail (204; 401 token inválido/expirado)
+# Atenção: altera a senha do usuário. Para manter a de teste, use a mesma `password`.
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "{{emailToken}}",
+  "new_password": "{{password}}"
+}
+
+### 8a. Redefinir senha com token inválido (401)
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "token-invalido",
+  "new_password": "novaSenha12345"
+}
+
+### 9. Logout (204; revoga todos os refresh tokens do usuário; 401 sem token)
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{accessToken}}

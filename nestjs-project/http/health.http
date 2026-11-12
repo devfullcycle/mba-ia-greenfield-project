@@ -1,0 +1,22 @@
+### Arquivo: health.http
+### Rotas gerais da API (sem autenticação). Selecione o ambiente `dev`.
+
+### Healthcheck (esperado: 200 "Hello World!")
+GET {{baseUrl}}/
+
+> {%
+  client.test("API respondeu 200", function () {
+    client.assert(response.status === 200, "status esperado 200, recebido " + response.status);
+  });
+%}
+
+### Swagger UI (200; exige SWAGGER_ENABLED=true no .env, senão 404)
+GET {{baseUrl}}/api/docs
+
+### Spec OpenAPI em JSON (200; exige SWAGGER_ENABLED=true)
+GET {{baseUrl}}/api/docs-json
+Accept: application/json
+
+### Mailpit - UI/API de e-mails capturados (200)
+GET {{mailpitUrl}}/api/v1/messages?limit=5
+Accept: application/json

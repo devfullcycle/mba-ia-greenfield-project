@@ -1,0 +1,225 @@
+### Arquivo: videos-upload.http
+### Upload multipart em partes via URLs pré-assinadas do MinIO.
+### Pré-requisito: rodar o login em auth.http (guarda accessToken).
+### Rode em ordem, de cima para baixo: 1 -> 2 -> (3 opcional) -> 4 -> 5.
+###
+### O arquivo de exemplo (../test/video/fixtures/sample.mp4, 905702 bytes) tem menos de 5 MiB,
+### então o upload tem UMA única parte. Arquivos maiores precisam ser fatiados em várias partes
+### (mínimo 5 MiB cada, exceto a última) - para isso use o cliente de linha de comando:
+###
+###   npm run upload:video -- --file <caminho> --api http://localhost:3000 --token <access_token>
+###
+### (opcionais: --concurrency N, --storage-connect host:port). Rode no diretório nestjs-project.
+
+### 1. Iniciar upload (201; cria o vídeo em DRAFT e guarda videoId, partUrl, partSize)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "sample.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 905702
+}
+
+> {%
+  client.test("Upload iniciado", function () {
+    client.assert(response.status === 201, "status esperado 201, recebido " + response.status);
+  });
+  if (response.status === 201) {
+    client.global.set("videoId", response.body.id);
+    client.global.set("partSize", String(response.body.part_size));
+    client.global.set("partUrl", response.body.parts[0].url);
+  }
+%}
+
+### 2. Enviar a parte 1 direto ao MinIO (200; guarda o ETag da parte)
+# A URL pré-assinada aponta para http://localhost:9000 e já traz a assinatura na query string.
+# Não envie Authorization nem altere o header Host, senão a assinatura (SignedHeaders=host) falha com 403.
+# O ETag vem entre aspas; removemos as aspas para usá-lo no JSON do passo 4.
+PUT {{partUrl}}
+Content-Type: video/mp4
+
+< ../test/video/fixtures/sample.mp4
+
+> {%
+  client.test("Parte enviada", function () {
+    client.assert(response.status === 200, "status esperado 200, recebido " + response.status);
+  });
+  const etag = response.headers.valueOf("ETag");
+  if (etag) {
+    client.global.set("etag", etag.replace(/"/g, ""));
+  }
+%}
+
+### 3. (Opcional) Renovar as URLs pré-assinadas de partes do upload em DRAFT
+# 200 {parts, expires_at}; só vale enquanto o vídeo está em DRAFT (depois do passo 4 dá 409 VIDEO_NOT_IN_DRAFT).
+# Útil quando as URLs expiram (6 h) ou o upload é retomado.
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "part_numbers": [1]
+}
+
+> {%
+  if (response.status === 200) {
+    client.global.set("partUrl", response.body.parts[0].url);
+  }
+%}
+
+### 3a. Renovar parte inexistente (400 INVALID_UPLOAD_PARTS: part_number maior que part_count)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "part_numbers": [99]
+}
+
+### 3b. Renovar com lista vazia (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/parts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "part_numbers": []
+}
+
+### 4. Finalizar o upload (202 {id, status: PROCESSING}; o worker processa e o vídeo vira READY em poucos segundos)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "parts": [
+    { "part_number": 1, "etag": "{{etag}}" }
+  ]
+}
+
+> {%
+  client.test("Upload finalizado", function () {
+    client.assert(response.status === 202, "status esperado 202, recebido " + response.status);
+  });
+%}
+
+### 4a. Finalizar de novo (409 VIDEO_NOT_IN_DRAFT: o vídeo já saiu de DRAFT)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "parts": [
+    { "part_number": 1, "etag": "{{etag}}" }
+  ]
+}
+
+### 4b. Finalizar com corpo inválido (400 VALIDATION_ERROR: parts vazio)
+POST {{baseUrl}}/videos/{{videoId}}/uploads/complete
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "parts": []
+}
+
+### 5. Acompanhar o processamento (200; repita até status = READY)
+# PROCESSING -> READY (ou ERROR com error_reason). Dono vê qualquer status.
+GET {{baseUrl}}/videos/{{videoId}}
+Authorization: Bearer {{accessToken}}
+
+> {%
+  client.test("Vídeo existe", function () {
+    client.assert(response.status === 200, "status esperado 200, recebido " + response.status);
+  });
+  client.log("status do vídeo: " + response.body.status);
+%}
+
+### ---------------------------------------------------------------------------
+### Erros comuns do fluxo de upload
+### ---------------------------------------------------------------------------
+
+### E1. Iniciar sem token (401)
+POST {{baseUrl}}/videos/uploads
+Content-Type: application/json
+
+{
+  "original_filename": "sample.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 905702
+}
+
+### E2. MIME type que não é vídeo (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "documento.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 1000
+}
+
+### E3. Tamanho acima de 10 GB (400 VALIDATION_ERROR)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "enorme.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 10737418241
+}
+
+### E4. Vídeo inexistente ou de outro usuário (404 VIDEO_NOT_FOUND)
+POST {{baseUrl}}/videos/naoexiste0/uploads/parts
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "part_numbers": [1]
+}
+
+### E5. Abortar vídeo que não está em DRAFT (409 VIDEO_NOT_IN_DRAFT; ex.: o vídeo já finalizado acima)
+DELETE {{baseUrl}}/videos/{{videoId}}/uploads
+Authorization: Bearer {{accessToken}}
+
+### ===========================================================================
+### ABORTAR UPLOAD (seção independente)
+### Cria seu próprio rascunho (abortVideoId) para não conflitar com o vídeo acima.
+### ===========================================================================
+
+### A1. Iniciar um upload só para abortar (201; guarda abortVideoId)
+POST {{baseUrl}}/videos/uploads
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "original_filename": "para-abortar.mp4",
+  "mime_type": "video/mp4",
+  "size_bytes": 905702
+}
+
+> {%
+  if (response.status === 201) {
+    client.global.set("abortVideoId", response.body.id);
+  }
+%}
+
+### A2. Abortar o upload (204; cancela o multipart no storage e remove o rascunho)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads
+Authorization: Bearer {{accessToken}}
+
+> {%
+  client.test("Upload abortado", function () {
+    client.assert(response.status === 204, "status esperado 204, recebido " + response.status);
+  });
+%}
+
+### A3. Abortar de novo (404 VIDEO_NOT_FOUND: o rascunho já foi removido)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads
+Authorization: Bearer {{accessToken}}
+
+### A4. Abortar sem token (401)
+DELETE {{baseUrl}}/videos/{{abortVideoId}}/uploads

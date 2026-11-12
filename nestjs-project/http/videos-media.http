@@ -1,0 +1,61 @@
+### Arquivo: videos-media.http
+### Leitura de metadados e entrega de mídia (stream, download, thumbnail).
+### Usa {{videoId}} (guardado por videos-upload.http). Se ainda não existir, o primeiro
+### request abaixo assume o vídeo READY de exemplo (WwXreTVSFP) do banco de dev.
+### Stream/download/thumbnail só funcionam para vídeos READY (senão 404).
+
+### 1. Metadados sem autenticação (200 se READY; 404 VIDEO_NOT_FOUND se não READY)
+< {%
+  if (!client.global.get("videoId")) {
+    client.global.set("videoId", "WwXreTVSFP");
+  }
+%}
+GET {{baseUrl}}/videos/{{videoId}}
+
+### 2. Metadados autenticado (200; o dono vê qualquer status; token inválido vale como anônimo)
+GET {{baseUrl}}/videos/{{videoId}}
+Authorization: Bearer {{accessToken}}
+
+### 3. Stream completo (200; Accept-Ranges: bytes)
+GET {{baseUrl}}/videos/{{videoId}}/stream
+
+### 4. Stream com Range (206; Content-Range: bytes 0-1023/905702)
+GET {{baseUrl}}/videos/{{videoId}}/stream
+Range: bytes=0-1023
+
+> {%
+  client.test("Resposta parcial", function () {
+    client.assert(response.status === 206, "status esperado 206, recebido " + response.status);
+  });
+%}
+
+### 5. Download (200; Content-Disposition: attachment)
+GET {{baseUrl}}/videos/{{videoId}}/download
+
+### 6. Download com Range - download retomável (206)
+GET {{baseUrl}}/videos/{{videoId}}/download
+Range: bytes=0-1023
+
+### 7. Thumbnail (200; image/jpeg)
+GET {{baseUrl}}/videos/{{videoId}}/thumbnail
+
+### ---------------------------------------------------------------------------
+### Exemplos negativos
+### ---------------------------------------------------------------------------
+
+### N1. Range fora do tamanho do arquivo (416 RANGE_NOT_SATISFIABLE; Content-Range: bytes */905702)
+GET {{baseUrl}}/videos/{{videoId}}/stream
+Range: bytes=999999999-
+
+### N2. Download com Range fora do limite (416 RANGE_NOT_SATISFIABLE)
+GET {{baseUrl}}/videos/{{videoId}}/download
+Range: bytes=999999999-
+
+### N3. Id inexistente - metadados (404 VIDEO_NOT_FOUND)
+GET {{baseUrl}}/videos/naoexiste0
+
+### N4. Id inexistente - stream (404 VIDEO_NOT_FOUND)
+GET {{baseUrl}}/videos/naoexiste0/stream
+
+### N5. Id inexistente - thumbnail (404 VIDEO_NOT_FOUND)
+GET {{baseUrl}}/videos/naoexiste0/thumbnail
