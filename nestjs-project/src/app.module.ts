@@ -1,22 +1,35 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigType } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { VideosModule } from './videos/videos.module';
 import appConfig from './config/app.config';
 import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
 import mailConfig from './config/mail.config';
+import videoConfig from './config/video.config';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, authConfig, databaseConfig, mailConfig],
+      load: [appConfig, authConfig, databaseConfig, mailConfig, videoConfig],
       validationSchema: envValidationSchema,
       validationOptions: { allowUnknown: true, abortEarly: false },
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [videoConfig.KEY],
+      useFactory: (videoCfg: ConfigType<typeof videoConfig>) => ({
+        connection: {
+          host: videoCfg.redisHost,
+          port: videoCfg.redisPort,
+        },
+      }),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -33,6 +46,7 @@ import { envValidationSchema } from './config/env.validation';
       }),
     }),
     AuthModule,
+    VideosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

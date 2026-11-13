@@ -159,3 +159,7 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 ## REST Conventions
 
 This is a RESTful API. All endpoints must follow standard REST conventions — correct HTTP methods, proper status codes, plural resource nouns, and consistent URL structure. Details are enforced via rules on controller files.
+
+## Video Module
+
+The `VideosModule` uses TypeORM, MinIO-compatible storage, BullMQ/Redis, and a separate FFmpeg worker. Authenticated management endpoints create drafts and issue multipart presigned URLs; completion publishes `process-video`. Public stream/download endpoints expose only `READY` videos and support HTTP `Range`/`206`. Keep secrets in environment variables and never include them in logs, responses, or committed files.
