@@ -23,7 +23,7 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ/Redis) → video processing jobs with retries and backoff
 - **Email Service** (SMTP) → account confirmation and password recovery
 
 ## Docker Networking
@@ -105,3 +105,21 @@ Skip documentation lookup only for trivial operations such as:
 
 If a library is involved and there is uncertainty, documentation lookup is mandatory.
 If the documentation returned does not match the installed version, flag the discrepancy before proceeding.
+
+## Video Processing (Phase 03)
+
+The video flow is implemented in `nestjs-project/src/videos/`:
+
+- `POST /videos` creates an authenticated channel owner's `DRAFT` video.
+- `POST /videos/:id/upload` starts a multipart upload in MinIO.
+- `POST /videos/:id/upload/parts` returns presigned part URLs.
+- `POST /videos/:id/upload/complete` completes the multipart upload and publishes a BullMQ job.
+- `POST /videos/:id/upload/cancel` aborts an incomplete upload.
+- `GET /videos/:id/stream` serves only `READY` videos and supports HTTP `Range`/`206`.
+- `GET /videos/:id/download` serves a ready video as an attachment.
+
+The `video-worker` Compose service runs `src/worker.ts`. It consumes Redis/BullMQ jobs, downloads the source from MinIO, runs `ffprobe` and `ffmpeg`, uploads a JPEG thumbnail, and persists `READY` or `ERROR` state. Video files are never transported in full through the API; clients upload parts directly to MinIO using presigned URLs.
+
+Required local variables are documented in `nestjs-project/.env.example`. Do not commit real storage, database, JWT, or mail credentials.
+
+Phase evidence and exact validation commands are recorded in `docs/phases/phase-03-videos/progress.md`.

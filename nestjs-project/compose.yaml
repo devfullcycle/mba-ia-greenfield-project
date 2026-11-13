@@ -1,26 +1,70 @@
 services:
   nestjs-api:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - 3000:3000
+      - "3000:3000"
     volumes:
       - .:/home/node/app
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: streamtube
+      DB_PASSWORD: streamtube
+      DB_NAME: streamtube
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      STORAGE_ENDPOINT: minio
+      STORAGE_PORT: 9000
+      STORAGE_USE_SSL: "false"
+      STORAGE_ACCESS_KEY: streamtube
+      STORAGE_SECRET_KEY: streamtube-local-secret
+      STORAGE_BUCKET: streamtube-videos
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: change-me-in-development
+      JWT_REFRESH_SECRET: change-me-refresh-in-development
     depends_on:
       db:
         condition: service_healthy
       mailpit:
         condition: service_started
+      minio:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      NODE_ENV: development
+      STORAGE_ENDPOINT: minio
+      STORAGE_PORT: 9000
+      STORAGE_USE_SSL: "false"
+      STORAGE_ACCESS_KEY: streamtube
+      STORAGE_SECRET_KEY: streamtube-local-secret
+      STORAGE_BUCKET: streamtube-videos
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      VIDEO_QUEUE_NAME: video-processing
+      VIDEO_WORKER_CONCURRENCY: 1
+    depends_on:
+      minio:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
   db:
     image: postgres:17
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=streamtube
-      - POSTGRES_PASSWORD=streamtube
-      - POSTGRES_DB=streamtube
+      POSTGRES_USER: streamtube
+      POSTGRES_PASSWORD: streamtube
+      POSTGRES_DB: streamtube
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U REDACTED_CREDENTIAL"]
       interval: 5s
@@ -33,4 +77,32 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  minio:
+    image: soldevelo/minio@sha256:1b02c5747d97e68fb46e740d771c454391d79d985e4fa5051dbb240ccad1dc85
+    command: server /data --console-address ":9001"
+    user: "0:0"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: streamtube
+      MINIO_ROOT_PASSWORD: streamtube-local-secret
+    volumes:
+      - minio-data:/data
 
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  minio-data:
+  redis-data:

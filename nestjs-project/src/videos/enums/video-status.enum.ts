@@ -1,0 +1,9 @@
+export enum VideoStatus {
+  DRAFT = 'DRAFT',
+  UPLOADING = 'UPLOADING',
+  UPLOADED = 'UPLOADED',
+  PROCESSING = 'PROCESSING',
+  READY = 'READY',
+  ERROR = 'ERROR',
+  CANCELLED = 'CANCELLED',
+}

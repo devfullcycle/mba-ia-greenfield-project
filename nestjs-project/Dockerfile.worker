@@ -1,0 +1,14 @@
+FROM node:25.6.0-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /home/node/app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+USER node
+CMD ["node", "dist/worker.js"]
