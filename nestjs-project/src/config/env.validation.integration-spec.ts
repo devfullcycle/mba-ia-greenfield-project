@@ -1,3 +1,4 @@
+import type { ValidationError } from 'joi';
 import { envValidationSchema } from './env.validation';
 
 const requiredEnv = {
@@ -8,11 +9,21 @@ const requiredEnv = {
   JWT_REFRESH_SECRET: 'refresh-secret',
 };
 
-const validate = (env: Record<string, string>) =>
-  envValidationSchema.validate(
+interface EnvValidationResult {
+  error?: ValidationError;
+  value: Record<string, unknown>;
+}
+
+const validate = (env: Record<string, string>): EnvValidationResult => {
+  const result = envValidationSchema.validate(
     { ...requiredEnv, ...env },
     { allowUnknown: true, abortEarly: false },
   );
+  return {
+    error: result.error,
+    value: result.value as Record<string, unknown>,
+  };
+};
 
 describe('envValidationSchema — SWAGGER_ENABLED', () => {
   it('should reject SWAGGER_ENABLED with an invalid value', () => {
