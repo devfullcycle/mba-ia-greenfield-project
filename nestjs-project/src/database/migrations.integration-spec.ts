@@ -14,6 +14,11 @@ const MANAGED_TABLES = [
   'verification_tokens',
 ];
 
+// Postgres types created by the migrations. DROP TABLE ... CASCADE does not
+// remove them, so they must be dropped explicitly or re-running the migrations
+// fails with `type "..." already exists`.
+const MANAGED_ENUM_TYPES = ['verification_tokens_type_enum'];
+
 describe('Database migrations (integration)', () => {
   let dataSource: DataSource;
 
@@ -31,12 +36,15 @@ describe('Database migrations (integration)', () => {
 
     await dataSource.initialize();
 
-    await Promise.all([
-      ...MANAGED_TABLES.map((table) =>
-        dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`),
-      ),
-      dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`),
-    ]);
+    // Sequential drops: concurrent DROP ... CASCADE on FK-related tables can deadlock.
+    for (const table of [...MANAGED_TABLES, 'migrations']) {
+      await dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
+    }
+    for (const enumType of MANAGED_ENUM_TYPES) {
+      await dataSource.query(
+        `DROP TYPE IF EXISTS "public"."${enumType}" CASCADE`,
+      );
+    }
   });
 
   afterAll(async () => {
