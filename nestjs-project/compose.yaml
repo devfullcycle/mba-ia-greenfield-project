@@ -21,6 +21,8 @@ services:
       - POSTGRES_USER=streamtube
       - POSTGRES_PASSWORD=streamtube
       - POSTGRES_DB=streamtube
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U streamtube"]
       interval: 5s
@@ -33,4 +35,5 @@ services:
       - "1025:1025"
       - "8025:8025"
 
-
+volumes:
+  postgres-data:
