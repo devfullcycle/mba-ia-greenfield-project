@@ -37,12 +37,46 @@ describe('Video migration (integration)', () => {
       await dataSource.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
     }
     await dataSource.query(`DROP TYPE IF EXISTS "videos_status_enum" CASCADE`);
+    await dataSource.query(
+      `DROP TYPE IF EXISTS "verification_tokens_type_enum" CASCADE`,
+    );
     await dataSource.query(`DROP TABLE IF EXISTS "migrations" CASCADE`);
   });
 
   afterAll(async () => {
-    await dataSource.runMigrations();
-    await dataSource.destroy();
+    try {
+      const [videos, enumValues, migration] = await Promise.all([
+        dataSource.query(
+          `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'videos'`,
+        ),
+        dataSource.query(
+          `SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = 'videos_status_enum' ORDER BY e.enumsortorder`,
+        ),
+        dataSource.query(`SELECT name FROM "migrations" WHERE name = $1`, [
+          'CreateVideos1794574108904',
+        ]),
+      ]);
+
+      if (
+        videos.length !== 0 ||
+        enumValues.length !== 0 ||
+        migration.length !== 0
+      ) {
+        await dataSource.query(`DROP TABLE IF EXISTS "videos" CASCADE`);
+        await dataSource.query(
+          `DROP TYPE IF EXISTS "videos_status_enum" CASCADE`,
+        );
+        await dataSource.query(`DELETE FROM "migrations" WHERE name = $1`, [
+          'CreateVideos1794574108904',
+        ]);
+      }
+
+      // Re-apply the video migration so subsequent suites receive both the
+      // videos table and the videos_status_enum type in the shared database.
+      await dataSource.runMigrations();
+    } finally {
+      await dataSource.destroy();
+    }
   });
 
   it('creates the videos table and status enum', async () => {
