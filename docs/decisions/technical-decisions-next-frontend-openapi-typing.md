@@ -15,9 +15,9 @@ _Subprojects in scope:_
 
 > Cross-doc anchors:
 > - **Producer of the spec:** `openapi-docs-nestjs/TD-02` — the canonical artifact lives at `nestjs-project/openapi.json` and is committed in that subproject.
-> - **Docker isolation constraint:** per `next-frontend/CLAUDE.md` § Development Environment, only `next-frontend/` is bind-mounted into its container (`/home/node/app`). The sibling `nestjs-project/openapi.json` is **not** visible inside the `next-frontend` container's filesystem; any codegen command run inside the container (CLAUDE.md mandates all `npm`/`npx`/`tsc` commands run inside the container) must read a path that resolves under `/home/node/app`. The two subprojects also run on **separate Docker Compose stacks** with no shared network (`next-frontend-config-base/TD-03` Context). This is the load-bearing constraint behind TD-02 (Spec Sourcing) — without it, codegen could read the producer file directly via a relative path.
+> - **Docker isolation constraint:** per `next-frontend/AGENTS.md` § Development Environment, only `next-frontend/` is bind-mounted into its container (`/home/node/app`). The sibling `nestjs-project/openapi.json` is **not** visible inside the `next-frontend` container's filesystem; any codegen command run inside the container (AGENTS.md mandates all `npm`/`npx`/`tsc` commands run inside the container) must read a path that resolves under `/home/node/app`. The two subprojects also run on **separate Docker Compose stacks** with no shared network (`next-frontend-config-base/TD-03` Context). This is the load-bearing constraint behind TD-02 (Spec Sourcing) — without it, codegen could read the producer file directly via a relative path.
 > - **BFF architectural commitment:** `next-frontend-config-base/TD-03` (strict BFF — single server-only `API_URL`; browser calls only same-origin Route Handlers; backend URL never leaves the server) — this scopes WHO consumes the upstream Nest types (only the BFF) and WHO consumes the BFF-facing types (the Components layer).
-> - **Testing model that uses MSW:** `next-frontend/CLAUDE.md` § Testing — BFF integration tests import Route Handlers as functions and let `msw/node` intercept the `fetch` they make to NestJS. Mocks model the NestJS upstream, not the BFF.
+> - **Testing model that uses MSW:** `next-frontend/AGENTS.md` § Testing — BFF integration tests import Route Handlers as functions and let `msw/node` intercept the `fetch` they make to NestJS. Mocks model the NestJS upstream, not the BFF.
 > - **Excluded option (deprecated):** `openapi-typescript-codegen` (ferdikoomen) was archived on 2024-05-01; all versions deprecated on npm; the upstream README explicitly redirects users to `@hey-api/openapi-ts`. Included in this document only for trace; not evaluated as a live option in TD-01.
 
 ---
@@ -33,7 +33,7 @@ _Subprojects in scope:_
 - **BFF layer** (`app/api/**/route.ts`): calls upstream NestJS via `fetch(env.API_URL + path)`. Needs request body / response body / path-param / query-param types **for the NestJS endpoint shape**.
 - **Components layer** (RSC and Client): calls same-origin Route Handlers via `fetch("/api/...")`. Needs request/response types **for the BFF shape** (which may equal the NestJS shape pass-through, or diverge if the BFF reshapes — addressed in TD-04).
 
-Stack constraint: Next.js 16.2.6 + React 19.2.4, App Router, TypeScript strict. The project already uses **Zod 4** for env validation (`next-frontend-config-base/TD-01`) and `class-variance-authority` for component variants. There is currently **no** client-side data-fetching library (no TanStack Query, no SWR). MSW is committed but not yet wired (`mocks/handlers.ts` + `mocks/server.ts` pending bootstrap — see CLAUDE.md "Status — bootstrap pending"). The BFF model means the upstream Nest contract is touched **only inside server-side Route Handlers** — the browser never sees `paths`-typed code from the upstream spec.
+Stack constraint: Next.js 16.2.6 + React 19.2.4, App Router, TypeScript strict. The project already uses **Zod 4** for env validation (`next-frontend-config-base/TD-01`) and `class-variance-authority` for component variants. There is currently **no** client-side data-fetching library (no TanStack Query, no SWR). MSW is committed but not yet wired (`mocks/handlers.ts` + `mocks/server.ts` pending bootstrap — see AGENTS.md "Status — bootstrap pending"). The BFF model means the upstream Nest contract is touched **only inside server-side Route Handlers** — the browser never sees `paths`-typed code from the upstream spec.
 
 **Input path constraint:** the chosen tool's CLI must accept a path resolvable inside the `next-frontend` container (e.g., `./openapi.json` relative to `/home/node/app`). The location and lifecycle of that local file are decided in TD-02; this TD only requires that the tool reads a single local file path.
 
@@ -82,9 +82,9 @@ Plugin-based meta-framework: every output kind (TS types, Zod schemas, TanStack 
 
 **Context:** The constraint is concrete and load-bearing:
 
-- `next-frontend/CLAUDE.md` § Development Environment: only `next-frontend/` is bind-mounted into the container (`/home/node/app`). The repo root and sibling subprojects are **not** mounted.
-- The same CLAUDE.md mandates that every `npm`, `npx`, `node`, and `tsc` command runs **inside the container** (host execution is forbidden — wrong Node version, wrong working dir, wrong file ownership).
-- The two subprojects also live on **separate Docker Compose stacks** with no shared network (`next-frontend-config-base/TD-03`). A future "shared compose network" infra task is mentioned in CLAUDE.md but explicitly deferred.
+- `next-frontend/AGENTS.md` § Development Environment: only `next-frontend/` is bind-mounted into the container (`/home/node/app`). The repo root and sibling subprojects are **not** mounted.
+- The same AGENTS.md mandates that every `npm`, `npx`, `node`, and `tsc` command runs **inside the container** (host execution is forbidden — wrong Node version, wrong working dir, wrong file ownership).
+- The two subprojects also live on **separate Docker Compose stacks** with no shared network (`next-frontend-config-base/TD-03`). A future "shared compose network" infra task is mentioned in AGENTS.md but explicitly deferred.
 
 Combined: the codegen CLI (running inside `next-frontend`'s container) cannot read `../nestjs-project/openapi.json` because that path is outside the bind mount. It must read a file path that resolves under `/home/node/app`. This decision establishes how the spec reaches that path and how it stays current with the canonical producer copy.
 
@@ -104,7 +104,7 @@ The developer who edits the backend spec also runs `cp nestjs-project/openapi.js
 Same end-state as Option A (a committed `next-frontend/openapi.json`), but the copy is automated by a small sync script (`scripts/sync-openapi.sh` or a root-level npm script if the repo grows a root `package.json`). The script runs **on the host** (since it must read from outside any single container's bind mount) and writes into `next-frontend/openapi.json`. Developers run the script after every backend spec change; CI also runs it before TD-03's freshness check.
 
 - **Pros:** Single command instead of remembering the `cp` invocation. Documentation can point to one canonical step (`bash scripts/sync-openapi.sh`). Combined with TD-03's freshness check, eliminates drift: if the script wasn't run, the freshness check fails the build. Foundation for richer sync logic later (e.g., post-processing, filtering paths, computing a checksum).
-- **Cons:** Adds a script that lives at the repo root — slight friction for a monorepo that currently has no root-level tooling. Script runs on the host, not in any container, which adds a "host-only command" category alongside CLAUDE.md's existing host-only commands (compose / probes). Still requires the file copy to be committed.
+- **Cons:** Adds a script that lives at the repo root — slight friction for a monorepo that currently has no root-level tooling. Script runs on the host, not in any container, which adds a "host-only command" category alongside AGENTS.md's existing host-only commands (compose / probes). Still requires the file copy to be committed.
 
 ### Option C: Docker Compose bind-mount of the canonical file into the container
 
@@ -220,9 +220,9 @@ Each feature folder owns its own contract file (e.g., `app/(videos)/_contracts.t
 
 **Scope:** Frontend
 
-**Trigger:** Decide how `mocks/handlers.ts` (MSW handlers that intercept the BFF's `fetch` calls to NestJS in integration tests, per `next-frontend/CLAUDE.md`) reuses the same OpenAPI contract — so the mocks cannot drift from the real upstream response shape.
+**Trigger:** Decide how `mocks/handlers.ts` (MSW handlers that intercept the BFF's `fetch` calls to NestJS in integration tests, per `next-frontend/AGENTS.md`) reuses the same OpenAPI contract — so the mocks cannot drift from the real upstream response shape.
 
-**Context:** MSW handlers in this project model the **NestJS upstream**, not the BFF (per the testing model in CLAUDE.md: "BFF integration tests import Route Handlers as functions; `msw/node` intercepts the `fetch` they make to the NestJS API"). The handler signature is roughly:
+**Context:** MSW handlers in this project model the **NestJS upstream**, not the BFF (per the testing model in AGENTS.md: "BFF integration tests import Route Handlers as functions; `msw/node` intercepts the `fetch` they make to the NestJS API"). The handler signature is roughly:
 
 ```ts
 http.get("http://nestjs-api:3000/videos/:id", () => HttpResponse.json({ /* fixture */ }))
@@ -281,11 +281,11 @@ Generate once at bootstrap, copy the generated handlers into `mocks/handlers.ts`
 ## Notes for downstream pipeline
 
 - This is an **orphan ad-hoc** (`related_phases: []`) decision document, in the same family as `openapi-docs-nestjs` (producer side) and `next-frontend-config-base` (FE foundation). It enables Phase 02+ FE work that touches the BFF without itself being a phase capability.
-- **Docker bind-mount constraint is the load-bearing driver of TD-02.** If a future infra task introduces a shared Compose network (mentioned as "to be defined" in `next-frontend/CLAUDE.md` and in `next-frontend-config-base/TD-03` Notes), TD-02 may be revisited — but the committed-local-copy strategy stays valid regardless of the runtime network topology, because the issue is filesystem visibility from inside the container, not network reachability.
+- **Docker bind-mount constraint is the load-bearing driver of TD-02.** If a future infra task introduces a shared Compose network (mentioned as "to be defined" in `next-frontend/AGENTS.md` and in `next-frontend-config-base/TD-03` Notes), TD-02 may be revisited — but the committed-local-copy strategy stays valid regardless of the runtime network topology, because the issue is filesystem visibility from inside the container, not network reachability.
 - TDs 03, 04, 05 are partially **coupled to TD-01**: choosing a heavier tool (Options B/C/D) reshapes the natural answers to TD-04 and TD-05 (e.g., a generated SDK in TD-01 favors importing SDK return types directly in TD-04; an MSW-plugin-bearing tool favors Option B in TD-05). The recommendations above form a **coherent set** assuming TD-01 is decided as A — if TD-01 swings to B/C/D, TDs 04 and 05 must be revisited.
 - TD-02 and TD-03 **compose**: under TD-02 Option B and TD-03 Option C, the CI freshness check is one pipeline step that runs the sync script, runs the codegen script, and asserts no diff on `openapi.json` or `types.gen.ts`. Drift on either side fails CI with a clear remediation message.
 - After decisions are made, the implementation surface for `/plan-build` will include: a host-runnable sync script (e.g., `scripts/sync-openapi.sh`) producing `next-frontend/openapi.json`, an npm script (`openapi:types`) inside `next-frontend`, a committed generated artifact (`next-frontend/lib/api/types.gen.ts`), the contracts barrel (`next-frontend/lib/api/contracts.ts`), a CI freshness check, and the MSW handler typing pattern documented in the test bootstrap task (separate task — `next-frontend-msw-foundation`, identified during `/decide` triage 2026-05-13).
-- `next-frontend/CLAUDE.md` does not yet mention the codegen pipeline; once decisions are made, the "Talking to the NestJS API" section should reference `@/lib/api/contracts` as the canonical import target, the sync script as a host-only step in the Development Environment section, and the new npm scripts.
+- `next-frontend/AGENTS.md` does not yet mention the codegen pipeline; once decisions are made, the "Talking to the NestJS API" section should reference `@/lib/api/contracts` as the canonical import target, the sync script as a host-only step in the Development Environment section, and the new npm scripts.
 
 Sources consulted during research:
 - [openapi-typescript & openapi-fetch documentation](https://openapi-ts.dev/) — types-first OpenAPI consumption.

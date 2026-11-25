@@ -5,7 +5,7 @@ sources_mtime:
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-05-13T14:50:56-03:00"
   docs/decisions/technical-decisions-phase-01-configuracao-base.md: "2026-05-12T14:01:33-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
+  .agents/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
 ---
 
 # task-next-frontend-config-base — Context
@@ -40,7 +40,7 @@ _Source files:_
 
 ### next-frontend-config-base/TD-03
 
-**Recommendation:** Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
+**Recommendation:** Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
 **Libraries:** —
 
 ## Inherited Decisions Detail

@@ -1,0 +1,5 @@
+# Project MCP servers migrated from .mcp.json. Parent permissions remain unchanged.
+
+[mcp_servers.postgres]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://streamtube:streamtube@localhost/streamtube"]

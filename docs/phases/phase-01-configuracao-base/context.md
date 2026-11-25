@@ -53,7 +53,7 @@ _Source files:_
 | Projeto Next.js (frontend) (será criado depois, não agora) e Nest.js (backend) inicializados | phase-01-configuracao-base/TD-01, phase-01-configuracao-base/TD-03 |
 | Ambiente de desenvolvimento local com todos os serviços via Docker Compose | phase-01-configuracao-base/TD-02, phase-01-configuracao-base/TD-03 |
 | Estrutura inicial do banco de dados PostgreSQL (schema, migrations e seeds) (sem tabelas ainda) | phase-01-configuracao-base/TD-04 |
-| Fundação de IA para coding. | _Not covered by a TD — handled by CLAUDE.md, Claude skills, and editor configuration; no open technical decision._ |
+| Fundação de IA para coding. | _Not covered by a TD — handled by AGENTS.md, Claude skills, and editor configuration; no open technical decision._ |
 
 ## Decisions Detail
 

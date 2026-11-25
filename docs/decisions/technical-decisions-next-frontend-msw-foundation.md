@@ -15,8 +15,8 @@ _Subprojects in scope:_
 
 > Cross-doc anchors (already decided — do not reopen):
 > - **Hand-written handlers typed via `paths`:** `next-frontend-openapi-typing/TD-05`. Auto-generated MSW handlers (orval `mock: true`, hey-api MSW plugin, etc.) are explicitly rejected. Every TD below assumes the handler bodies are hand-written and typed via `paths["/route"]["method"]["responses"][status]["content"]["application/json"]`.
-> - **MSW v2 (`msw` + `msw/node`) chosen as the BFF test fake:** `next-frontend/CLAUDE.md` § Testing. Vitest as runner; BFF Route Handlers tested **as functions** (imported and invoked directly); `msw/node` intercepts the `fetch` they make to NestJS.
-> - **Canonical file map and `mocks/` exception:** `.claude/rules/next-frontend-msw-mocks.md` and `.claude/rules/next-frontend-bff-api.md`. The `mocks/` tree is the only place outside `lib/api/contracts.ts` allowed to import `paths` from `@/lib/api/types.gen` directly — because its job is to mirror wire shapes, not expose named aliases.
+> - **MSW v2 (`msw` + `msw/node`) chosen as the BFF test fake:** `next-frontend/AGENTS.md` § Testing. Vitest as runner; BFF Route Handlers tested **as functions** (imported and invoked directly); `msw/node` intercepts the `fetch` they make to NestJS.
+> - **Canonical file map and `mocks/` exception:** `.agents/rules/next-frontend-msw-mocks.md` and `.agents/rules/next-frontend-bff-api.md`. The `mocks/` tree is the only place outside `lib/api/contracts.ts` allowed to import `paths` from `@/lib/api/types.gen` directly — because its job is to mirror wire shapes, not expose named aliases.
 > - **URL composition:** handlers match `${env.API_URL}/...` (the upstream URL the BFF actually calls). `env.API_URL` is server-only per `next-frontend-config-base/TD-03` Option A (Strict BFF — single server-only key).
 > - **Determinism principle (locked):** TD-05 rejects randomized fixture bodies for BFF integration tests. The factory TD below (TD-03) operates strictly inside that constraint — any builder must produce deterministic output by default.
 
@@ -28,14 +28,14 @@ This research builds the **structural foundation** on which Phase 02+ adds endpo
 
 **Scope:** Frontend
 
-**Trigger:** Decide how `mocks/handlers.ts` (the file `next-frontend/CLAUDE.md` and `next-frontend-msw-mocks.md` currently reference as a single artifact) is organized internally as the BFF grows from ~5 endpoints in Phase 02 to ~30+ across Phases 02–07. The "phase only adds the routes it owns" requirement is the user's explicit ask — the chosen structure must make per-phase additions append-only, with minimal merge conflict surface and clear ownership.
+**Trigger:** Decide how `mocks/handlers.ts` (the file `next-frontend/AGENTS.md` and `next-frontend-msw-mocks.md` currently reference as a single artifact) is organized internally as the BFF grows from ~5 endpoints in Phase 02 to ~30+ across Phases 02–07. The "phase only adds the routes it owns" requirement is the user's explicit ask — the chosen structure must make per-phase additions append-only, with minimal merge conflict surface and clear ownership.
 
-**Context:** Today `mocks/` does not exist (bootstrap pending per CLAUDE.md). Two consumer surfaces will read whatever this structure produces:
+**Context:** Today `mocks/` does not exist (bootstrap pending per AGENTS.md). Two consumer surfaces will read whatever this structure produces:
 
 - **Vitest setupFiles** → `setupServer(...allHandlers)` once at suite startup (`mocks/server.ts`).
 - **Per-test `server.use(...)` overrides** inside `beforeEach` or individual `it` blocks (canonical MSW v2 override pattern — see the MSW docs' "Override handlers at runtime" recipe).
 
-The single-file `mocks/handlers.ts` shown in `.claude/rules/next-frontend-msw-mocks.md` is the **minimum viable shape**, not a structural mandate; the rule's example is one file because no decision has been made yet about how to grow it. This TD makes that decision.
+The single-file `mocks/handlers.ts` shown in `.agents/rules/next-frontend-msw-mocks.md` is the **minimum viable shape**, not a structural mandate; the rule's example is one file because no decision has been made yet about how to grow it. This TD makes that decision.
 
 Reference: MSW's official "Structuring handlers" best-practice page recommends per-domain modules composed via a barrel `mocks/handlers/index.ts` for any non-trivial mock surface.
 
@@ -110,12 +110,12 @@ Files are named by phase rather than by domain. Phase NN owns exactly one file.
 
 **Context:** Two execution contexts exist for MSW in this project — and they intercept **different traffic** under the strict-BFF model:
 
-- **Node (`msw/node` + `setupServer`)** — used inside Vitest. Intercepts the `fetch` that BFF Route Handlers make to **the upstream NestJS API**, at URLs matching `${env.API_URL}/...`. This is the only context CLAUDE.md and the msw-mocks rule currently mandate.
+- **Node (`msw/node` + `setupServer`)** — used inside Vitest. Intercepts the `fetch` that BFF Route Handlers make to **the upstream NestJS API**, at URLs matching `${env.API_URL}/...`. This is the only context AGENTS.md and the msw-mocks rule currently mandate.
 - **Browser (`msw/browser` + `setupWorker`)** — would run as a Service Worker in the browser during `next dev`. Under strict BFF, the browser **only** talks to same-origin Next.js Route Handlers (`/api/...`); it **never** talks to NestJS directly. So a browser worker would intercept **same-origin requests to `/api/...`** — i.e., it would mock the **BFF responses** to the Components layer, not the upstream NestJS.
 
 These are two different mock layers — different URLs (`${env.API_URL}/...` vs `/api/...`), different shapes (upstream Nest contract vs BFF-exposed contract, per `next-frontend-openapi-typing/TD-04`), different consumers (BFF Route Handlers vs Client Components). Sharing handlers between them is not as simple as importing the same array.
 
-Existence of a dev browser worker is **not yet required** by any documented capability: no existing rule or CLAUDE.md section asks for "FE dev without the BFF running". But the user's research scope makes the separation question explicit, so the structural decision belongs in this foundation TD — even if the answer is "test-only for now".
+Existence of a dev browser worker is **not yet required** by any documented capability: no existing rule or AGENTS.md section asks for "FE dev without the BFF running". But the user's research scope makes the separation question explicit, so the structural decision belongs in this foundation TD — even if the answer is "test-only for now".
 
 **Options:**
 
@@ -159,7 +159,7 @@ Both `mocks/server.ts` and `mocks/browser.ts` exist and import the **same** `moc
 - **Pros:** Single handler tree (matches TD-01 directly without a second branch). Symmetrical mental model — "one set of handlers, two runtimes".
 - **Cons:** **The browser worker intercepts nothing the browser actually sends under strict BFF**, because the browser only hits `/api/...`. Wiring `setupWorker` with upstream-targeted handlers in this project would be ceremonial — a worker that runs but never matches. To make the browser worker do real work, its handlers must target `/api/...` (Option B's `handlers/bff/`), not the upstream — so this option is internally incoherent for the BFF model. Useful only in a non-BFF project where the browser calls the API directly.
 
-**Recommendation:** **Option A (test-only, `setupServer` only at the foundation)**. The browser worker is a future capability with no documented current consumer; wiring it now (Option B) is speculative investment, and wiring it incoherently (Option C) actively misleads developers into thinking interception works when it doesn't under strict BFF. Option A keeps the foundation minimal, aligns 1:1 with everything CLAUDE.md and the existing rules currently document, and is non-breaking to extend.
+**Recommendation:** **Option A (test-only, `setupServer` only at the foundation)**. The browser worker is a future capability with no documented current consumer; wiring it now (Option B) is speculative investment, and wiring it incoherently (Option C) actively misleads developers into thinking interception works when it doesn't under strict BFF. Option A keeps the foundation minimal, aligns 1:1 with everything AGENTS.md and the existing rules currently document, and is non-breaking to extend.
 
 **When Option A should be revisited** — the trigger for re-opening this TD with a Supersede toward Option B-style wiring:
 
@@ -380,15 +380,15 @@ Phase 02+ tests need no additional setup — they `import { POST } from "@/app/a
 
 - This is an **orphan ad-hoc** (`related_phases: []`) document, sibling to `next-frontend-config-base`, `next-frontend-openapi-typing`, and `openapi-docs-nestjs`. It is foundation for Phase 02+ FE test work, not itself a phase capability.
 - **Composition with `next-frontend-openapi-typing/TD-05`** is tight: TD-05 locks "hand-written handlers, typed via `paths`"; every TD above operates strictly inside that constraint. The factory pattern in TD-03 does not change that — factories produce typed fixture *literals* that handlers still emit by hand via `HttpResponse.json<paths[...]>()`.
-- **Composition with `.claude/rules/next-frontend-msw-mocks.md`** is also tight: the rule currently shows `mocks/handlers.ts` as a single file (example syntax, not a structural mandate). Once these TDs are decided, the rule should be updated to reference `mocks/handlers/<domain>.ts` + the barrel (TD-01 B), to call out `mocks/factories/` (TD-03 D), and to document the `onUnhandledRequest: "error"` + `server.resetHandlers()` lifecycle (TD-04 A). The "Where MSW lives" section will need a small rewrite.
-- **Implementation surface for `/plan-build`** under the recommended choices: install `msw` and `@testing-library/jest-dom` + `jsdom` (Vitest setup), create `mocks/handlers/` with one empty domain barrel + `index.ts`, create `mocks/factories/` (empty placeholder), create `mocks/server.ts`, create `mocks/setup.ts` for Vitest lifecycle, register `setupFiles` in `vitest.config.ts`, update `package.json` scripts (`test`, `test:watch`) per CLAUDE.md, update `next-frontend-msw-mocks.md` to reflect the new structure. `@faker-js/faker` and `mocks/browser.ts` are NOT installed at the foundation.
+- **Composition with `.agents/rules/next-frontend-msw-mocks.md`** is also tight: the rule currently shows `mocks/handlers.ts` as a single file (example syntax, not a structural mandate). Once these TDs are decided, the rule should be updated to reference `mocks/handlers/<domain>.ts` + the barrel (TD-01 B), to call out `mocks/factories/` (TD-03 D), and to document the `onUnhandledRequest: "error"` + `server.resetHandlers()` lifecycle (TD-04 A). The "Where MSW lives" section will need a small rewrite.
+- **Implementation surface for `/plan-build`** under the recommended choices: install `msw` and `@testing-library/jest-dom` + `jsdom` (Vitest setup), create `mocks/handlers/` with one empty domain barrel + `index.ts`, create `mocks/factories/` (empty placeholder), create `mocks/server.ts`, create `mocks/setup.ts` for Vitest lifecycle, register `setupFiles` in `vitest.config.ts`, update `package.json` scripts (`test`, `test:watch`) per AGENTS.md, update `next-frontend-msw-mocks.md` to reflect the new structure. `@faker-js/faker` and `mocks/browser.ts` are NOT installed at the foundation.
 - **Forward-compatibility under recommendations:** Option A in TD-02 + Option D in TD-03 + Option B in TD-01 form a coherent "minimum but extensible" foundation. Each future capability (browser dev worker per TD-02, bulk-list factories per TD-03, etc.) is additive — no choice locks the project out of its alternative.
-- **Supersede candidates if recommendations are accepted:** none from prior decisions. This TD-set does not contradict TD-05 of openapi-typing or any item in `next-frontend/CLAUDE.md`; it concretizes them.
+- **Supersede candidates if recommendations are accepted:** none from prior decisions. This TD-set does not contradict TD-05 of openapi-typing or any item in `next-frontend/AGENTS.md`; it concretizes them.
 
 Sources consulted during research:
 - [MSW — Structuring handlers (best practice)](https://mswjs.io/docs/best-practices/structuring-handlers) — per-domain modules + barrel as the official recommendation; `server.use(...)` override recipe.
 - [MSW — `server.resetHandlers()`](https://mswjs.io/docs/api/setup-server/reset-handlers) — afterEach reset pattern.
 - [MSW — Vitest Browser Mode recipe](https://mswjs.io/docs/recipes/vitest-browser-mode) — context for the browser-worker option (TD-02 B); not adopted at foundation but available later.
 - `next-frontend-openapi-typing/TD-05` (in-repo) — handler-typing decision that anchors every TD above.
-- `.claude/rules/next-frontend-msw-mocks.md` (in-repo) — current MSW conventions for `mocks/handlers.ts` + per-test overrides.
-- `next-frontend/CLAUDE.md` § Testing (in-repo) — Vitest + MSW stack and the BFF-as-functions testing pattern.
+- `.agents/rules/next-frontend-msw-mocks.md` (in-repo) — current MSW conventions for `mocks/handlers.ts` + per-test overrides.
+- `next-frontend/AGENTS.md` § Testing (in-repo) — Vitest + MSW stack and the BFF-as-functions testing pattern.

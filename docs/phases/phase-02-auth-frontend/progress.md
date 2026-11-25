@@ -119,7 +119,7 @@
   - Path da página: plano especifica `app/(auth)/signup/page.tsx` (route group); a página de login existente está em `app/login/page.tsx` (sem route group) — divergência de convenção de path entre slices; fora de escopo deste SI reconciliar (observação para o usuário).
   - Criado `components/icons/arrow-back-icon.tsx` a partir do asset Figma (arrow_back) — back-link.tsx é wrapper `<Link>` e recebe o ícone como children (posicionamento absolute via call-site, permitido).
   - **Fora de escopo (autorizado pelo usuário):** `hooks/__tests__/use-session.test.ts:12` tinha erro de tipo TS2769 pré-existente do SI-02.9 (SessionProvider sem `children` no createElement); aplicado fix de 1 linha (children no objeto de props) para destravar o gate `tsc --noEmit` do projeto. SI-02.9 deveria ter pego isso — follow-up para o usuário.
-  - Paridade visual não verificada em browser (dev server não iniciado per regra next-frontend/CLAUDE.md — só sob pedido explícito); tsc --noEmit do projeto passa (exit 0).
+  - Paridade visual não verificada em browser (dev server não iniciado per regra next-frontend/AGENTS.md — só sob pedido explícito); tsc --noEmit do projeto passa (exit 0).
 
 ### SI-02.10b — Tela de cadastro (lógica & wiring)
 - **Status:** completed
@@ -131,7 +131,7 @@
   - **Test-infra (in-scope):** `vitest.setup.ts` ganhou polyfill de `ResizeObserver` (jsdom não provê; Radix `@radix-ui/react-use-size` referencia no mount — bloqueava todo teste de componente Radix-backed).
   - **Removido (consequência direta deste SI):** `components/auth/__tests__/signup-form.test.tsx` (teste presentacional bootstrap do SI-02.0.4) — afirmava o contrato antigo (`isSubmitting` prop, botão "Sign up") que este SI substituiu deliberadamente; superseded pelo wiring test + E2E.
   - Criado `lib/auth/error-mapping.ts` (mapeia `ApiErrorEnvelope` → setError por status, per library-refs).
-  - **Fora de escopo (follow-ups p/ usuário):** (a) `.env.local` foi criado pelo subagente de testes com `API_URL=http://localhost:3000` — dentro do container isso aponta pro próprio Next dev server; se o MSW server-side morrer (hot-reload), o fetch upstream cai em 404 HTML do Next em vez de falhar rápido. Convenção do projeto (CLAUDE.md / vitest.setup default) é o nome de serviço Compose (`http://nestjs-api:3000`). (b) `.env.example` não lista `SESSION_PASSWORD`. (c) Operacional: o dev server precisa de restart limpo com `MSW_ENABLED=true` antes de cada run E2E — server de sessão anterior pode ter MSW morto silenciosamente (não reproduzível a partir de estado limpo).
+  - **Fora de escopo (follow-ups p/ usuário):** (a) `.env.local` foi criado pelo subagente de testes com `API_URL=http://localhost:3000` — dentro do container isso aponta pro próprio Next dev server; se o MSW server-side morrer (hot-reload), o fetch upstream cai em 404 HTML do Next em vez de falhar rápido. Convenção do projeto (AGENTS.md / vitest.setup default) é o nome de serviço Compose (`http://nestjs-api:3000`). (b) `.env.example` não lista `SESSION_PASSWORD`. (c) Operacional: o dev server precisa de restart limpo com `MSW_ENABLED=true` antes de cada run E2E — server de sessão anterior pode ter MSW morto silenciosamente (não reproduzível a partir de estado limpo).
 
 ### SI-02.11.0 — Drift audit: Tela de login
 - **Status:** completed
@@ -150,7 +150,7 @@
   - Drift Report aplicado: 1 auto-Edit em `components/auth/login-form.tsx` (link "Forgot password?" `text-label-md` → `text-body-md`, per Figma 147:539 Inter Regular 14/20). Demais 7 componentes `skip`. Post-edit variant-conflict guard: nenhum sibling tipográfico sob prefixo de variante no link → sem ação extra.
   - Criado `app/(auth)/login/page.tsx` (route group, espelha a convenção de `app/(auth)/signup/page.tsx`): main > Card > BrandLogo + h1 "Sign in" + LoginForm + AuthFooter. Sem BackLink/subtítulo (ausentes no Figma node 138:179).
   - **Removido (consequência direta deste SI):** `app/login/page.tsx` (scaffold pré-fase). O plano fixa o path em `app/(auth)/login/page.tsx`; manter ambos resolveria `/login` em paralelo (route group não afeta a URL) → erro de rota paralela do Next. O scaffold antigo era a versão pré-fase desta mesma tela, substituída por esta (compõe LoginForm) — superseded.
-  - Paridade visual não verificada em browser (dev server não iniciado per regra next-frontend/CLAUDE.md); compilação validada na final verification.
+  - Paridade visual não verificada em browser (dev server não iniciado per regra next-frontend/AGENTS.md); compilação validada na final verification.
 
 ### SI-02.11b — Tela de login (lógica & wiring)
 - **Status:** completed
@@ -163,7 +163,7 @@
   - Diagnóstico do fix-loop (1 tentativa): falha Vitest era isolamento de teste (`refreshMock` module-level retinha contagem do teste 200 anterior — source correto, retorna antes de `router.refresh()` em `!res.ok`); resolvido com `beforeEach(refreshMock.mockClear())`. Falha E2E 401 era MSW server-side stale: `instrumentation.ts` carrega MSW uma vez no boot e NÃO faz hot-reload; servidor pré-edição caía no branch 200. Resolvido com restart limpo do dev server (mesma gotcha já registrada em SI-02.10b).
   - **Fora de escopo (follow-up p/ usuário):** o CTA de reenvio de confirmação aponta para `/resend-confirmation`, rota inexistente nesta fase (design gap/TBD já registrado no UI Contract — `403` Error Catalog "TBD — design gap"). Sem endpoint de reenvio no escopo deste slice.
   - **Operacional:** o container `next-frontend` não tem `pkill`; matar o dev server stale antes de E2E exige kill via `/proc` (PIDs de `next-server`). Relevante para SI-02.12b (mesmo fluxo E2E).
-  - Paridade visual não verificada em browser (regra next-frontend/CLAUDE.md — só sob pedido explícito).
+  - Paridade visual não verificada em browser (regra next-frontend/AGENTS.md — só sob pedido explícito).
 
 ### SI-02.12.0 — Drift audit: Tela de recuperação de senha
 - **Status:** completed
@@ -183,7 +183,7 @@
   - Criado `app/(auth)/forgot-password/page.tsx` (route group, espelha convenção signup/login): main > Card relative > IconButton(arrow_back, absolute top-left) + BrandLogo + h1 "Reset password" + subtítulo + ForgotPasswordForm + AuthFooter. Sem scaffold antigo conflitante (não havia `app/forgot-password/`).
   - Back affordance: `IconButton` (DS primitive, per UI Contract) com `ArrowBackIcon` (reusa `components/icons/arrow-back-icon.tsx`, criado em SI-02.10a a partir do asset Figma arrow_back — mesmo asset/posição que o back-link de signup). A navegação client-side de volta para `/login` (onClick) é interação → wiring da SI-02.12b; o shell renderiza o controle.
   - **Fidelidade Figma vs UX (follow-up p/ usuário):** AuthFooter renderizado per Figma literal — question "Remember your password?" + link "Sign up" → `/signup`. O UI Contract registra como open question que o usual seria "Sign in" → `/login` (inconsistência de design a confirmar com designer). Mantido fiel ao Figma per AC; não resolvido unilateralmente.
-  - Paridade visual não verificada em browser (regra next-frontend/CLAUDE.md); compilação na final verification.
+  - Paridade visual não verificada em browser (regra next-frontend/AGENTS.md); compilação na final verification.
 
 ### SI-02.12b — Tela de recuperação de senha (lógica & wiring)
 - **Status:** completed
@@ -194,4 +194,4 @@
   - Adicionado `mapForgotPasswordErrorToForm` a `lib/auth/error-mapping.ts` (400→campo email; else→root.serverError).
   - Sem novos reserved triggers MSW — handler `/auth/forgot-password` já tinha `badrequest@`→400 / qualquer outro→204 (anti-enumeration). Nenhum edit em `mocks/`.
   - Fix-loop não necessário (0 tentativas); o subagente precisou de restart limpo do dev server porque o servidor pré-existente rodava SEM `MSW_ENABLED=true` (HTTP 200 mas MSW server-side off). Confirmação confiável de readiness E2E = `POST /api/auth/forgot-password` retornar 204, não só `curl -I` 200.
-  - Paridade visual não verificada em browser (regra next-frontend/CLAUDE.md).
+  - Paridade visual não verificada em browser (regra next-frontend/AGENTS.md).

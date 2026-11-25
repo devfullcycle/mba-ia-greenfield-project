@@ -6,7 +6,7 @@ sources_mtime:
   docs/decisions/technical-decisions-phase-01-configuracao-base.md: "2026-05-12T14:01:33-03:00"
   docs/decisions/technical-decisions-phase-02-auth.md: "2026-05-12T14:01:41-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-nestjs-project/SKILL.md: "2026-04-08T13:39:27-03:00"
+  .agents/skills/testing-guide-nestjs-project/SKILL.md: "2026-04-08T13:39:27-03:00"
 ---
 
 # task-openapi-docs-nestjs — Context

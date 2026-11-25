@@ -25,7 +25,7 @@ Foundation for environment variable configuration and validation in the next-fro
 
 **Technical actions:**
 
-1. Rodar `docker compose exec next-frontend npm install zod@^4.0.0 @t3-oss/env-nextjs@^0.13.0` (comandos npm sempre dentro do container per `next-frontend/CLAUDE.md` § "Commands")
+1. Rodar `docker compose exec next-frontend npm install zod@^4.0.0 @t3-oss/env-nextjs@^0.13.0` (comandos npm sempre dentro do container per `next-frontend/AGENTS.md` § "Commands")
 2. Criar `next-frontend/lib/env.ts` exportando `env` via `createEnv({ server: { API_URL: z.url() }, client: {}, shared: { NODE_ENV: z.enum([...]) }, experimental__runtimeEnv: { NODE_ENV: process.env.NODE_ENV }, emptyStringAsUndefined: true })` (per `next-frontend-config-base/TD-02` Setup + `next-frontend-config-base/TD-01` idioms Zod 4 + `next-frontend-config-base/TD-03` chaves canônicas)
 3. Criar `next-frontend/.env.example` documentando `API_URL` (server-only, formato URL, exemplo Docker comentado) e `NODE_ENV` (per `next-frontend-config-base/TD-03` Setup)
 4. Rodar `docker compose exec next-frontend npx tsc --noEmit` para confirmar compilação OK
@@ -44,22 +44,22 @@ Foundation for environment variable configuration and validation in the next-fro
 
 ---
 
-### SI-2 — Atualizar next-frontend/CLAUDE.md para BFF estrito
+### SI-2 — Atualizar next-frontend/AGENTS.md para BFF estrito
 
-**Description:** Reescrever a seção "Talking to the NestJS API" em `next-frontend/CLAUDE.md` para alinhar à decisão TD-03: remover a convenção planejada de `NEXT_PUBLIC_API_URL` e documentar o modelo BFF estrito — uma única chave `API_URL` server-only; browser fala com o backend apenas via Route Handlers same-origin.
+**Description:** Reescrever a seção "Talking to the NestJS API" em `next-frontend/AGENTS.md` para alinhar à decisão TD-03: remover a convenção planejada de `NEXT_PUBLIC_API_URL` e documentar o modelo BFF estrito — uma única chave `API_URL` server-only; browser fala com o backend apenas via Route Handlers same-origin.
 
 **Technical actions:**
 
-1. Editar `next-frontend/CLAUDE.md` § "Talking to the NestJS API" — substituir o parágrafo dual-key planejado pela convenção single-key strict BFF: somente `API_URL` (server-only) existe; clientes acessam o backend exclusivamente via Route Handlers (same-origin); remover a menção a `NEXT_PUBLIC_API_URL`; referenciar `next-frontend/lib/env.ts` como source-of-truth da leitura de env (per `next-frontend-config-base/TD-03` Migração)
+1. Editar `next-frontend/AGENTS.md` § "Talking to the NestJS API" — substituir o parágrafo dual-key planejado pela convenção single-key strict BFF: somente `API_URL` (server-only) existe; clientes acessam o backend exclusivamente via Route Handlers (same-origin); remover a menção a `NEXT_PUBLIC_API_URL`; referenciar `next-frontend/lib/env.ts` como source-of-truth da leitura de env (per `next-frontend-config-base/TD-03` Migração)
 
 **Tests:** _(empty — atualização documental; corretude validada por grep nos ACs.)_
 
-**Dependencies:** SI-1 _(o env layer em `lib/env.ts` deve existir antes do CLAUDE.md referenciá-lo como source-of-truth canônico)_
+**Dependencies:** SI-1 _(o env layer em `lib/env.ts` deve existir antes do AGENTS.md referenciá-lo como source-of-truth canônico)_
 
 **Acceptance criteria:**
 
 - `grep -rn 'NEXT_PUBLIC_API_URL' next-frontend/` retorna zero matches após a edição.
-- `next-frontend/CLAUDE.md` § "Talking to the NestJS API" cita `API_URL` como única chave de ambiente para o backend e referencia `next-frontend/lib/env.ts` como source-of-truth.
+- `next-frontend/AGENTS.md` § "Talking to the NestJS API" cita `API_URL` como única chave de ambiente para o backend e referencia `next-frontend/lib/env.ts` como source-of-truth.
 - A seção menciona explicitamente o modelo BFF estrito (Client Components → Route Handlers same-origin → NestJS) e remove qualquer referência a chamadas diretas do browser ao backend.
 
 ---
@@ -140,7 +140,7 @@ _No existing files require refactor — Setup SI is the only application of this
 
 #### next-frontend-config-base/TD-03 — API URL Key Strategy for the FE↔BE Bridge
 
-**Pattern:** Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere.
+**Pattern:** Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere.
 
 **Setup:** Exactly one server-only env key — `API_URL` — is the canonical backend address from the FE side. Client Components / browser bundles MUST NOT reference it (enforced structurally by TD-02's t3-env boundary). Server contexts (Route Handlers, Server Actions, RSC) consume it via `env.API_URL`.
 
@@ -165,11 +165,11 @@ The concrete _value_ of `API_URL` in dev (shared Compose network with `http://ne
 
 | File | Current behavior | Required change | Owning SI |
 |------|-----------------|-----------------|-----------|
-| `next-frontend/CLAUDE.md` | The "Talking to the NestJS API" section names a planned `NEXT_PUBLIC_API_URL` (for client-side reads) alongside `API_URL` (server-side reads) | Rewrite the dual-key paragraph to the single-key strict-BFF model: only `API_URL` exists (server-only); browser hits the backend only via same-origin Route Handlers; remove the `NEXT_PUBLIC_API_URL` mention | SI-NN.M (Doc Update) |
+| `next-frontend/AGENTS.md` | The "Talking to the NestJS API" section names a planned `NEXT_PUBLIC_API_URL` (for client-side reads) alongside `API_URL` (server-side reads) | Rewrite the dual-key paragraph to the single-key strict-BFF model: only `API_URL` exists (server-only); browser hits the backend only via same-origin Route Handlers; remove the `NEXT_PUBLIC_API_URL` mention | SI-NN.M (Doc Update) |
 
 **Verificação:**
 
-- **Unit:** after the doc-update SI completes, `grep -rn 'NEXT_PUBLIC_API_URL' next-frontend/` returns zero matches (currently only `next-frontend/CLAUDE.md` mentions it; updating it is sufficient).
+- **Unit:** after the doc-update SI completes, `grep -rn 'NEXT_PUBLIC_API_URL' next-frontend/` returns zero matches (currently only `next-frontend/AGENTS.md` mentions it; updating it is sufficient).
 - **Integration:** the first downstream Route Handler that consumes `env.API_URL` has an `*.integration.test.ts` whose MSW handler intercepts `fetch` against the `${env.API_URL}/...` URL pattern — proves the key flows correctly from `.env` through t3-env through the handler.
 - **E2E:** N/A in this phase (no Route Handler yet).
 - **Regression guards:** none (greenfield).
@@ -181,18 +181,18 @@ The concrete _value_ of `API_URL` in dev (shared Compose network with `http://ne
 ## Dependency Map
 
 SI-1 (root) — Instalar deps e criar env loader
-└── SI-2 — depends on SI-1 (env layer em `lib/env.ts` existe antes do CLAUDE.md referenciá-lo como source-of-truth)
+└── SI-2 — depends on SI-1 (env layer em `lib/env.ts` existe antes do AGENTS.md referenciá-lo como source-of-truth)
 
 ---
 
 ## Deliverables
 
 - [ ] SI-1 — Instalar deps e criar env loader
-- [ ] SI-2 — Atualizar `next-frontend/CLAUDE.md` para BFF estrito
+- [ ] SI-2 — Atualizar `next-frontend/AGENTS.md` para BFF estrito
 
 **Full test suites:**
 
 - [ ] Type/compilation check passes (`cd next-frontend && docker compose exec next-frontend npx tsc --noEmit`)
 - [ ] Lint passes (`cd next-frontend && docker compose exec next-frontend npm run lint`)
 
-_(Vitest / Playwright commands intentionally omitted — `next-frontend/CLAUDE.md` § "Status — bootstrap pending" documents that the test infra is not yet wired. Whether to wire it in this task or defer to a separate bootstrap task is a future scoping decision; this task introduces no testable artifacts that require Vitest, so the omission is non-load-bearing.)_
+_(Vitest / Playwright commands intentionally omitted — `next-frontend/AGENTS.md` § "Status — bootstrap pending" documents that the test infra is not yet wired. Whether to wire it in this task or defer to a separate bootstrap task is a future scoping decision; this task introduces no testable artifacts that require Vitest, so the omission is non-load-bearing.)_

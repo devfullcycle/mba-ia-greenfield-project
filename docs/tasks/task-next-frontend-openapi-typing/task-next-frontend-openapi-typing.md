@@ -9,7 +9,7 @@ sources_mtime:
   docs/decisions/technical-decisions-openapi-docs-nestjs.md: "2026-05-12T16:17:52-03:00"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-05-13T15:23:15-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
+  .agents/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
 ---
 
 # Task — next-frontend OpenAPI Typing
@@ -152,13 +152,13 @@ sources_mtime:
 
 **Frontend Runtime spec:** see `## Technical Specifications` → `### Frontend Runtime` → `#### next-frontend-openapi-typing/TD-05 — MSW Handler Typing Against the Generated Schema`
 
-**Description:** TD-05 decide o padrão de tipagem mas NÃO bootstrap MSW em si (Vitest + `mocks/handlers.ts` + `mocks/server.ts` vivem na task separada `next-frontend-msw-foundation`). Este SI documenta o padrão em `next-frontend/CLAUDE.md § Testing` para que a task de bootstrap, quando aterrissar, adote a convenção `paths`-anchored byte-verbatim sem ter que rederivar a decisão.
+**Description:** TD-05 decide o padrão de tipagem mas NÃO bootstrap MSW em si (Vitest + `mocks/handlers.ts` + `mocks/server.ts` vivem na task separada `next-frontend-msw-foundation`). Este SI documenta o padrão em `next-frontend/AGENTS.md § Testing` para que a task de bootstrap, quando aterrissar, adote a convenção `paths`-anchored byte-verbatim sem ter que rederivar a decisão.
 
 **Technical actions:**
 
-1. Editar `next-frontend/CLAUDE.md § Testing` para incluir uma sub-seção "MSW Handler Typing Convention" referenciando explicitamente `next-frontend-openapi-typing/TD-05` como a fonte da decisão.
-2. Adicionar code-block exemplo na nova sub-seção do CLAUDE.md, byte-verbatim no F2-load-bearing do snippet em `### Frontend Runtime → #### next-frontend-openapi-typing/TD-05 — MSW Handler Typing Against the Generated Schema → Setup` (`import type { paths } from "@/lib/api/types.gen"`, `HttpResponse.json<paths[...]["responses"][200]["content"]["application/json"]>(...)`, URL composta a partir de `env.API_URL`).
-3. Atualizar a sub-seção "Status — bootstrap pending" em `next-frontend/CLAUDE.md` para registrar que o padrão de tipagem está decidido (link cruzado para esta task) e que a task `next-frontend-msw-foundation` herda essa convenção quando rodar.
+1. Editar `next-frontend/AGENTS.md § Testing` para incluir uma sub-seção "MSW Handler Typing Convention" referenciando explicitamente `next-frontend-openapi-typing/TD-05` como a fonte da decisão.
+2. Adicionar code-block exemplo na nova sub-seção do AGENTS.md, byte-verbatim no F2-load-bearing do snippet em `### Frontend Runtime → #### next-frontend-openapi-typing/TD-05 — MSW Handler Typing Against the Generated Schema → Setup` (`import type { paths } from "@/lib/api/types.gen"`, `HttpResponse.json<paths[...]["responses"][200]["content"]["application/json"]>(...)`, URL composta a partir de `env.API_URL`).
+3. Atualizar a sub-seção "Status — bootstrap pending" em `next-frontend/AGENTS.md` para registrar que o padrão de tipagem está decidido (link cruzado para esta task) e que a task `next-frontend-msw-foundation` herda essa convenção quando rodar.
 
 **Dependencies:** SI-3 (referencia `next-frontend/lib/api/upstream.ts` indiretamente — o snippet documentado importa `paths` de `lib/api/types.gen` que o SI-2 produziu), SI-4 (referencia `lib/api/contracts.ts` na convenção)
 
@@ -166,9 +166,9 @@ sources_mtime:
 
 **Acceptance criteria:**
 
-- `next-frontend/CLAUDE.md § Testing` contém uma sub-seção (heading nível H3 ou bullet de seção) com título referenciando "MSW Handler Typing Convention" e cita explicitamente `next-frontend-openapi-typing/TD-05` como source-of-truth.
+- `next-frontend/AGENTS.md § Testing` contém uma sub-seção (heading nível H3 ou bullet de seção) com título referenciando "MSW Handler Typing Convention" e cita explicitamente `next-frontend-openapi-typing/TD-05` como source-of-truth.
 - O code-block na sub-seção contém os tokens F2-load-bearing do snippet (`import type { paths }`, `HttpResponse.json<paths[...]>`, URL via `env.API_URL`) byte-verbatim do `### Frontend Runtime → #### next-frontend-openapi-typing/TD-05 → Setup`.
-- A sub-seção "Status — bootstrap pending" do CLAUDE.md menciona que a convenção de tipagem está decidida e referencia a task `next-frontend-msw-foundation` como owner da bootstrap.
+- A sub-seção "Status — bootstrap pending" do AGENTS.md menciona que a convenção de tipagem está decidida e referencia a task `next-frontend-msw-foundation` como owner da bootstrap.
 
 ---
 
@@ -216,7 +216,7 @@ _No existing files require refactor — Setup SI is the only application of this
 
 #### next-frontend-openapi-typing/TD-02 — Spec Sourcing Under Docker Bind-Mount Isolation
 
-**Pattern:** Committed local copy of the spec at `next-frontend/openapi.json`, kept in sync with the canonical producer at `nestjs-project/openapi.json` via a host-only sync script (`scripts/sync-openapi.sh`). The next-frontend Docker container only bind-mounts its own subproject (per `next-frontend/CLAUDE.md` § Development Environment), so codegen inside the container reads `./openapi.json` — which resolves under `/home/node/app` and points at the local copy. Compose-stack independence is preserved (neither subproject's compose file references the other); drift is prevented structurally by TD-03's CI freshness check.
+**Pattern:** Committed local copy of the spec at `next-frontend/openapi.json`, kept in sync with the canonical producer at `nestjs-project/openapi.json` via a host-only sync script (`scripts/sync-openapi.sh`). The next-frontend Docker container only bind-mounts its own subproject (per `next-frontend/AGENTS.md` § Development Environment), so codegen inside the container reads `./openapi.json` — which resolves under `/home/node/app` and points at the local copy. Compose-stack independence is preserved (neither subproject's compose file references the other); drift is prevented structurally by TD-03's CI freshness check.
 
 **Setup:**
 
@@ -367,7 +367,7 @@ import { handlers } from "./handlers";
 export const server = setupServer(...handlers);
 ```
 
-The MSW `setupServer` instance is wired into Vitest `setupFiles` (`server.listen()` / `server.resetHandlers()` / `server.close()` per the bootstrap task, which is out-of-scope here — see `next-frontend/CLAUDE.md` § "Status — bootstrap pending").
+The MSW `setupServer` instance is wired into Vitest `setupFiles` (`server.listen()` / `server.resetHandlers()` / `server.close()` per the bootstrap task, which is out-of-scope here — see `next-frontend/AGENTS.md` § "Status — bootstrap pending").
 
 **Aplicação:**
 
@@ -390,7 +390,7 @@ The bootstrap of Vitest + MSW + the wiring of `setupFiles` is **out-of-scope** f
 
 - **Unit:** `npx tsc --noEmit` succeeds on `mocks/handlers.ts`. A stale fixture (e.g., upstream renamed a field) fails compile.
 - **Integration:** BFF integration tests assert on specific values returned by the handlers / per-test overrides — deterministic by construction.
-- **E2E:** out-of-scope (E2E tests don't use MSW per `next-frontend/CLAUDE.md` § Testing).
+- **E2E:** out-of-scope (E2E tests don't use MSW per `next-frontend/AGENTS.md` § Testing).
 - **Regression guards:** every endpoint added to the BFF's `paths` index must have a corresponding hand-written handler (or per-test override) before the integration test for that route can run; the discipline is enforced by the test failing on missing handler ("request unhandled" from `msw/node`).
 
 ---
@@ -415,7 +415,7 @@ SI-6 — depends on SI-3 + SI-4 (MSW typing docs reference both lib/api/upstream
 - [ ] SI-3 — Typed upstream client (`lib/api/upstream.ts`)
 - [ ] SI-4 — Contracts barrel (`lib/api/contracts.ts`)
 - [ ] SI-5 — CI freshness check workflow
-- [ ] SI-6 — MSW handler typing pattern documentation in CLAUDE.md
+- [ ] SI-6 — MSW handler typing pattern documentation in AGENTS.md
 
 **Full test suites:**
 
@@ -423,4 +423,4 @@ SI-6 — depends on SI-3 + SI-4 (MSW typing docs reference both lib/api/upstream
 - [ ] Lint passes (`docker compose exec next-frontend npm run lint`).
 - [ ] Production build passes (`docker compose exec next-frontend npm run build`) — verifies the `import "server-only"` boundary doesn't leak into client bundles.
 - [ ] CI freshness check baseline (SI-5 workflow) passes on the merge commit — i.e., `git diff --exit-code next-frontend/openapi.json next-frontend/lib/api/types.gen.ts` returns 0 against the committed pair.
-- Frontend Vitest + MSW test suite: **out-of-scope** for this task. The test runner / MSW server / setup-files bootstrap is owned by the separate `next-frontend-msw-foundation` task (per `next-frontend/CLAUDE.md` § "Status — bootstrap pending"); once that task lands, the suite gates the typing pattern this task established.
+- Frontend Vitest + MSW test suite: **out-of-scope** for this task. The test runner / MSW server / setup-files bootstrap is owned by the separate `next-frontend-msw-foundation` task (per `next-frontend/AGENTS.md` § "Status — bootstrap pending"); once that task lands, the suite gates the typing pattern this task established.

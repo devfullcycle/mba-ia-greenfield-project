@@ -28,7 +28,7 @@ _Subprojects in scope:_
 - have its `NEXT_PUBLIC_*` slice imported into client bundles (build-frozen) — so its bundle weight matters;
 - export the inferred TS type used by every consumer (`lib/env.ts → env.API_URL`).
 
-Stack constraint: Next.js 16.2.6 + React 19.2.4, TypeScript strict, App Router. CLAUDE.md mandates `npx tsc --noEmit` + lint as part of Definition of Done — any library chosen must produce inferred types, not require manual `as` casts.
+Stack constraint: Next.js 16.2.6 + React 19.2.4, TypeScript strict, App Router. AGENTS.md mandates `npx tsc --noEmit` + lint as part of Definition of Done — any library chosen must produce inferred types, not require manual `as` casts.
 
 **Options:**
 
@@ -123,12 +123,12 @@ One `lib/env.ts`. Single Zod schema, single typed `env` export. No `server-only`
 
 **Trigger:** Define the canonical env-key contract that `next-frontend` uses to reach `nestjs-project`. This is the FIRST cross-component value defined by the env layer and must be settled at the foundation phase because it shapes the schema, the `.env.example`, and the eventual Docker network configuration.
 
-**Context:** Per `next-frontend/CLAUDE.md` ("Talking to the NestJS API" section), the two subprojects today run on **separate Docker Compose stacks** with no shared network:
+**Context:** Per `next-frontend/AGENTS.md` ("Talking to the NestJS API" section), the two subprojects today run on **separate Docker Compose stacks** with no shared network:
 
 - Browser ⇒ NestJS API: `http://localhost:3000` (host-exposed port of `nestjs-api`).
-- Server-side code (RSC / Route Handlers / Server Actions, **inside the `next-frontend` container**) ⇒ NestJS API: **does not yet work** — `localhost:3000` from inside the container resolves to the container itself, not the host. CLAUDE.md notes "a shared Compose network or `host.docker.internal` will be required — to be defined".
+- Server-side code (RSC / Route Handlers / Server Actions, **inside the `next-frontend` container**) ⇒ NestJS API: **does not yet work** — `localhost:3000` from inside the container resolves to the container itself, not the host. AGENTS.md notes "a shared Compose network or `host.docker.internal` will be required — to be defined".
 
-The testing strategy in CLAUDE.md mandates a **BFF model**: every NestJS call originates from a Next.js Route Handler (`app/api/.../route.ts`), and Client Components call only same-origin Next.js routes. BFF tests stub `fetch` to NestJS via MSW. This testing architecture has implications for which keys are actually necessary.
+The testing strategy in AGENTS.md mandates a **BFF model**: every NestJS call originates from a Next.js Route Handler (`app/api/.../route.ts`), and Client Components call only same-origin Next.js routes. BFF tests stub `fetch` to NestJS via MSW. This testing architecture has implications for which keys are actually necessary.
 
 This is `Scope: Cross-layer` because: (a) the chosen key set must align with backend CORS configuration (server-side knows which origin to allow); (b) the key set will be consumed by both subprojects' compose files and by every future FE feature that talks to the backend; and (c) the question "browser direct-calls backend or only via BFF?" is the contract between the two layers.
 
@@ -138,24 +138,24 @@ This is `Scope: Cross-layer` because: (a) the chosen key set must align with bac
 
 One key, server-only: `API_URL`. Only Route Handlers / RSC / Server Actions read it. Client Components call **only** same-origin Next.js routes (`/api/...`). No browser-to-backend traffic; no CORS configuration required on the backend; the backend URL never leaves the server.
 
-- **Pros:** Smallest possible surface — one key, no leak risk, no CORS, no public exposure of the backend URL. Perfectly aligned with the BFF testing strategy already locked in CLAUDE.md (Route Handlers are imported as functions; MSW intercepts the `fetch` they make to NestJS). Single source of truth for backend address. Adding `NEXT_PUBLIC_API_URL` later is non-breaking if a direct-client case appears.
+- **Pros:** Smallest possible surface — one key, no leak risk, no CORS, no public exposure of the backend URL. Perfectly aligned with the BFF testing strategy already locked in AGENTS.md (Route Handlers are imported as functions; MSW intercepts the `fetch` they make to NestJS). Single source of truth for backend address. Adding `NEXT_PUBLIC_API_URL` later is non-breaking if a direct-client case appears.
 - **Cons:** Every backend call goes through a Next.js Route Handler — extra hop for cases that could theoretically have gone direct (e.g., trivial read-only data). For large payloads (videos, Phase 03+), object storage URLs will need a separate mechanism anyway (presigned URLs from object storage, NOT the backend URL) — so the "videos go direct" case does not argue for `NEXT_PUBLIC_API_URL`.
 
 ### Option B: Dual key — `API_URL` (server) + `NEXT_PUBLIC_API_URL` (client)
 
-Two keys. Server reads `API_URL`; browser reads `NEXT_PUBLIC_API_URL`. Mirrors the convention CLAUDE.md currently calls out as "planned" (without prescribed values).
+Two keys. Server reads `API_URL`; browser reads `NEXT_PUBLIC_API_URL`. Mirrors the convention AGENTS.md currently calls out as "planned" (without prescribed values).
 
-- **Pros:** Matches the convention currently documented in CLAUDE.md. Permits direct browser → backend calls in addition to BFF, useful if a future feature wants to skip the BFF for latency or simplicity reasons. Explicit dual context — the dev/Docker URL ≠ the production URL is encoded in the key naming.
-- **Cons:** Adds two keys to keep in sync (Docker dev: client uses `localhost:3000`, server uses `host.docker.internal:3000` or shared-network name; production: both may converge or diverge). Browser knows backend URL → backend MUST configure CORS. Direct browser-to-backend bypasses the BFF model: tests that mock the BFF do not cover those calls; observability fragments. Violates the architectural commitment in CLAUDE.md that the BFF is the single source of truth for backend traffic.
+- **Pros:** Matches the convention currently documented in AGENTS.md. Permits direct browser → backend calls in addition to BFF, useful if a future feature wants to skip the BFF for latency or simplicity reasons. Explicit dual context — the dev/Docker URL ≠ the production URL is encoded in the key naming.
+- **Cons:** Adds two keys to keep in sync (Docker dev: client uses `localhost:3000`, server uses `host.docker.internal:3000` or shared-network name; production: both may converge or diverge). Browser knows backend URL → backend MUST configure CORS. Direct browser-to-backend bypasses the BFF model: tests that mock the BFF do not cover those calls; observability fragments. Violates the architectural commitment in AGENTS.md that the BFF is the single source of truth for backend traffic.
 
 ### Option C: Single shared `NEXT_PUBLIC_API_URL` (production-unified hostname)
 
 One key, public, used both server and client. Works only when a reverse proxy / CDN fronts both subprojects on a routable hostname (e.g., production: both behind `api.streamtube.com`). In dev with separate Compose stacks, requires either a uniform hostname routable from both browser and `next-frontend` container (`host.docker.internal`) or a shared compose network.
 
 - **Pros:** One key, one mental model. Trivially compatible with production-behind-reverse-proxy topology.
-- **Cons:** Does not work in the current dev setup (separate Compose stacks). Would require infrastructure decisions (shared Compose network OR `host.docker.internal` discipline) that are explicitly marked "to be defined" in CLAUDE.md — taking this option forces those infra decisions now. Same CORS / BFF-bypass concerns as Option B if direct browser calls are made.
+- **Cons:** Does not work in the current dev setup (separate Compose stacks). Would require infrastructure decisions (shared Compose network OR `host.docker.internal` discipline) that are explicitly marked "to be defined" in AGENTS.md — taking this option forces those infra decisions now. Same CORS / BFF-bypass concerns as Option B if direct browser calls are made.
 
-**Recommendation:** **Option A (Strict BFF — single server-only `API_URL`)**. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
+**Recommendation:** **Option A (Strict BFF — single server-only `API_URL`)**. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
 
 > **Out-of-scope ancillary note (NOT a TD here):** Once Option A is chosen, the concrete _value_ of `API_URL` in dev (`http://host.docker.internal:3000` vs joining the two Compose stacks into a shared network with `http://nestjs-api:3000`) is a Docker-Compose-topology decision that this research does not resolve. It belongs in either Phase 02's pre-work or a dedicated infra ad-hoc TD. The env-key contract (this TD) is intentionally independent of how the value is resolved at runtime.
 
@@ -182,12 +182,12 @@ The TDs above decide _how_ env is loaded and validated; they do not enumerate ev
 |----|-------|----------|----------------|--------|
 | TD-01 | Frontend | Validation library for env schema | **Zod 4** (TS-first inference, ecosystem alignment, t3-env compatibility) | **A (Zod 4)** |
 | TD-02 | Frontend | Server/Client boundary enforcement | **`@t3-oss/env-nextjs`** (type-level prefix + runtime proxy + single-file ergonomics) | **A (@t3-oss/env-nextjs)** |
-| TD-03 | Cross-layer | API URL key strategy | **Strict BFF — single server-only `API_URL`** (matches CLAUDE.md BFF model) | **A (Strict BFF — single server-only `API_URL`)** |
+| TD-03 | Cross-layer | API URL key strategy | **Strict BFF — single server-only `API_URL`** (matches AGENTS.md BFF model) | **A (Strict BFF — single server-only `API_URL`)** |
 
 ---
 
 ## Notes for downstream pipeline
 
 - TD-02 **depends on TD-01**: `@t3-oss/env-nextjs` supports Zod and Valibot only. Picking Joi or class-validator in TD-01 forecloses TD-02 Option A and forces Option B or C.
-- TD-03's Recommendation explicitly contradicts the planned-conventional naming in `next-frontend/CLAUDE.md` (which mentions `NEXT_PUBLIC_API_URL`). If TD-03 is decided in favor of Option A, `next-frontend/CLAUDE.md` should be updated to remove the planned `NEXT_PUBLIC_API_URL` mention as part of `/plan-build`'s SI scope; if Option B is chosen, CLAUDE.md already aligns.
+- TD-03's Recommendation explicitly contradicts the planned-conventional naming in `next-frontend/AGENTS.md` (which mentions `NEXT_PUBLIC_API_URL`). If TD-03 is decided in favor of Option A, `next-frontend/AGENTS.md` should be updated to remove the planned `NEXT_PUBLIC_API_URL` mention as part of `/plan-build`'s SI scope; if Option B is chosen, AGENTS.md already aligns.
 - This document does NOT decide: (a) the Docker networking topology (how `API_URL`'s value reaches the FE container); (b) the OpenAPI codegen approach (next research: `next-frontend-openapi-typing`); (c) the MSW base (next research: `next-frontend-msw-foundation`). All three are sibling ad-hoc researches identified during `/decide` triage on 2026-05-13.

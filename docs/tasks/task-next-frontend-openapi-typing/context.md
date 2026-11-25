@@ -7,7 +7,7 @@ sources_mtime:
   docs/decisions/technical-decisions-openapi-docs-nestjs.md: "2026-05-12T16:17:52-03:00"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-05-13T15:23:15-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
+  .agents/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
 ---
 
 # task-next-frontend-openapi-typing — Context
@@ -159,7 +159,7 @@ _Source files:_
 
 ### next-frontend-config-base/TD-03
 
-**Recommendation:** Strict BFF — single server-only `API_URL`. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
+**Recommendation:** Strict BFF — single server-only `API_URL`. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere. The Docker networking gap (how server-in-container resolves the backend) is a separate orthogonal decision, surfaced below.
 
 **Libraries:** —
 
@@ -208,6 +208,6 @@ _None._
 | **Server action** | `*.integration.test.ts` with MSW; E2E for the submit flow |
 | **Middleware / error / loading / not-found / metadata** | See guide — depends on type |
 
-_Source: `.claude/skills/testing-guide-next-frontend/SKILL.md` §3 Feature Implementation Checklist._
+_Source: `.agents/skills/testing-guide-next-frontend/SKILL.md` §3 Feature Implementation Checklist._
 
 _Task-specific note: the artifacts produced by this task (`openapi.json` copy, `lib/api/types.gen.ts`, `lib/api/contracts.ts`, repo-root sync script, npm script) are configuration / generated / pure-type artifacts with no runtime branching — none of the checklist rows applies directly. The freshness check (TD-03 Option C) is a CI step verifiable by running the pipeline locally and asserting clean `git diff`. Future BFF route handlers that consume the generated types will fall under "Route handler" rows above._

@@ -9,7 +9,7 @@
 - **Observations:**
   - Created `scripts/` directory at repo root (didn't exist before this SI).
   - Sync script ran successfully on host; `diff -q nestjs-project/openapi.json next-frontend/openapi.json` returns exit 0.
-  - Commit step from technical action #3 is the user's responsibility (per CLAUDE.md — only commit when explicitly asked).
+  - Commit step from technical action #3 is the user's responsibility (per AGENTS.md — only commit when explicitly asked).
 
 ### SI-2 — Codegen pipeline: install openapi-typescript + npm script + first generation (Setup of TD-03 phase 1)
 - **Status:** completed
@@ -39,7 +39,7 @@
 - **Tests:** no tests
 - **Observations:**
   - No prior CI infrastructure existed in the repo; defaulted to GitHub Actions per the SI's suggested path `.github/workflows/openapi-freshness.yml`. If the team adopts a different CI platform later, the three-step shape (sync → gen → diff) is portable.
-  - Added `actions/setup-node@v4` + `npm ci` inside `next-frontend/` before the codegen step so the `openapi-typescript` CLI is available on the runner (the host environment is not Docker on the runner; running inside a container per next-frontend/CLAUDE.md applies to local development, not CI runners which are themselves the execution environment).
+  - Added `actions/setup-node@v4` + `npm ci` inside `next-frontend/` before the codegen step so the `openapi-typescript` CLI is available on the runner (the host environment is not Docker on the runner; running inside a container per next-frontend/AGENTS.md applies to local development, not CI runners which are themselves the execution environment).
   - No-drift baseline on the current commit verified locally via `bash scripts/sync-openapi.sh && npm run openapi:types && git diff --exit-code` → exit 0.
 
 ### SI-6 — MSW handler typing pattern documentation (Setup of TD-05)

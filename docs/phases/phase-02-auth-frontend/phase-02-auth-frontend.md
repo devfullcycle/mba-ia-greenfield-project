@@ -225,7 +225,7 @@ Entregar o slice de frontend da Fase 02 — telas de cadastro, login e solicita�
 
 1. Criar `mocks/handlers/auth.ts` — handlers para upstream `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `POST /auth/forgot-password`, `POST /auth/refresh`, tipados via os aliases de `@/lib/api/contracts` (per `next-frontend-openapi-typing/TD-05` — hand-written, typed via `paths`).
 2. Registrar o módulo no barrel de handlers (um arquivo novo + uma linha no barrel) (per `next-frontend-msw-foundation/TD-01` — per-domain modules + barrel).
-3. Embutir reserved trigger fixtures no handler set compartilhado: `email: "conflict@example.com"` → 409, `"badrequest@example.com"` → 400, senão sucesso (per `next-frontend/CLAUDE.md` § E2E architecture; fixtures determinísticas hand-written per `next-frontend-msw-foundation/TD-03`).
+3. Embutir reserved trigger fixtures no handler set compartilhado: `email: "conflict@example.com"` → 409, `"badrequest@example.com"` → 400, senão sucesso (per `next-frontend/AGENTS.md` § E2E architecture; fixtures determinísticas hand-written per `next-frontend-msw-foundation/TD-03`).
 
 **Tests:** _(empty — MSW handler set é test-infra; exercitado pelos testes de integração de SI-02.5..SI-02.8 e pelo E2E)_
 
@@ -671,7 +671,7 @@ E2E da página (solicitação → success inline) é autorado externamente por `
 
 ### API Contracts
 
-> _BFF tier — frontend-exposed contract. The browser calls the FE-facing route under `app/api/auth/**`; the route proxies the upstream NestJS API server-side per the strict-BFF architecture documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller). The slice has no `Scope: Backend | Cross-layer` TD — backend auth is settled in `phase-02-auth` — so only the BFF tier is emitted. Contract source-of-truth: `next-frontend/openapi.json` → `lib/api/types.gen.ts` → `paths` (per `next-frontend-openapi-typing/TD-01..TD-04`)._
+> _BFF tier — frontend-exposed contract. The browser calls the FE-facing route under `app/api/auth/**`; the route proxies the upstream NestJS API server-side per the strict-BFF architecture documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller). The slice has no `Scope: Backend | Cross-layer` TD — backend auth is settled in `phase-02-auth` — so only the BFF tier is emitted. Contract source-of-truth: `next-frontend/openapi.json` → `lib/api/types.gen.ts` → `paths` (per `next-frontend-openapi-typing/TD-01..TD-04`)._
 
 #### POST /api/auth/signup (SI-NN.X)
 
@@ -991,7 +991,7 @@ SI-02.12.0 — depends on SI-02.0.3, SI-02.0.4 (drift audit)
 **Full test suites:**
 
 - [ ] Frontend unit + integration tests pass (`docker compose exec next-frontend npm test`)
-- [ ] E2E tests pass (`npx playwright test` on the host, with the containerized dev server up and `MSW_ENABLED=true` per `next-frontend/CLAUDE.md`)
+- [ ] E2E tests pass (`npx playwright test` on the host, with the containerized dev server up and `MSW_ENABLED=true` per `next-frontend/AGENTS.md`)
 - [ ] Type/compilation check passes (`docker compose exec next-frontend npx tsc --noEmit`)
 - [ ] Lint passes (`docker compose exec next-frontend npm run lint`)
 

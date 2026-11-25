@@ -6,7 +6,7 @@ sources_mtime:
   docs/decisions/technical-decisions-next-frontend-openapi-typing.md: "2026-05-13T19:51:13-03:00"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-05-13T15:23:15-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
+  .agents/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
 ---
 
 # task-next-frontend-msw-foundation — Context
@@ -37,7 +37,7 @@ _Source files:_
 
 ### next-frontend-msw-foundation/TD-02
 
-**Recommendation:** The browser worker is a future capability with no documented current consumer; wiring it now (Option B) is speculative investment, and wiring it incoherently (Option C) actively misleads developers into thinking interception works when it doesn't under strict BFF. Option A keeps the foundation minimal, aligns 1:1 with everything CLAUDE.md and the existing rules currently document, and is non-breaking to extend.
+**Recommendation:** The browser worker is a future capability with no documented current consumer; wiring it now (Option B) is speculative investment, and wiring it incoherently (Option C) actively misleads developers into thinking interception works when it doesn't under strict BFF. Option A keeps the foundation minimal, aligns 1:1 with everything AGENTS.md and the existing rules currently document, and is non-breaking to extend.
 **Libraries:** —
 
 ### next-frontend-msw-foundation/TD-03
@@ -141,7 +141,7 @@ _Source files:_
 
 ### next-frontend-config-base/TD-03
 
-**Recommendation:** Strict BFF — single server-only `API_URL`. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/CLAUDE.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere.
+**Recommendation:** Strict BFF — single server-only `API_URL`. Aligned with the BFF testing strategy and architectural commitment already documented in `next-frontend/AGENTS.md` (Route Handlers as the only NestJS caller; BFF tests stub `fetch` via MSW). Eliminates CORS, eliminates public exposure of the backend URL, and produces the smallest correct foundation. Option B's `NEXT_PUBLIC_API_URL` is a future-proofing concession with no current consumer — and adding a public key later is a non-breaking change, while removing one is breaking. Option C ties a foundational decision to infra work explicitly deferred elsewhere.
 **Libraries:** —
 
 ## Inherited Conventions
@@ -193,7 +193,7 @@ This task creates test infrastructure (the MSW foundation itself) rather than a 
 
 - `npx tsc --noEmit` must pass after `mocks/server.ts`, `mocks/setup.ts`, and any seed `mocks/handlers/` files are added — the `paths`-anchored fixture typing chain (`next-frontend-openapi-typing/TD-05`) must remain green.
 - `npm run lint` must pass on the new `mocks/` tree.
-- `npm test` (Vitest, once `test` script is added per CLAUDE.md § "Status — bootstrap pending") must run **zero** suites and exit clean — bootstrap is correct when the runner starts up, loads `setupFiles`, registers MSW, and finds no tests to run.
+- `npm test` (Vitest, once `test` script is added per AGENTS.md § "Status — bootstrap pending") must run **zero** suites and exit clean — bootstrap is correct when the runner starts up, loads `setupFiles`, registers MSW, and finds no tests to run.
 - A smoke `*.integration.test.ts` is **out of scope** of this foundation task: real handler/test pairs arrive with Phase 02 (auth endpoints — first concrete consumer per the correlator's medium-ranked phase-02-auth doc).
 
 **Anti-patterns enforced by this foundation** (verbatim from `testing-guide-next-frontend` § 5):

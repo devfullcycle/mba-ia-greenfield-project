@@ -27,7 +27,7 @@
   - `npm test` exit 0 with "No test files found, exiting with code 0" (no `onUnhandledRequest` warnings).
   - `tsc --noEmit` exit 0.
 
-### SI-4 — Atualizar .claude/rules/next-frontend-msw-mocks.md
+### SI-4 — Atualizar .agents/rules/next-frontend-msw-mocks.md
 - **Status:** completed
 - **Tests:** no tests (rule doc only)
 - **Observations:**
@@ -37,7 +37,7 @@
   - Updated handler example from `mocks/handlers.ts` to `mocks/handlers/auth.ts`; preserved `paths[...]` typing and `${env.API_URL}/...` URL composition verbatim.
   - `### Exception to the contracts-barrel rule` block preserved unchanged.
 
-### SI-5 — Atualizar next-frontend/CLAUDE.md § Testing → Status
+### SI-5 — Atualizar next-frontend/AGENTS.md § Testing → Status
 - **Status:** completed
 - **Tests:** no tests (doc only)
 - **Observations:**

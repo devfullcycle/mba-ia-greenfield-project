@@ -8,7 +8,7 @@ sources_mtime:
   docs/decisions/technical-decisions-next-frontend-openapi-typing.md: "2026-05-13T19:51:13-03:00"
   docs/decisions/technical-decisions-next-frontend-config-base.md: "2026-05-13T15:23:15-03:00"
   docs/phases/phase-02-auth/context.md: "2026-05-12T14:01:10-03:00"
-  .claude/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
+  .agents/skills/testing-guide-next-frontend/SKILL.md: "2026-05-13T10:59:26-03:00"
 ---
 
 # next-frontend MSW Foundation
@@ -23,12 +23,12 @@ MSW (Mock Service Worker) foundation for next-frontend: handler module organizat
 
 ### SI-1 — Instalar MSW + Vitest e dependências de teste
 
-**Description:** Adicionar Vitest, MSW v2 e bibliotecas de RTL/jsdom ao `next-frontend/package.json` como `devDependencies`; ativar os npm scripts (`test`, `test:watch`) que `next-frontend/CLAUDE.md` § Commands já documenta como contrato. Pure infra — nenhum arquivo de teste ou de mock é criado neste SI.
+**Description:** Adicionar Vitest, MSW v2 e bibliotecas de RTL/jsdom ao `next-frontend/package.json` como `devDependencies`; ativar os npm scripts (`test`, `test:watch`) que `next-frontend/AGENTS.md` § Commands já documenta como contrato. Pure infra — nenhum arquivo de teste ou de mock é criado neste SI.
 
 **Technical actions:**
 
 1. Rodar `docker compose exec next-frontend npm install --save-dev msw vitest @testing-library/react @testing-library/jest-dom jsdom @vitest/coverage-v8` — adiciona o runner (Vitest) e o interceptor Node (`msw/node`) necessários por `next-frontend-msw-foundation/TD-02` e `TD-04` (ver `### Frontend Runtime → TD-02 / TD-04`).
-2. Adicionar `"test": "vitest run"` e `"test:watch": "vitest"` em `next-frontend/package.json → scripts` — torna os comandos documentados em `CLAUDE.md § Commands` executáveis.
+2. Adicionar `"test": "vitest run"` e `"test:watch": "vitest"` em `next-frontend/package.json → scripts` — torna os comandos documentados em `AGENTS.md § Commands` executáveis.
 3. Rodar `docker compose exec next-frontend npx vitest --version` como smoke do binário (não persiste artefato; apenas valida que o install foi limpo).
 
 **Tests:** _(empty — Infra)_
@@ -38,7 +38,7 @@ MSW (Mock Service Worker) foundation for next-frontend: handler module organizat
 **Acceptance criteria:**
 
 - `docker compose exec next-frontend npm ls msw vitest @testing-library/react @testing-library/jest-dom jsdom` lista cada dependência sem `extraneous` / `invalid`.
-- `next-frontend/package.json → scripts` contém `test` e `test:watch` exatamente como `next-frontend/CLAUDE.md § Commands` documenta.
+- `next-frontend/package.json → scripts` contém `test` e `test:watch` exatamente como `next-frontend/AGENTS.md § Commands` documenta.
 - `docker compose exec next-frontend npx vitest --version` imprime a versão instalada e exit 0.
 
 ---
@@ -88,13 +88,13 @@ MSW (Mock Service Worker) foundation for next-frontend: handler module organizat
 
 ---
 
-### SI-4 — Atualizar `.claude/rules/next-frontend-msw-mocks.md` para refletir a estrutura decidida
+### SI-4 — Atualizar `.agents/rules/next-frontend-msw-mocks.md` para refletir a estrutura decidida
 
-**Description:** A regra atual (`.claude/rules/next-frontend-msw-mocks.md`) mostra `mocks/handlers.ts` como arquivo único (exemplo herdado do contrato pré-decision). Atualizar para refletir o que esta task materializou: a árvore per-domain `mocks/handlers/<domain>.ts` + barrel (TD-01), o diretório `mocks/factories/` com a convenção `buildX(overrides)` (TD-03), e a lifecycle `listen({ onUnhandledRequest: "error" }) + resetHandlers + close` (TD-04). A exceção "`mocks/` pode importar `paths` direto" permanece — ela já era travada por `next-frontend-openapi-typing/TD-05`.
+**Description:** A regra atual (`.agents/rules/next-frontend-msw-mocks.md`) mostra `mocks/handlers.ts` como arquivo único (exemplo herdado do contrato pré-decision). Atualizar para refletir o que esta task materializou: a árvore per-domain `mocks/handlers/<domain>.ts` + barrel (TD-01), o diretório `mocks/factories/` com a convenção `buildX(overrides)` (TD-03), e a lifecycle `listen({ onUnhandledRequest: "error" }) + resetHandlers + close` (TD-04). A exceção "`mocks/` pode importar `paths` direto" permanece — ela já era travada por `next-frontend-openapi-typing/TD-05`.
 
 **Technical actions:**
 
-1. Editar `.claude/rules/next-frontend-msw-mocks.md` § "Where MSW lives": substituir a referência única a `mocks/handlers.ts` por uma listagem que inclua `mocks/handlers/<domain>.ts`, `mocks/handlers/index.ts` (barrel), `mocks/factories/<domain>.ts`, `mocks/server.ts`, `mocks/setup.ts` — com one-liner explicando o papel de cada (per `next-frontend-msw-foundation/TD-01` e `TD-02`).
+1. Editar `.agents/rules/next-frontend-msw-mocks.md` § "Where MSW lives": substituir a referência única a `mocks/handlers.ts` por uma listagem que inclua `mocks/handlers/<domain>.ts`, `mocks/handlers/index.ts` (barrel), `mocks/factories/<domain>.ts`, `mocks/server.ts`, `mocks/setup.ts` — com one-liner explicando o papel de cada (per `next-frontend-msw-foundation/TD-01` e `TD-02`).
 2. Adicionar nova subseção "Lifecycle (Vitest `setupFiles`)" documentando o ciclo `listen({ onUnhandledRequest: "error" }) → resetHandlers (afterEach) → close (afterAll)`, com snippet curto e o motivo de `onUnhandledRequest: "error"` (per `next-frontend-msw-foundation/TD-04`).
 3. Adicionar nova subseção "Factories convention" descrevendo `mocks/factories/<domain>.ts` exportando `buildX(overrides?: Partial<X>): X` com defaults hand-written, e a regra de `@faker-js/faker` opt-in apenas para `buildXList` com `faker.seed(N)` local antes da geração (per `next-frontend-msw-foundation/TD-03`).
 4. Atualizar o exemplo de código que mostra um handler — trocar `next-frontend/mocks/handlers.ts` por `next-frontend/mocks/handlers/auth.ts`, preservando byte-verbatim o restante (a tipagem via `paths["/videos/{id}"]["get"]["responses"][200]["content"]["application/json"]` e a composição com `${env.API_URL}/...`).
@@ -105,20 +105,20 @@ MSW (Mock Service Worker) foundation for next-frontend: handler module organizat
 
 **Acceptance criteria:**
 
-- `.claude/rules/next-frontend-msw-mocks.md` cita `mocks/handlers/<domain>.ts` e `mocks/handlers/index.ts` explicitamente; a string isolada `mocks/handlers.ts` foi removida ou trocada onde representava o arquivo único antigo.
+- `.agents/rules/next-frontend-msw-mocks.md` cita `mocks/handlers/<domain>.ts` e `mocks/handlers/index.ts` explicitamente; a string isolada `mocks/handlers.ts` foi removida ou trocada onde representava o arquivo único antigo.
 - A regra contém as subseções "Lifecycle (Vitest setupFiles)" e "Factories convention" com referências verbatim a `next-frontend-msw-foundation/TD-04` e `TD-03` respectivamente.
 - O exemplo de handler na regra usa `next-frontend/mocks/handlers/auth.ts` (não `mocks/handlers.ts`); a tipagem `paths[...]` e a URL `${env.API_URL}/...` foram preservadas verbatim.
 - O bloco "Exception to the contracts-barrel rule" continua presente sem alteração (já estava correto pré-decision).
 
 ---
 
-### SI-5 — Atualizar `next-frontend/CLAUDE.md § Testing → Status` para refletir bootstrap concluído
+### SI-5 — Atualizar `next-frontend/AGENTS.md § Testing → Status` para refletir bootstrap concluído
 
-**Description:** A subseção `## Testing → ### Status — bootstrap pending` em `next-frontend/CLAUDE.md` enumera todos os artefatos que SI-1..SI-3 acabaram de materializar como "não instalados ainda". Substituir por uma subseção `### Status — bootstrap complete` referenciando este task como fundação, e manter o bloco "Already decided" (TD-05 de openapi-typing) atualizado para refletir que agora é convenção executada, não pendente.
+**Description:** A subseção `## Testing → ### Status — bootstrap pending` em `next-frontend/AGENTS.md` enumera todos os artefatos que SI-1..SI-3 acabaram de materializar como "não instalados ainda". Substituir por uma subseção `### Status — bootstrap complete` referenciando este task como fundação, e manter o bloco "Already decided" (TD-05 de openapi-typing) atualizado para refletir que agora é convenção executada, não pendente.
 
 **Technical actions:**
 
-1. Editar `next-frontend/CLAUDE.md § Testing`: substituir o bloco `### Status — bootstrap pending` por `### Status — bootstrap complete` listando os artefatos agora presentes (`next-frontend/vitest.config.ts`, `next-frontend/mocks/server.ts`, `next-frontend/mocks/setup.ts`, `next-frontend/mocks/handlers/index.ts`, `next-frontend/mocks/factories/`) e citando `docs/tasks/task-next-frontend-msw-foundation/` como a fundação que materializou tudo.
+1. Editar `next-frontend/AGENTS.md § Testing`: substituir o bloco `### Status — bootstrap pending` por `### Status — bootstrap complete` listando os artefatos agora presentes (`next-frontend/vitest.config.ts`, `next-frontend/mocks/server.ts`, `next-frontend/mocks/setup.ts`, `next-frontend/mocks/handlers/index.ts`, `next-frontend/mocks/factories/`) e citando `docs/tasks/task-next-frontend-msw-foundation/` como a fundação que materializou tudo.
 2. Atualizar o bloco "Already decided" para deixar explícito que `next-frontend-openapi-typing/TD-05` (handler typing via `paths`) já é executado nos handlers per-domain criados (não mais "convenção pendente").
 
 **Tests:** _(empty — doc only)_
@@ -127,7 +127,7 @@ MSW (Mock Service Worker) foundation for next-frontend: handler module organizat
 
 **Acceptance criteria:**
 
-- `next-frontend/CLAUDE.md § Testing` não contém mais a string literal "bootstrap pending" nem "do not exist yet" referenciando os arquivos criados em SI-3.
+- `next-frontend/AGENTS.md § Testing` não contém mais a string literal "bootstrap pending" nem "do not exist yet" referenciando os arquivos criados em SI-3.
 - A subseção `### Status` referencia este task pelo path `docs/tasks/task-next-frontend-msw-foundation/` como origem das decisões.
 - O bloco "Already decided" cita `next-frontend-openapi-typing/TD-05` como convenção em vigor (não pendente).
 
@@ -186,7 +186,7 @@ import { handlers } from "./handlers";
 export const server = setupServer(...handlers);
 ```
 
-**Aplicação:** logic-only — applies to every Vitest integration test under `next-frontend/app/api/**/__tests__/*.integration.test.ts` (BFF Route Handler test pattern from `next-frontend/CLAUDE.md` § Testing). The browser worker is intentionally absent — Client Components developed in foundation/Phase 02 do not have FE-offline mocking. A future phase that needs browser-side mocks supersedes this TD with the `mocks/browser.ts` + `public/mockServiceWorker.js` additive set.
+**Aplicação:** logic-only — applies to every Vitest integration test under `next-frontend/app/api/**/__tests__/*.integration.test.ts` (BFF Route Handler test pattern from `next-frontend/AGENTS.md` § Testing). The browser worker is intentionally absent — Client Components developed in foundation/Phase 02 do not have FE-offline mocking. A future phase that needs browser-side mocks supersedes this TD with the `mocks/browser.ts` + `public/mockServiceWorker.js` additive set.
 
 **Migração:**
 
@@ -280,7 +280,7 @@ _No existing files require refactor — Setup SI is the only application of this
 
 - **Unit:** N/A at foundation.
 - **Integration:** the first integration test authored by Phase 02 must (a) call the imported Route Handler, (b) observe that `server.listen({ onUnhandledRequest: "error" })` was applied — any accidentally-unhandled `fetch` fails the test loudly with `"request unhandled"`, (c) reset between tests — a `server.use(...)` override in test 1 does not leak into test 2 (provable by writing two tests where test 1 overrides and test 2 expects the default fixture).
-- **E2E:** N/A — MSW does not run under Playwright in this project (per `next-frontend/CLAUDE.md` § Testing — Playwright drives the running app against whichever upstream the running environment is wired to).
+- **E2E:** N/A — MSW does not run under Playwright in this project (per `next-frontend/AGENTS.md` § Testing — Playwright drives the running app against whichever upstream the running environment is wired to).
 - **Regression guards:** `docker compose exec next-frontend npm test` (once Phase 02 adds tests) exits clean with no `onUnhandledRequest` warnings logged by MSW.
 
 ---
@@ -294,7 +294,7 @@ SI-1 (root — install deps)
 └── SI-2 — depends on SI-1 (msw types needed to type the handlers array)
     └── SI-3 — depends on SI-2 (server.ts imports `handlers` from the barrel created in SI-2)
         └── SI-4 — depends on SI-3 (rule documents the structure that now exists on disk — not a speculative spec)
-            └── SI-5 — depends on SI-4 (CLAUDE.md points to the rule; rule must reflect post-bootstrap reality before CLAUDE.md cites it)
+            └── SI-5 — depends on SI-4 (AGENTS.md points to the rule; rule must reflect post-bootstrap reality before AGENTS.md cites it)
 ```
 
 Strict linear chain — each SI builds on the previous. No parallel roots.
@@ -306,8 +306,8 @@ Strict linear chain — each SI builds on the previous. No parallel roots.
 - [ ] SI-1 — Instalar MSW + Vitest e dependências de teste
 - [ ] SI-2 — Criar a árvore `mocks/handlers/` + barrel + seed + diretório `mocks/factories/`
 - [ ] SI-3 — Wire MSW na lifecycle do Vitest (`mocks/server.ts` + `mocks/setup.ts` + `vitest.config.ts`)
-- [ ] SI-4 — Atualizar `.claude/rules/next-frontend-msw-mocks.md` para refletir a estrutura decidida
-- [ ] SI-5 — Atualizar `next-frontend/CLAUDE.md § Testing → Status` para refletir bootstrap concluído
+- [ ] SI-4 — Atualizar `.agents/rules/next-frontend-msw-mocks.md` para refletir a estrutura decidida
+- [ ] SI-5 — Atualizar `next-frontend/AGENTS.md § Testing → Status` para refletir bootstrap concluído
 
 **Full test suites:**
 

@@ -183,7 +183,7 @@ green-field-ia-project/
 │   ├── tests/                           # E2E (Playwright)
 │   ├── compose.yaml                     # Docker Compose (dev server)
 │   └── Dockerfile.dev
-├── CLAUDE.md                            # Instruções para IA
+├── AGENTS.md                            # Instruções para IA
 ├── FC Tube.fig                          # Design system do projeto (Figma)
 ├── whiteboard.png                       # Quadro branco do projeto
 └── README.md
