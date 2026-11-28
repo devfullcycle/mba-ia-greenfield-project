@@ -47,25 +47,36 @@ This applies to all environment variables, configuration files, and code that re
 
 ## Definition of Done (Technical)
 
-A change is only considered complete when **all** of the following pass:
+A feature (or fix) is only considered done when **all** of the following are true:
 
-1. The relevant test suite passes (unit + integration + e2e affected by the change).
-2. The full test suite passes before finishing the task.
-3. TypeScript compiles cleanly: `npx tsc --noEmit` exits with code 0. Compilation errors must never be left as debt for future tasks.
-4. Lint passes: `npm run lint`.
+1. **Green test suite:** the relevant tests (unit + integration + e2e affected by the change) pass during development, and the **full test suite passes with zero failures** before finishing.
+2. **Clean build:** `npx tsc --noEmit` exits with code 0. Compilation errors must never be left as debt for future tasks.
+3. **Clean lint:** `npm run lint` finishes with **no errors and no warnings**.
 
-If any of these fails, the task is not done — fix the underlying issue before declaring completion.
+If any of these fails, the task is not done — fix the underlying issue before declaring completion, and never commit, open a PR, or merge into `dev` with any of them failing. Do not silence failures (skipped tests, `eslint-disable`, `@ts-ignore`) to get green.
 
 
 ## Git Conventions
 
-- **Main branch:** `main` — never commit directly to it
-- Branches: `feature/*`, `bugfix/*`, `hotfix/*`, `docs/*`
-- **Commits:** short, descriptive messages focused on the "why" of the change
-- **Workflow:** Git Flow conventions. Two long-lived branches:
-  - `main` — stable, production-ready code 
-  - `dev` — integration branch; all feature/bugfix/hotfix branches start from `dev` and merge back into `dev`
-  - When `dev` is stable, it is merged into `main`
+### Branching (Git Flow)
+
+- **Long-lived branches:**
+  - `main` — stable, production-ready code. **Never commit directly to it** and **never create work branches from it**.
+  - `dev` — integration branch. Receives all feature/bugfix/docs work via merge.
+- **Work branches** must be created **only from `dev`** (update it first: `git checkout dev && git pull`), never from `main`, and merged back into `dev`:
+  - `feature/<short-name>` — new features
+  - `bugfix/<short-name>` — fixes for issues found in `dev`
+  - `hotfix/<short-name>` — urgent fixes
+  - `docs/<short-name>` — documentation-only changes
+- **Release:** only when `dev` is stable (Definition of Done met, full suite green) is it merged into `main`.
+- Never commit directly to `dev` or `main`; always go through a work branch.
+- If the current branch is `main` when a task starts, switch to `dev` and branch from there before making any change.
+
+### Commits
+
+- Short, descriptive messages focused on the "why" of the change.
+- One logical change per commit; do not mix scopes (see Scope Limits).
+- Only commit when the Definition of Done checks above pass.
 
 ## Testing Policy
 
