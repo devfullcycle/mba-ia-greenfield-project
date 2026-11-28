@@ -7,6 +7,15 @@
         "@modelcontextprotocol/server-postgres",
         "postgresql://streamtube:streamtube@localhost/streamtube"
       ]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {}
     }
   }
 }
