@@ -3,12 +3,13 @@ kind: phase
 name: phase-03-upload-processing-backend
 sources_mtime:
   docs/project-plan.md: "2026-11-28T00:17:07-03:00"
-  docs/decisions/technical-decisions-phase-03-upload-processing-backend.md: "2026-11-28T02:10:16-03:00"
+  docs/decisions/technical-decisions-phase-03-upload-processing-backend.md: "2026-11-28T02:32:09-03:00"
+  docs/decisions/technical-decisions-backend-nest12-runtime-test-runner.md: "2026-11-28T02:27:13-03:00"
   docs/decisions/technical-decisions-openapi-docs-nestjs.md: "2026-11-28T00:17:07-03:00"
   docs/phases/phase-01-configuracao-base/context.md: "2026-11-28T00:17:07-03:00"
   docs/phases/phase-02-auth/context.md: "2026-11-28T00:17:07-03:00"
   docs/phases/phase-02-auth-frontend/context.md: "2026-11-28T00:17:07-03:00"
-  docs/phases/phase-03-upload-processing-backend/library-refs.md: "2026-11-28T02:11:53-03:00"
+  docs/phases/phase-03-upload-processing-backend/library-refs.md: "2026-11-28T02:41:20-03:00"
   .claude/skills/testing-guide-nestjs-project/SKILL.md: "2026-11-28T00:17:07-03:00"
 ---
 
@@ -54,23 +55,27 @@ sources_mtime:
 | phase-03-upload-processing-backend/TD-07 | phase | Backend | Modelo de dados e ciclo de vida do vídeo | decided | A (tabela videos com status enum) | — |
 | phase-03-upload-processing-backend/TD-08 | phase | Cross-layer | Identificador público único da URL — contract do id | decided | B (id curto aleatório com unique index) | nanoid |
 | phase-03-upload-processing-backend/TD-09 | phase | Cross-layer | Gatilho de conclusão do upload — contract do complete | decided | A (endpoint explícito complete) | — |
-| phase-03-upload-processing-backend/TD-10 | phase | Backend | Limites, validação e limpeza | decided | A (validação em camadas, com job de limpeza da Option B incluso) | — |
+| phase-03-upload-processing-backend/TD-10 | phase | Backend | Limites, validação e limpeza | decided | A (validação em camadas, com job de limpeza da Option B) | — |
 | phase-03-upload-processing-backend/TD-11 | phase | Backend | Estratégia de testes (storage, fila e ffmpeg) | decided | C (híbrido) | — |
-| phase-03-upload-processing-backend/TD-12 | phase | Backend | Baseline de dependências do backend antes de instalar as libs da fase | decided | B (Option A + migração para Nest 12 na própria fase) | @nestjs/core@^12, @nestjs/common@^12, @nestjs/platform-express@^12, @nestjs/testing@^12, @nestjs/cli@^12, @nestjs-modules/mailer@^4, typescript@^6 |
+| phase-03-upload-processing-backend/TD-12 | phase | Backend | Baseline de dependências do backend (defasagem e vulnerabilidades) | decided | B (Option A + migração para Nest 12 na própria fase) | @nestjs/core@^12, @nestjs/common@^12, @nestjs/platform-express@^12, @nestjs/testing@^12, @nestjs/cli@^12, @nestjs-modules/mailer@^4, typescript@^6 |
+|     └─ Last revision: 2026-11-28 — As libs companheiras (`@nestjs/config`, `@nestjs/jwt`, `@nestjs/throttler`, `@ne… | | | | | | |
+| backend-nest12-runtime-test-runner/TD-01 | ad-hoc | Repo-wide | Baseline de Node do projeto (imagem, engines e tipos) | decided | A (Node 24 LTS, a partir de 24.15) | @types/node@^24 |
+| backend-nest12-runtime-test-runner/TD-02 | ad-hoc | Backend | Test runner do backend sob o Nest 12 (Jest ou Vitest) | decided | A (manter Jest 30 com ts-jest atualizado, sobre Node 24.9+) | jest@^30, ts-jest, @types/jest |
 
 _Source files:_
 
 - phase-03-upload-processing-backend — `docs/decisions/technical-decisions-phase-03-upload-processing-backend.md` (scope_type: phase, related_phases: [3])
+- backend-nest12-runtime-test-runner — `docs/decisions/technical-decisions-backend-nest12-runtime-test-runner.md` (scope_type: ad-hoc, related_phases: [3])
 
 ## Capability Coverage
 
 | Capability (from project-plan.md) | Covered by |
 |-----------------------------------|------------|
-| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-upload-processing-backend/TD-01, TD-11, TD-12 |
-| Serviço de processamento em segundo plano (filas) | phase-03-upload-processing-backend/TD-03, TD-04, TD-11, TD-12 |
+| Serviço de armazenamento de arquivos (vídeos e thumbnails) | phase-03-upload-processing-backend/TD-01, TD-11, TD-12, backend-nest12-runtime-test-runner/TD-01, TD-02 |
+| Serviço de processamento em segundo plano (filas) | phase-03-upload-processing-backend/TD-03, TD-04, TD-11, TD-12, backend-nest12-runtime-test-runner/TD-01, TD-02 |
 | Upload de vídeos com suporte a arquivos de até 10GB sem impacto na performance | phase-03-upload-processing-backend/TD-02, TD-10 |
 | Pré-cadastro automático do vídeo como rascunho ao iniciar o upload | phase-03-upload-processing-backend/TD-07 |
-| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-upload-processing-backend/TD-05, TD-09, TD-11, TD-12 |
+| Processamento automático do vídeo após upload (extração de duração e metadados) | phase-03-upload-processing-backend/TD-05, TD-09, TD-11, TD-12, backend-nest12-runtime-test-runner/TD-01, TD-02 |
 | Geração automática de thumbnail a partir de um frame do vídeo | phase-03-upload-processing-backend/TD-05 |
 | URL única por vídeo, sem conflito com outros vídeos | phase-03-upload-processing-backend/TD-08 |
 | Reprodução via streaming (sem necessidade de download completo) | phase-03-upload-processing-backend/TD-06 |
@@ -80,12 +85,12 @@ _Source files:_
 
 ### phase-03-upload-processing-backend/TD-01
 
-**Recommendation:** um contrato S3 serve em dev e produção e o diagrama já prevê "S3 or MinIO". Fica registrada a ressalva de lifecycle no TD-10.
+**Recommendation:** MinIO via API S3 — um contrato S3 serve em dev e produção e o diagrama já prevê "S3 or MinIO". Fica registrada a ressalva de lifecycle no TD-10.
 **Libraries:** `@aws-sdk/client-s3`
 
 ### phase-03-upload-processing-backend/TD-02
 
-**Recommendation:** mantém a API fora do caminho dos 10GB e dá retomada por parte, usando só o SDK S3 já necessário pelo TD-01. O contrato (endpoints `init`, `part-urls` e `complete` e o shape das respostas) entra no `openapi.json`. Option C é a alternativa se a simplicidade do cliente pesar mais que manter a API fora do caminho dos dados.
+**Recommendation:** presigned multipart — mantém a API fora do caminho dos 10GB e dá retomada por parte, usando só o SDK S3 já necessário pelo TD-01. O contrato (endpoints `init`, `part-urls` e `complete` e o shape das respostas) entra no `openapi.json`. Option C é a alternativa se a simplicidade do cliente pesar mais que manter a API fora do caminho dos dados.
 **Libraries:** `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`
 
 ### phase-03-upload-processing-backend/TD-03
@@ -100,27 +105,27 @@ _Source files:_
 
 ### phase-03-upload-processing-backend/TD-05
 
-**Recommendation:** com o frame a ~10% da duração, aproveitando a duração que o ffprobe já retorna. Evita uma dependência arquivada e mantém o controle de timeout. (Source: `spawn` direto com ffprobe/ffmpeg.)
+**Recommendation:** **Option A (`spawn` direto)**, com o frame a ~10% da duração, aproveitando a duração que o ffprobe já retorna. Evita uma dependência arquivada e mantém o controle de timeout.
 **Libraries:** —
 
 ### phase-03-upload-processing-backend/TD-06
 
-**Recommendation:** mantém a API fora do caminho dos bytes e `Content-Disposition` cobre o download. HLS fica fora de escopo. Se o remux `+faststart` for necessário, ele entra no TD-05 como passo do worker.
+**Recommendation:** presigned GET + Range — mantém a API fora do caminho dos bytes e `Content-Disposition` cobre o download. HLS fica fora de escopo. Se o remux `+faststart` for necessário, ele entra no TD-05 como passo do worker.
 **Libraries:** `@aws-sdk/s3-request-presigner`
 
 ### phase-03-upload-processing-backend/TD-07
 
-**Recommendation:** com as transições validadas no service. Os valores do enum são o contrato lido pelo frontend e entram no `openapi.json`. Visibilidade e publicação ficam para a Fase 04. (Source: tabela `videos` + status enum.)
+**Recommendation:** **Option A (tabela `videos` + status enum)**, com as transições validadas no service. Os valores do enum são o contrato lido pelo frontend e entram no `openapi.json`. Visibilidade e publicação ficam para a Fase 04.
 **Libraries:** —
 
 ### phase-03-upload-processing-backend/TD-08
 
-**Recommendation:** gerado no pré-cadastro, com unique index, e estável mesmo se o título mudar. O slug puro não serve porque o título não existe no início do upload. O shape do campo `publicId` entra no contrato da API.
+**Recommendation:** id curto separado da PK — gerado no pré-cadastro, com unique index, e estável mesmo se o título mudar. O slug puro não serve porque o título não existe no início do upload. O shape do campo `publicId` entra no contrato da API.
 **Libraries:** `nanoid`
 
 ### phase-03-upload-processing-backend/TD-09
 
-**Recommendation:** a API verifica o objeto antes de enfileirar, sem infra adicional. Os uploads órfãos são tratados no TD-10.
+**Recommendation:** endpoint `complete` — a API verifica o objeto antes de enfileirar, sem infra adicional. Os uploads órfãos são tratados no TD-10.
 **Libraries:** —
 
 ### phase-03-upload-processing-backend/TD-10
@@ -130,13 +135,27 @@ _Source files:_
 
 ### phase-03-upload-processing-backend/TD-11
 
-**Recommendation:** segue a política atual (integration real, unit com mock) e cobre os pontos onde o mock esconderia bugs, como a assinatura de presigned URL com host público. (Source: Option C, híbrido.)
+**Recommendation:** híbrido — segue a política atual (integration real, unit com mock) e cobre os pontos onde o mock esconderia bugs, como a assinatura de presigned URL com host público.
 **Libraries:** —
 
 ### phase-03-upload-processing-backend/TD-12
 
-**Recommendation:** executada como tarefa própria (branch `bugfix/` ou `feature/` a partir de `dev`) **antes** de qualquer lib nova da fase, com `npm audit` e a suíte completa verdes como critério. A migração para o Nest 12 fica como decisão separada (`/research` próprio), porque exige Node ≥24.9 e TS 6 e não é pré-requisito de nenhum bullet da fase. Se você preferir fazer a Option B, a ordem natural é B antes de TD-03.
+**Recommendation:** **Option A**, executada como tarefa própria (branch `bugfix/` ou `feature/` a partir de `dev`) **antes** de qualquer lib nova da fase, com `npm audit` e a suíte completa verdes como critério. A migração para o Nest 12 fica como decisão separada (`/research` próprio), porque exige Node ≥24.9 e TS 6 e não é pré-requisito de nenhum bullet da fase. Se você preferir fazer a Option B, a ordem natural é B antes de TD-03.
 **Libraries:** `@nestjs/core@^12`, `@nestjs/common@^12`, `@nestjs/platform-express@^12`, `@nestjs/testing@^12`, `@nestjs/cli@^12`, `@nestjs-modules/mailer@^4`, `typescript@^6`
+
+**Revisions:**
+- 2026-11-28 — A Decision B (Option A + migração para Nest 12 na própria fase) prevalece sobre a Recommendation acima, que sugeria a Option A e deixava o Nest 12 como decisão separada; a migração é executada antes de TD-03 e TD-08, depois de definidos o Node e o test runner em `backend-nest12-runtime-test-runner/TD-01` e `TD-02`. Rationale: priorizar zerar vulnerabilidades e defasagem de major já nesta fase.
+- 2026-11-28 — As libs companheiras (`@nestjs/config`, `@nestjs/jwt`, `@nestjs/throttler`, `@nestjs/swagger`, `@nestjs/typeorm`, `joi` e `@nestjs-modules/mailer`) seguem as versões que o `nest upgrade` fixar, e substituem as majors citadas nos TDs herdados das Fases 01 e 02 (mailer ^2.x, joi ^17.x, config ^4.x, jwt ^11, throttler ^6.x). Rationale: o `nest upgrade` move todos os pacotes `@nestjs/*` para a mesma major de uma só vez.
+
+### backend-nest12-runtime-test-runner/TD-01
+
+**Recommendation:** é o menor passo seguro: satisfaz os pisos do Nest 12 e do Jest, tem suporte até 2028 e não depende de o ecossistema ter alcançado a linha 26. A Option B é a candidata natural se, na instalação, o `argon2` e as demais dependências nativas já tiverem suporte confirmado.
+**Libraries:** `@types/node@^24`
+
+### backend-nest12-runtime-test-runner/TD-02
+
+**Recommendation:** o app continua CommonJS, que é o caso em que o Nest 12 mantém o Jest, e o custo de migração (26 specs mais a documentação) só se justifica se o Jest realmente falhar. Se aparecer `ERR_REQUIRE_ASYNC_MODULE` ou se o TD-01 optar pelo Node 22 (Option C), a Option B passa a ser obrigatória. Essa decisão pode ser revertida depois com custo conhecido.
+**Libraries:** `jest@^30`, `ts-jest`, `@types/jest`
 
 ## Inherited Decisions Detail
 
@@ -230,44 +249,37 @@ _Source files:_
 
 ### phase-02-auth-frontend/TD-01
 
-**Recommendation:** Cookie-based sessions via a small custom session helper, not Auth.js. The strict-BFF model in `next-frontend-config-base/TD-03` already nominates the Route Handler as the only NestJS caller, and the backend is the auth authority, so Auth.js adds layers that buy nothing. A ~50-LOC helper is easier to debug and test, and avoids Auth.js lag behind Next.js majors. `localStorage` for refresh tokens is rejected as unsafe.
-
+**Recommendation:** Three reasons. (1) **Architectural fit.** The strict-BFF model in `next-frontend-config-base/TD-03` already nominates the Route Handler as the only NestJS caller; cookie-based sessions are the natural match, and Auth.js's framework adds layers between the BFF and the cookie that buy nothing because the backend is the auth authority — Auth.js's value (DB adapters, OAuth providers, magic-link, `getServerSession` helpers) is mostly unused in this configuration. (2) **Smaller blast radius.** A ~50-LOC session helper is grep-friendly, debuggable, and test-friendly via the existing MSW+BFF integration test pattern; a misconfigured Auth.js callback is a longer fault-isolation loop. (3) **Compatibility with Next.js 16 / React 19.** Built-in `next/headers` `cookies()` is the canonical primitive both runtimes already use; Auth.js v5 versions track Next.js majors with a lag, adding compatibility risk that Option A does not have. Option C is rejected as unsafe (`localStorage` for refresh tokens) and architecturally regressive (loses RSC personalization).
 **Libraries:** —
 
 ### phase-02-auth-frontend/TD-02
 
-**Recommendation:** Single encrypted httpOnly session cookie via `iron-session`. It adds defense in depth on the cookie content, simplifies logout to one `session.destroy()` call, and carries minimal user metadata (`userId`, `email`, `channelSlug`) so the layout RSC can render authenticated chrome without a per-render `/auth/me` round-trip. Server-side session store is rejected because it adds infrastructure the project does not have.
-
+**Recommendation:** Three reasons. (1) **Defense in depth on the cookie content** — `httpOnly` blocks JS, encryption blocks accidental log/proxy inspection; the marginal cost is one ~3KB dep. (2) **Single cookie to manage** simplifies logout (one `session.destroy()` call) and avoids the orphan-cookie failure mode of Option A. (3) **Room to carry minimal user metadata** (`userId`, `email`, `channelSlug`) lets `app/layout.tsx` RSC render the authenticated chrome (avatar, channel name) without a per-render `/auth/me` round-trip — Phase 04+ gains compound here. Option A is a viable downgrade if the team rejects `iron-session` for any reason; the migration A→B (or B→A) is a one-Route-Handler refactor with no test changes downstream because the BFF interface is unchanged. Option C is rejected: it solves a problem (server-side revocation) the project does not have at the cost of infrastructure the project does not own.
 **Libraries:** iron-session
 
 ### phase-02-auth-frontend/TD-03
 
-**Recommendation:** Server-side token refresh in the BFF helper with a single-flight guard from day one, tested via MSW with "two concurrent intercepted upstream calls; one refresh expected". Client-driven refresh and pre-emptive timers are rejected (RSC still needs server-side refresh; multi-tab and sleep/wake failure modes).
-
+**Recommendation:** The single-flight detail is non-trivial and goes in the helper from day one — tested by MSW with a "two concurrent intercepted upstream calls; one refresh expected" assertion. Option B's client-driven pattern is rejected because it doesn't replace Option A (RSC still needs server-side refresh) — adopting B means doing both. Option C's pre-emptive timer is rejected because the failure modes (multiple tabs, sleep/wake) outweigh the latency saving and force a `"use client"` shell near the root.
 **Libraries:** —
 
 ### phase-02-auth-frontend/TD-04
 
-**Recommendation:** react-hook-form with `@hookform/resolvers` and Zod. It is decoupled from the Route Handler vs Server Action choice, matches shadcn's canonical form primitive, and reuses the Zod-first pattern chosen in `next-frontend-config-base/TD-01`.
-
+**Recommendation:** Three reasons. (1) **Decoupled from TD-05** — works with Route Handlers OR Server Actions; the form code does not change if TD-05 is revisited later. (2) **Aligned with shadcn's canonical form primitive** — the project already commits to `radix-nova` shadcn (`components.json`); `npx shadcn@latest add form` produces react-hook-form wrappers; choosing react-hook-form means using the supported primitive instead of hand-rolling around it. (3) **Zod-first developer ergonomics match the rest of the FE foundation** — `next-frontend-config-base/TD-01` chose Zod 4 for env; the same schemas-as-source-of-truth pattern carries to forms with zero new validator paradigm. Option B is rejected for impedance with shadcn's primitive and for over-investing in progressive-enhancement that the strict-BFF model does not require. Option C is rejected for the per-field boilerplate and the loss of client-side feedback on a project that values quick, type-safe form iteration.
 **Libraries:** react-hook-form, @hookform/resolvers
 
 ### phase-02-auth-frontend/TD-05
 
-**Recommendation:** Route Handlers as the single mutation surface. This aligns with the strict-BFF model, reuses the existing MSW test scaffold, and sets a uniform precedent for Phases 03–07. Server Actions are the per-form migration path if progressive enhancement is later wanted.
-
+**Recommendation:** Three reasons. (1) **Strict-BFF alignment.** `next-frontend-config-base/TD-03` named Route Handlers as the BFF surface; Option A keeps every mutation visible under `app/api/**`. (2) **Test scaffold already exists** — `next-frontend/CLAUDE.md` § Testing and `next-frontend-msw-foundation` were authored for Route-Handlers-as-functions; Option A reuses them with zero invention. (3) **Single mutation surface** — Phase 02 sets the precedent for Phases 03–07; uniformity beats per-mutation idiom-picking when the cost of inconsistency compounds (Option C). Option B has real ergonomic appeal for the simplest forms but fragments the BFF surface and forces test-pattern reinvention; if the team later wants progressive enhancement for specific forms, the migration A→B is per-form and doesn't require touching unrelated routes — A is the safer default and the cheaper baseline.
 **Libraries:** —
 
 ### phase-02-auth-frontend/TD-06
 
-**Recommendation:** RSC reads the session cookie and passes it to a Client Provider that hydrates with the correct initial state. This gives no first-render flicker and needs no new BFF endpoint. A `router.refresh()` is required after mid-session mutations.
-
+**Recommendation:** Two reinforcing reasons. (1) **No first-render flicker, no round-trip** — the session is delivered in the same response as the page HTML; the Client Provider hydrates with the correct initial state; users never see "Login" briefly turn into their avatar. (2) **No new BFF endpoint** — the cookie is the source of truth, RSC reads it, the Provider broadcasts it; the BFF surface stays minimal. The `router.refresh()` requirement after mid-session mutations is a small price (one line in the relevant mutation handler) for the structural benefits. Option B is rejected for the double-read-and-flicker; Option C is dominated by Option B and rejected.
 **Libraries:** —
 
 ### phase-02-auth-frontend/TD-07
 
-**Recommendation:** Token pages are RSC-owned: the RSC owns the token and a Client Component owns the input. Confirmation is RSC-only and reset is RSC plus a Client form. Email-prefetch behavior is handled by backend idempotent confirmation.
-
+**Recommendation:** Three reasons. (1) **First-paint-correct** — the user sees the right outcome on the first paint, no skeleton, no flicker. (2) **Single integration pattern across both flows** — confirmation is RSC-only; reset is RSC + Client form (TD-04, TD-05 patterns reused) — both share the "RSC owns the token, Client Component owns the input" split. (3) **Email-prefetch behavior** is solved at the backend's idempotent-confirmation level (a small note for `/plan-build` to confirm; not a separate TD). Option B's Route-Handler-as-link-target adds redirects for no clean gain. Option C is dominated.
 **Libraries:** —
 
 ### openapi-docs-nestjs/TD-01

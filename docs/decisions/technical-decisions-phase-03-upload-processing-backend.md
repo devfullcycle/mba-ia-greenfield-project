@@ -417,6 +417,10 @@ Depende de nada, mas condiciona TD-03 e TD-04 (peers de fila e imagem do worker)
 **Decision:** B (Option A + migração para Nest 12 na própria fase)
 **Libraries:** `@nestjs/core@^12`, `@nestjs/common@^12`, `@nestjs/platform-express@^12`, `@nestjs/testing@^12`, `@nestjs/cli@^12`, `@nestjs-modules/mailer@^4`, `typescript@^6`
 
+**Revisions:**
+- 2026-11-28 — A Decision B (Option A + migração para Nest 12 na própria fase) prevalece sobre a Recommendation acima, que sugeria a Option A e deixava o Nest 12 como decisão separada; a migração é executada antes de TD-03 e TD-08, depois de definidos o Node e o test runner em `backend-nest12-runtime-test-runner/TD-01` e `TD-02`. Rationale: priorizar zerar vulnerabilidades e defasagem de major já nesta fase.
+- 2026-11-28 — As libs companheiras (`@nestjs/config`, `@nestjs/jwt`, `@nestjs/throttler`, `@nestjs/swagger`, `@nestjs/typeorm`, `joi` e `@nestjs-modules/mailer`) seguem as versões que o `nest upgrade` fixar, e substituem as majors citadas nos TDs herdados das Fases 01 e 02 (mailer ^2.x, joi ^17.x, config ^4.x, jwt ^11, throttler ^6.x). Rationale: o `nest upgrade` move todos os pacotes `@nestjs/*` para a mesma major de uma só vez.
+
 ---
 
 ## Decisions Summary

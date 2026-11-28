@@ -1,12 +1,33 @@
 ---
 kind: phase
 name: phase-03-upload-processing-backend
-status: dirty
+status: clean
 issue_count: 0
 sources_mtime:
-  docs/phases/phase-03-upload-processing-backend/context.md: "2026-11-28T01:49:49-03:00"
-  docs/decisions/technical-decisions-phase-03-upload-processing-backend.md: "2026-11-28T01:40:32-03:00"
+  docs/phases/phase-03-upload-processing-backend/context.md: "2026-11-28T02:41:20-03:00"
+  docs/decisions/technical-decisions-phase-03-upload-processing-backend.md: "2026-11-28T02:32:09-03:00"
+  docs/decisions/technical-decisions-backend-nest12-runtime-test-runner.md: "2026-11-28T02:27:13-03:00"
 issues:
+  - id: IC-1
+    status: resolved
+    summary: "TD-12 decidido como B, mas a Recommendation em Decisions Detail descreve a A"
+    resolved_by: phase-03-upload-processing-backend/TD-12
+  - id: ICC-1
+    status: resolved
+    summary: "TD-12 B (Nest 12, mailer ^4) vs libs herdadas fixadas em majors da era Nest 11"
+    resolved_by: phase-03-upload-processing-backend/TD-12
+  - id: OQ-13
+    status: resolved
+    summary: "backend-nest12-runtime-test-runner/TD-01 pending — Baseline de Node do projeto"
+    resolved_by: backend-nest12-runtime-test-runner/TD-01
+  - id: OQ-14
+    status: resolved
+    summary: "backend-nest12-runtime-test-runner/TD-02 pending — Test runner do backend sob o Nest 12"
+    resolved_by: backend-nest12-runtime-test-runner/TD-02
+  - id: MD-1
+    status: resolved
+    summary: "Sem TD para Node/test runner exigidos pela migração ao Nest 12 (TD-12 B)"
+    resolved_by: backend-nest12-runtime-test-runner/TD-01, TD-02
   - id: AMB-1
     status: resolved
     summary: "Limite do 'rascunho' da Fase 03 vs 'fluxo de rascunho e publicação' da Fase 04"
@@ -95,6 +116,11 @@ _None._
 _None._
 
 ## Resolved Issues
+- **IC-1** _(resolved_by phase-03-upload-processing-backend/TD-12)_ — TD-12 decidido como B, mas a Recommendation descrevia a A. Revision adicionada ao TD-12: a Decision B prevalece, com a migração ao Nest 12 antes de TD-03 e TD-08. Rationale: priorizar zerar vulnerabilidades e defasagem de major já nesta fase.
+- **ICC-1** _(resolved_by phase-03-upload-processing-backend/TD-12)_ — TD-12 B vs libs herdadas fixadas em majors do Nest 11. Revision adicionada ao TD-12: as libs companheiras seguem as versões que o `nest upgrade` fixar e substituem as majors dos TDs herdados. Os TDs herdados das Fases 01 e 02 não foram editados.
+- **OQ-13** _(resolved_by backend-nest12-runtime-test-runner/TD-01)_ — Decidido: A (Node 24 LTS, a partir de 24.15).
+- **OQ-14** _(resolved_by backend-nest12-runtime-test-runner/TD-02)_ — Decidido: A (manter Jest 30 com ts-jest atualizado, sobre Node 24.9+).
+- **MD-1** _(resolved_by backend-nest12-runtime-test-runner/TD-01, TD-02)_ — Node/test runner do Nest 12: os TDs foram criados no doc ad-hoc `backend-nest12-runtime-test-runner` e estão pendentes (acompanhados em OQ-13 e OQ-14).
 
 - **AMB-1** _(resolved_by clarification)_ — Limite do "rascunho" da Fase 03 vs "fluxo de rascunho e publicação" da Fase 04. Clarificação: a Fase 03 cobre só o ciclo técnico (registro e processamento, `uploading → ready/failed`). Visibilidade e publicação ficam com a Fase 04, como já diz o TD-07.
 - **OQ-1** _(resolved_by phase-03-upload-processing-backend/TD-01)_ — Decidido: A (MinIO no compose, via API S3).
